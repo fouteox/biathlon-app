@@ -2,8 +2,9 @@ name: Codex gate
 
 # Publishes the "Codex approval" commit status on the pull request head.
 # It is green only when:
-# - Codex has finished reviewing the current head commit and reacted 👍
-#   on the pull request description (its "no findings" signal);
+# - Codex's latest verdict on the current head commit is "no findings":
+#   a 👍 on the pull request description, or a "Didn't find any major
+#   issues" comment naming that commit;
 # - every review thread opened by Codex has at least one reply.
 # Thread resolution itself is enforced by the main branch ruleset
 # (.github/rulesets/main.json), which also requires this status.
@@ -53,25 +54,6 @@ jobs:
               const sha = pr.head.sha;
               if (pr.state !== 'open') return { sha, state: null };
 
-              // Codex keeps a machine-readable state in its review summary comment.
-              const comments = await github.paginate(github.rest.issues.listComments,
-                { owner, repo, issue_number: number, per_page: 100 });
-              const summary = comments
-                .filter((c) => isCodex(c.user?.login) && c.body?.includes('codex-review-state:v1'))
-                .pop();
-              const match = summary?.body.match(/codex-review-state:v1 (\{.*?\}) -->/);
-              let review = null;
-              try { review = match ? JSON.parse(match[1]).code_review : null; } catch {}
-              if (!review) {
-                return { sha, state: 'pending', description: 'Waiting for a Codex review (comment "@codex review")' };
-              }
-              if (review.commit_sha !== sha) {
-                return { sha, state: 'pending', description: `Codex has not reviewed ${sha.slice(0, 7)} yet (comment "@codex review")` };
-              }
-              if (review.status !== 'completed') {
-                return { sha, state: 'pending', description: 'Codex review in progress', retry: false };
-              }
-
               // Every thread Codex opened must have at least one reply.
               const threads = [];
               let cursor = null;
@@ -99,20 +81,57 @@ jobs:
                 return { sha, state: 'failure', description: `${unanswered} Codex thread(s) without a reply` };
               }
 
-              if (review.has_any_findings) {
-                return { sha, state: 'failure', description: 'Codex found issues on this commit: fix them, then "@codex review"' };
-              }
+              // Codex signals a clean review of the head commit either with a
+              // "Didn't find any major issues" comment naming that commit, or
+              // with a 👍 on the description once its summary shows the head
+              // commit as reviewed. A review with findings on the head commit
+              // is a negative signal. The latest signal wins.
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: number, per_page: 100 });
+              const reviewedHead = (body) => {
+                const commit = body?.match(/\*\*Reviewed commit:\*\* `([0-9a-f]{7,40})`/)?.[1];
+                return commit !== undefined && sha.startsWith(commit);
+              };
+              const signals = comments
+                .filter((c) => isCodex(c.user?.login) && c.body?.includes("Didn't find any major issues") && reviewedHead(c.body))
+                .map((c) => ({ ok: true, at: c.created_at }));
 
+              const reviews = await github.paginate(github.rest.pulls.listReviews,
+                { owner, repo, pull_number: number, per_page: 100 });
+              signals.push(...reviews
+                .filter((r) => isCodex(r.user?.login) && r.commit_id === sha)
+                .map((r) => ({ ok: false, at: r.submitted_at })));
+
+              // Codex keeps a machine-readable state in its review summary comment.
+              const summary = comments
+                .filter((c) => isCodex(c.user?.login) && c.body?.includes('codex-review-state:v1'))
+                .pop();
+              const match = summary?.body.match(/codex-review-state:v1 (\{.*?\}) -->/);
+              let review = null;
+              try { review = match ? JSON.parse(match[1]).code_review : null; } catch {}
               const reactions = await github.paginate(github.rest.reactions.listForIssue,
                 { owner, repo, issue_number: number, per_page: 100 });
-              const codex = reactions.filter((r) => isCodex(r.user?.login)).map((r) => r.content);
-              if (codex.includes('eyes')) {
+              const codex = reactions.filter((r) => isCodex(r.user?.login));
+              if (codex.some((r) => r.content === 'eyes')) {
                 return { sha, state: 'pending', description: 'Codex review in progress', retry: true };
               }
-              if (!codex.includes('+1')) {
+              if (review?.commit_sha === sha && review.status === 'completed') {
+                signals.push(...codex
+                  .filter((r) => r.content === '+1')
+                  .map((r) => ({ ok: true, at: r.created_at })));
+              }
+
+              const latest = signals.sort((x, y) => Date.parse(x.at) - Date.parse(y.at)).pop();
+              if (latest?.ok) {
+                return { sha, state: 'success', description: 'Codex reviewed this commit with no findings' };
+              }
+              if (latest) {
+                return { sha, state: 'failure', description: 'Codex found issues on this commit: fix them, then "@codex review"' };
+              }
+              if (review?.commit_sha === sha && review.status === 'completed') {
                 return { sha, state: 'pending', description: 'Waiting for the Codex 👍', retry: true };
               }
-              return { sha, state: 'success', description: 'Codex reviewed this commit and reacted 👍' };
+              return { sha, state: 'pending', description: `Codex has not reviewed ${sha.slice(0, 7)} yet (comment "@codex review")` };
             }
 
             // The 👍 lands a few seconds after the summary comment is edited.

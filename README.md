@@ -30,7 +30,7 @@ La branche `main` est protégée par le ruleset `.github/rulesets/main.json` (à
 
 - toutes les conversations sont résolues ;
 - la CI est verte (`BiathlonKit (Linux)`, `App (iOS Simulator)`) ;
-- le statut `Codex approval` est vert. Il est publié par `.github/workflows/codex-gate.yml` quand Codex a relu le dernier commit et posé son 👍 sur la description de la PR, et que chaque fil ouvert par Codex a reçu au moins une réponse.
+- le statut `Codex approval` est vert. Il est publié par `.github/workflows/codex-gate.yml` quand le dernier verdict de Codex sur le dernier commit est sans remarque (👍 sur la description de la PR, ou commentaire « Didn't find any major issues » qui cite ce commit), et que chaque fil ouvert par Codex a reçu au moins une réponse.
 
 ## Structure
 
