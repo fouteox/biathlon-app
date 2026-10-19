@@ -104,9 +104,12 @@ export async function drainOutbox(env: Env, now: number): Promise<void> {
   const retry: number[] = [];
   const unregistered: string[] = [];
   if (rows.length > 0) {
-    let token = await providerToken(env, now);
-    let refreshed = false;
+    // One signing key per APNs environment, as Apple recommends for team-scoped keys.
+    const tokens = new Map<APNsEnvironment, string>();
+    const refreshed = new Set<APNsEnvironment>();
     for (const row of rows) {
+      let token = tokens.get(row.environment) ?? (await providerToken(env, row.environment, now));
+      tokens.set(row.environment, token);
       const request = {
         deviceToken: row.token,
         environment: row.environment,
@@ -124,9 +127,10 @@ export async function drainOutbox(env: Env, now: number): Promise<void> {
       };
       let outcome = await sendPush(request, token);
       // Sign a new token at most once per run: APNs rejects updates more frequent than every 20 minutes.
-      if (outcome.kind === "expiredProviderToken" && !refreshed) {
-        refreshed = true;
-        token = await providerToken(env, now, true);
+      if (outcome.kind === "expiredProviderToken" && !refreshed.has(row.environment)) {
+        refreshed.add(row.environment);
+        token = await providerToken(env, row.environment, now, true);
+        tokens.set(row.environment, token);
         outcome = await sendPush(request, token);
       }
       switch (outcome.kind) {
@@ -159,20 +163,24 @@ export async function drainOutbox(env: Env, now: number): Promise<void> {
 }
 
 /** Reuses the signed provider token stored in D1 while it is younger than its lifetime. */
-async function providerToken(env: Env, now: number, forceRefresh = false): Promise<string> {
+async function providerToken(env: Env, environment: APNsEnvironment, now: number, forceRefresh = false): Promise<string> {
+  const cacheKey = `apns_token_${environment}`;
   if (!forceRefresh) {
-    const cached = await env.DB.prepare("SELECT value, updated_at FROM settings WHERE key = 'apns_token'").first<{
-      value: string;
-      updated_at: number;
-    }>();
+    const cached = await env.DB.prepare("SELECT value, updated_at FROM settings WHERE key = ?1")
+      .bind(cacheKey)
+      .first<{ value: string; updated_at: number }>();
     if (cached && now - cached.updated_at < PROVIDER_TOKEN_LIFETIME_S * 1000) return cached.value;
   }
-  const token = await makeProviderToken({ pem: env.APNS_KEY, keyId: env.APNS_KEY_ID, teamId: env.APNS_TEAM_ID }, Math.floor(now / 1000));
+  const key =
+    environment === "sandbox"
+      ? { pem: env.APNS_SANDBOX_KEY, keyId: env.APNS_SANDBOX_KEY_ID, teamId: env.APNS_TEAM_ID }
+      : { pem: env.APNS_PRODUCTION_KEY, keyId: env.APNS_PRODUCTION_KEY_ID, teamId: env.APNS_TEAM_ID };
+  const token = await makeProviderToken(key, Math.floor(now / 1000));
   await env.DB.prepare(
-    `INSERT INTO settings (key, value, updated_at) VALUES ('apns_token', ?1, ?2)
+    `INSERT INTO settings (key, value, updated_at) VALUES (?1, ?2, ?3)
      ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
   )
-    .bind(token, now)
+    .bind(cacheKey, token, now)
     .run();
   return token;
 }

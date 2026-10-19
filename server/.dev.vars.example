@@ -1,4 +1,6 @@
 # Copy to .dev.vars for `wrangler dev`. Never commit the real file.
-APNS_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
-APNS_KEY_ID="ABC123DEFG"
 APNS_TEAM_ID="DEF123GHIJ"
+APNS_SANDBOX_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+APNS_SANDBOX_KEY_ID="ABC123DEFG"
+APNS_PRODUCTION_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+APNS_PRODUCTION_KEY_ID="HIJ456KLMN"
