@@ -139,7 +139,7 @@ jobs:
               // A review requested after the latest verdict replaces it.
               const requested = Math.max(0, ...comments
                 .filter((c) => !isCodex(c.user?.login) && /@codex\s+(security\s+)?review\b/i.test(c.body ?? ''))
-                .map((c) => Date.parse(c.created_at)));
+                .map((c) => Date.parse(c.updated_at)));
               if (requested > (latest?.at ?? 0)) {
                 return { sha, state: 'pending', description: 'Codex review requested', retry: true };
               }
