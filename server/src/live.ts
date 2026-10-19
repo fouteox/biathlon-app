@@ -57,8 +57,11 @@ const REFERENCE_DATE_S = 978_307_200;
  * so failures in one never hold up the other.
  */
 const MAX_CHANNEL_CREATIONS_PER_ENVIRONMENT = 2;
-/** Channels lost to overlapping runs are rare: a couple of deletions per run clears them. */
-const MAX_ORPHAN_DELETIONS_PER_RUN = 2;
+/**
+ * Channels are deleted a few per run: a couple of races end at a time, and failures
+ * can't use up the budget of the races still followed.
+ */
+const MAX_CHANNEL_DELETIONS_PER_RUN = 4;
 /**
  * The channels store no messages, as Apple advises for frequent updates like sports
  * scores, so a device offline when the end is sent never gets it: the end is sent
@@ -127,7 +130,6 @@ export async function syncLiveActivities(
   budget = new SubrequestBudget(),
 ): Promise<void> {
   const tokens = new ProviderTokens(env, now, budget);
-  await deleteOrphans(env, tokens, now);
   const { results: rows } = await env.DB.prepare(
     "SELECT race_id AS raceId, environment, channel_id AS channelId, state, ended_at AS endedAt, end_sent_at AS endSentAt, deleted_at AS deletedAt FROM live_channels",
   ).all<ChannelRow>();
@@ -140,15 +142,28 @@ export async function syncLiveActivities(
       kept.push(channel);
     } else if (isFollowable(watched.get(channel.raceId))) {
       // A race followable again, like a cancellation called off, gets new channels.
-      if (!(await replace(env, tokens, channel))) kept.push(channel);
+      await replace(env, channel);
     } else {
       if (channel.deletedAt === null) await resendEnd(env, tokens, channel, now);
       kept.push(channel);
     }
   }
-  if (!races) return;
-  await openChannels(env, tokens, races, kept, now);
+  if (races) {
+    await openChannels(env, tokens, races, kept, now);
+    await updateOpenChannels(env, tokens, open, watched, now, budget);
+  }
+  // Last, so the races' broadcasts come first in the budget.
+  await deleteRetiredChannels(env, tokens, now);
+}
 
+async function updateOpenChannels(
+  env: Env,
+  tokens: ProviderTokens,
+  open: ChannelRow[],
+  watched: Map<string, RaceSnapshot>,
+  now: number,
+  budget: SubrequestBudget,
+) {
   for (const [raceId, channels] of Map.groupBy(open, (row) => row.raceId)) {
     const race = watched.get(raceId);
     const known = await currentState(raceId, race, budget);
@@ -215,12 +230,8 @@ async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapsho
     )
       .bind(race.id, environment, outcome.channelId, JSON.stringify({ ...calendarFields(race), leaders: [] }), now)
       .run();
-    if (meta.changes === 0) {
-      // An overlapping run recorded its channel first: this one is deleted by a later run.
-      await env.DB.prepare("INSERT INTO orphaned_channels (environment, channel_id) VALUES (?1, ?2)")
-        .bind(environment, outcome.channelId)
-        .run();
-    }
+    // An overlapping run recorded its channel first: this one has no row to be deleted with.
+    if (meta.changes === 0) await retire(env, environment, outcome.channelId).run();
   }
 }
 
@@ -244,30 +255,38 @@ async function publish(env: Env, tokens: ProviderTokens, channel: ChannelRow, st
 const UNCHANGED_OPEN_CHANNEL =
   "race_id = ?2 AND environment = ?3 AND channel_id = ?4 AND state = ?5 AND ended_at IS NULL";
 
-/** Sends the final state, retried at the next run until it succeeds. */
+/**
+ * Sends the final state, retried at the next run until it succeeds. A channel APNs no
+ * longer knows ends all the same, already deleted, for the app to learn the final state.
+ */
 async function end(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
   const outcome = await send(env, tokens, channel, "end", state, now);
-  if (outcome === "sent") {
-    await env.DB.prepare(
-      `UPDATE live_channels SET state = ?1, ended_at = ?6, end_sent_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`,
-    )
-      .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state, now)
-      .run();
-  } else if (outcome === "unregistered") {
-    await forget(env, channel);
-  }
+  if (outcome === "failed") return;
+  const deletedAt = outcome === "unregistered" ? now : null;
+  await env.DB.prepare(
+    `UPDATE live_channels SET state = ?1, ended_at = ?6, end_sent_at = ?6, deleted_at = ?7 WHERE ${UNCHANGED_OPEN_CHANNEL}`,
+  )
+    .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state, now, deletedAt)
+    .run();
 }
 
 /** The ended row a run read, not the open one an overlapping run may have replaced it with. Binds ?2 to ?4. */
 const SAME_ENDED_CHANNEL = "race_id = ?2 AND environment = ?3 AND channel_id = ?4 AND ended_at IS NOT NULL";
 
-/** Sends the end again for devices that were offline, then deletes the channel at APNs once the grace period is over. */
+/**
+ * Sends the end again for devices that were offline, then retires the channel once the
+ * grace period is over. The row stays, marked deleted, for the app to learn the final state.
+ */
 async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, now: number) {
+  const markDeleted = () =>
+    env.DB.prepare(`UPDATE live_channels SET deleted_at = ?1 WHERE ${SAME_ENDED_CHANNEL}`).bind(
+      now,
+      channel.raceId,
+      channel.environment,
+      channel.channelId,
+    );
   if (now - (channel.endedAt ?? now) >= END_GRACE_MS) {
-    if (!(await deleteAtAPNs(env, tokens, channel.environment, channel.channelId))) return;
-    await env.DB.prepare(`UPDATE live_channels SET deleted_at = ?1 WHERE ${SAME_ENDED_CHANNEL}`)
-      .bind(now, channel.raceId, channel.environment, channel.channelId)
-      .run();
+    await env.DB.batch([retire(env, channel.environment, channel.channelId), markDeleted()]);
     return;
   }
   if (now - (channel.endSentAt ?? now) < END_RESEND_INTERVAL_MS) return;
@@ -277,46 +296,50 @@ async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, 
       .bind(now, channel.raceId, channel.environment, channel.channelId)
       .run();
   } else if (outcome === "unregistered") {
-    await forget(env, channel);
+    await markDeleted().run();
   }
 }
 
-/** Deletes an ended channel and its row, for a new one to open; `false` when APNs still has it, for the next run to retry. */
-async function replace(env: Env, tokens: ProviderTokens, channel: ChannelRow): Promise<boolean> {
-  if (channel.deletedAt === null && !(await deleteAtAPNs(env, tokens, channel.environment, channel.channelId))) {
-    return false;
-  }
-  await env.DB.prepare("DELETE FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3")
-    .bind(channel.raceId, channel.environment, channel.channelId)
-    .run();
-  return true;
+/** Drops an ended channel's row, for a new channel to open, and retires the channel if APNs still has it. */
+async function replace(env: Env, channel: ChannelRow) {
+  const deleteRow = env.DB.prepare(
+    "DELETE FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3",
+  ).bind(channel.raceId, channel.environment, channel.channelId);
+  await env.DB.batch(
+    channel.deletedAt === null ? [retire(env, channel.environment, channel.channelId), deleteRow] : [deleteRow],
+  );
 }
 
-/** Deletes a few of the channels left by overlapping runs, so failures can't starve the races. */
-async function deleteOrphans(env: Env, tokens: ProviderTokens, now: number) {
+/** Queues a channel for its deletion at APNs (`deleteRetiredChannels`). */
+function retire(env: Env, environment: APNsEnvironment, channelId: string) {
+  return env.DB.prepare(
+    "INSERT INTO retired_channels (environment, channel_id) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
+  ).bind(environment, channelId);
+}
+
+/**
+ * Deletes a few retired channels at APNs, the least recently attempted first: failed
+ * deletions are retried at later runs without starving the races or the other channels.
+ */
+async function deleteRetiredChannels(env: Env, tokens: ProviderTokens, now: number) {
   const { results } = await env.DB.prepare(
-    "SELECT environment, channel_id AS channelId FROM orphaned_channels ORDER BY attempted_at LIMIT ?1",
+    "SELECT environment, channel_id AS channelId FROM retired_channels ORDER BY attempted_at LIMIT ?1",
   )
-    .bind(MAX_ORPHAN_DELETIONS_PER_RUN)
+    .bind(MAX_CHANNEL_DELETIONS_PER_RUN)
     .all<{ environment: APNsEnvironment; channelId: string }>();
   for (const { environment, channelId } of results) {
-    const statement = (await deleteAtAPNs(env, tokens, environment, channelId))
-      ? env.DB.prepare("DELETE FROM orphaned_channels WHERE environment = ?1 AND channel_id = ?2").bind(environment, channelId)
-      : env.DB.prepare("UPDATE orphaned_channels SET attempted_at = ?3 WHERE environment = ?1 AND channel_id = ?2").bind(
-          environment,
-          channelId,
-          now,
-        );
-    await statement.run();
+    const deletion = await tokens.send(environment, (token) => deleteChannel(environment, env.APNS_TOPIC, channelId, token));
+    if (deletion.kind === "sent" || deletion.kind === "unregistered") {
+      await env.DB.prepare("DELETE FROM retired_channels WHERE environment = ?1 AND channel_id = ?2")
+        .bind(environment, channelId)
+        .run();
+      continue;
+    }
+    if (deletion.kind !== "deferred") console.error("APNs channel deletion failed", environment, channelId, deletion);
+    await env.DB.prepare("UPDATE retired_channels SET attempted_at = ?3 WHERE environment = ?1 AND channel_id = ?2")
+      .bind(environment, channelId, now)
+      .run();
   }
-}
-
-/** Deletes a channel at APNs; `true` once APNs no longer has it. */
-async function deleteAtAPNs(env: Env, tokens: ProviderTokens, environment: APNsEnvironment, channelId: string) {
-  const deletion = await tokens.send(environment, (token) => deleteChannel(environment, env.APNS_TOPIC, channelId, token));
-  if (deletion.kind === "sent" || deletion.kind === "unregistered") return true;
-  if (deletion.kind !== "deferred") console.error("APNs channel deletion failed", environment, channelId, deletion);
-  return false;
 }
 
 /** Broadcasts an ActivityKit event; "unregistered" when APNs no longer knows the channel. */

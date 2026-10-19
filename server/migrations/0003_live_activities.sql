@@ -16,9 +16,10 @@ CREATE TABLE live_channels (
   PRIMARY KEY (race_id, environment)
 );
 
--- Channels created by a cron run that an overlapping run beat to the race's row:
--- deleted at APNs by a later run, since channels are limited to 10,000.
-CREATE TABLE orphaned_channels (
+-- Channels waiting for their deletion at APNs, a few per run (channels are limited to
+-- 10,000): those of races over or reinstated, and those a cron run created after an
+-- overlapping run had recorded one.
+CREATE TABLE retired_channels (
   environment TEXT NOT NULL CHECK (environment IN ('sandbox', 'production')),
   channel_id TEXT NOT NULL,
   -- When its deletion last failed: the oldest attempts go first, so failures can't hold the others back.

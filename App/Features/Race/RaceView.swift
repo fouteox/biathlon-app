@@ -50,7 +50,10 @@ struct RaceView: View {
         .navigationTitle(race.shortDescription)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if liveState.phase.canBeFollowedLive, liveActivities.isAvailable {
+            // A followed race keeps its toggle to stop following, whatever its cached results say.
+            if liveActivities.isAvailable,
+                liveState.phase.canBeFollowedLive || liveActivities.followedRaceIDs.contains(race.id)
+            {
                 ToolbarItem(placement: .topBarTrailing) {
                     Toggle("Live Activity", systemImage: "dot.radiowaves.left.and.right", isOn: following)
                 }

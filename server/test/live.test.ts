@@ -110,8 +110,8 @@ const channels = (env: Env) =>
     .all<{ environment: string; channelId: string; state: string }>()
     .then(({ results }) => results);
 
-const orphans = (env: Env) =>
-  env.DB.prepare("SELECT channel_id AS channelId FROM orphaned_channels ORDER BY channel_id")
+const retired = (env: Env) =>
+  env.DB.prepare("SELECT channel_id AS channelId FROM retired_channels ORDER BY channel_id")
     .all<{ channelId: string }>()
     .then(({ results }) => results.map(({ channelId }) => channelId));
 
@@ -293,7 +293,7 @@ describe("Live Activity channels", () => {
     expect(broadcasts(ended).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
   });
 
-  it("leaves alone the new channel an overlapping run opened while the old one was being deleted", async () => {
+  it("leaves alone the new channel an overlapping run opened while the old one was being retired", async () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
@@ -301,16 +301,12 @@ describe("Live Activity channels", () => {
     stubNetwork();
     await syncLiveActivities(env, cancelled, NOW);
     stubNetwork();
-    const fetchStub = globalThis.fetch;
-    // The other run replaces the row with an open channel while this one deletes the old channel.
-    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
-      if (init.method === "DELETE") {
-        await env.DB.prepare(
-          "UPDATE live_channels SET channel_id = 'new-' || environment, ended_at = NULL, end_sent_at = NULL",
-        ).run();
-      }
-      return fetchStub(input, init);
-    });
+    // The other run replaces the row with an open channel just before this one retires the old channel.
+    const batch = env.DB.batch.bind(env.DB);
+    env.DB.batch = async (statements) => {
+      await env.DB.prepare("UPDATE live_channels SET channel_id = 'new-' || environment, ended_at = NULL, end_sent_at = NULL").run();
+      return batch(statements);
+    };
 
     await syncLiveActivities(env, cancelled, NOW + 60 * 60_000);
 
@@ -372,7 +368,7 @@ describe("Live Activity channels", () => {
     expect((await channels(env)).map(({ state }) => state)).toEqual(['{"newer":true}', '{"newer":true}']);
   });
 
-  it("deletes the channels it opened when an overlapping run opened them first, until APNs confirms", async () => {
+  it("deletes the channels it opened when an overlapping run opened them first", async () => {
     const env = await makeEnv();
     const sent = stubNetwork();
     const fetchStub = globalThis.fetch;
@@ -388,39 +384,33 @@ describe("Live Activity channels", () => {
       }
       return fetchStub(input, init);
     });
+
     await syncLiveActivities(env, [race()], NOW);
-    expect(sent.filter((request) => request.method === "DELETE")).toEqual([]);
 
-    stubNetwork({ failingHost: "api-manage-broadcast" });
-    await syncLiveActivities(env, [race()], NOW + 60_000);
-    expect(await orphans(env)).toEqual(["channel-1", "channel-2"]);
-
-    const retried = stubNetwork();
-    await syncLiveActivities(env, [race()], NOW + 120_000);
-    expect(retried.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"])).toEqual([
+    expect(sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"])).toEqual([
       "channel-1",
       "channel-2",
     ]);
-    expect(await orphans(env)).toEqual([]);
+    expect(await retired(env)).toEqual([]);
     expect((await channels(env)).map(({ channelId }) => channelId)).toEqual(["other", "other"]);
   });
 
-  it("deletes a few orphaned channels per run, leaving the rest of the budget to the races", async () => {
+  it("deletes a few retired channels per run, leaving the rest of the budget to the races", async () => {
     const env = await makeEnv();
-    for (const id of ["a", "b", "c", "d", "e"]) {
-      await env.DB.prepare("INSERT INTO orphaned_channels (environment, channel_id) VALUES ('sandbox', ?1)").bind(id).run();
+    for (const id of ["a", "b", "c", "d", "e", "f"]) {
+      await env.DB.prepare("INSERT INTO retired_channels (environment, channel_id) VALUES ('sandbox', ?1)").bind(id).run();
     }
     const sent = stubNetwork({ failingHost: "api-manage-broadcast" });
 
     await syncLiveActivities(env, [], NOW);
 
-    expect(sent.filter((request) => request.method === "DELETE").length).toBe(2);
+    expect(sent.filter((request) => request.method === "DELETE").length).toBe(4);
   });
 
-  it("tries the orphaned channels in turn, so failing ones can't hold the others back", async () => {
+  it("tries the retired channels in turn, so failing ones can't hold the others back", async () => {
     const env = await makeEnv();
-    for (const id of ["a", "b", "c"]) {
-      await env.DB.prepare("INSERT INTO orphaned_channels (environment, channel_id) VALUES ('sandbox', ?1)").bind(id).run();
+    for (const id of ["a", "b", "c", "d", "e", "f"]) {
+      await env.DB.prepare("INSERT INTO retired_channels (environment, channel_id) VALUES ('sandbox', ?1)").bind(id).run();
     }
     const deleted = (sent: Sent[]) => sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"]);
 
@@ -429,7 +419,7 @@ describe("Live Activity channels", () => {
     const second = stubNetwork({ failingHost: "api-manage-broadcast" });
     await syncLiveActivities(env, [], NOW + 60_000);
 
-    expect(new Set([...deleted(first), ...deleted(second)])).toEqual(new Set(["a", "b", "c"]));
+    expect(new Set([...deleted(first), ...deleted(second)])).toEqual(new Set(["a", "b", "c", "d", "e", "f"]));
   });
 
   it("moves the start time of a live race from the calendar while its results can't be read", async () => {
@@ -557,6 +547,22 @@ describe("GET /v1/races/:id/channels/:environment", () => {
       expect(response.status).toBe(410);
       expect(await response.json()).toEqual({ state: relayFinal });
     }
+  });
+
+  it("answers 410 with the final state when APNs no longer knew the channel at the end", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    const finished = [race({ StatusId: 11, ScheduleStatus: "FINISHED" })];
+    stubNetwork({ results: relay.results, broadcastReason: "ChannelNotRegistered" });
+    await syncLiveActivities(env, finished, NOW);
+
+    const later = stubNetwork({ results: relay.results });
+    await syncLiveActivities(env, finished, NOW + 60 * 60_000);
+    expect(later.filter((request) => !request.url.includes("biathlonresults.com"))).toEqual([]);
+    const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
+    expect(response.status).toBe(410);
+    expect(await response.json()).toEqual({ state: relayFinal });
   });
 
   it("answers 404 for a race without a channel and 400 for an unknown environment", async () => {
