@@ -73,6 +73,7 @@ export async function verifyAttestation(input: {
   now: number;
   root?: Uint8Array;
   validationCategories?: readonly number[];
+  minBundleVersion?: string;
 }): Promise<AttestedKey> {
   return guarded(async () => {
     const object = asMap(decode(input.attestation));
@@ -119,9 +120,10 @@ export async function verifyAttestation(input: {
     // 9. credentialId is the key identifier too.
     if (!equal(authData.credentialId!, input.keyId)) throw new AttestationError("credential mismatch");
 
-    // 10. The build is one of this app's. 11. The bundle version is recorded: it changes
-    // with every build. Devices that send no extensions are accepted.
+    // 10. The build is one of this app's. 11. The build is still supported.
+    // Devices that send no extensions are accepted.
     checkValidationCategory(authData, input.validationCategories);
+    checkBundleVersion(authData, input.minBundleVersion);
     return {
       publicKey: leaf.publicKey,
       environment,
@@ -143,6 +145,7 @@ export async function verifyAssertion(input: {
   appId: string;
   previousCounter: number;
   validationCategories?: readonly number[];
+  minBundleVersion?: string;
 }): Promise<number> {
   return guarded(async () => {
     const object = asMap(decode(input.assertion));
@@ -175,6 +178,7 @@ export async function verifyAssertion(input: {
     // 6. The caller checks the challenge embedded in clientData.
     // 7-8. Same checks as for the attestation.
     checkValidationCategory(authData, input.validationCategories);
+    checkBundleVersion(authData, input.minBundleVersion);
     return authData.counter;
   });
 }
@@ -221,6 +225,28 @@ function checkValidationCategory(authData: AuthenticatorData, allowed = APP_VALI
   if (authData.validationCategory !== undefined && !allowed.includes(authData.validationCategory)) {
     throw new AttestationError(`validation category ${authData.validationCategory} not allowed`);
   }
+}
+
+/**
+ * Rejects builds older than `minimum`, so that raising it after a fix shuts out
+ * the builds before it. Both are CFBundleVersion strings: up to three
+ * period-separated integers, compared numerically.
+ */
+function checkBundleVersion(authData: AuthenticatorData, minimum: string | undefined): void {
+  if (minimum === undefined || authData.bundleVersion === undefined) return;
+  const version = parseBundleVersion(authData.bundleVersion);
+  const floor = parseBundleVersion(minimum);
+  if (!version || !floor) throw new AttestationError(`invalid bundle version ${authData.bundleVersion}`);
+  for (let i = 0; i < 3; i++) {
+    const difference = (version[i] ?? 0) - (floor[i] ?? 0);
+    if (difference > 0) return;
+    if (difference < 0) throw new AttestationError(`bundle version ${authData.bundleVersion} no longer supported`);
+  }
+}
+
+function parseBundleVersion(text: string): number[] | undefined {
+  if (!/^\d{1,9}(\.\d{1,9}){0,2}$/.test(text)) return undefined;
+  return text.split(".").map(Number);
 }
 
 function attestEnvironment(aaguid: Uint8Array): AttestEnvironment {

@@ -56,6 +56,7 @@ export async function registerKey(env: Env, body: unknown, now: number): Promise
       clientDataHash: await sha256(new TextEncoder().encode(challenge)),
       appId: env.APP_ATTEST_APP_ID,
       now,
+      minBundleVersion: env.APP_ATTEST_MIN_BUNDLE_VERSION,
     });
     // Apple: make sure the key isn't already associated. This also stops replayed attestations.
     const inserted = await env.DB.prepare(
@@ -125,6 +126,7 @@ export async function authorize(
       publicKey: fromBase64(key.publicKey),
       appId: env.APP_ATTEST_APP_ID,
       previousCounter: key.counter,
+      minBundleVersion: env.APP_ATTEST_MIN_BUNDLE_VERSION,
     });
   } catch (error) {
     if (error instanceof AttestationError) return { status: 401, error: `assertion rejected: ${error.message}` };

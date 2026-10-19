@@ -44,6 +44,14 @@ describe("attestation", () => {
     );
   });
 
+  it("rejects builds older than the minimum bundle version", async () => {
+    // Apple's sample is build "1".
+    await expect(verifyAttestation({ ...sampleInput, minBundleVersion: "1.0" })).resolves.toBeDefined();
+    await expect(verifyAttestation({ ...sampleInput, minBundleVersion: "0.9.9" })).resolves.toBeDefined();
+    await expect(verifyAttestation({ ...sampleInput, minBundleVersion: "1.0.1" })).rejects.toThrow("bundle version 1 no longer supported");
+    await expect(verifyAttestation({ ...sampleInput, minBundleVersion: "10" })).rejects.toThrow("no longer supported");
+  });
+
   it("rejects an expired credential certificate", async () => {
     await expect(verifyAttestation({ ...sampleInput, now: Date.parse("2026-05-01T00:00:00Z") })).rejects.toThrow("validity");
   });

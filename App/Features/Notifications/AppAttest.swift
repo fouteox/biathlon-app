@@ -17,8 +17,9 @@ final class AppAttest {
     private let serverURL: URL
     private let service = DCAppAttestService.shared
     private let defaults: UserDefaults
-    /// The attestation in progress: concurrent syncs share it instead of each attesting a key.
-    private var attesting: Task<String, any Error>?
+    /// The last send: sends run one at a time, so that a single key is attested and
+    /// assertion counters grow in the order of the changes they carry.
+    private var queue: Task<Void, Never>?
 
     /// Keys don't survive reinstalls, device migration or restores, which may bring
     /// these values back: an `invalidKey` error then starts over with a new key.
@@ -49,10 +50,20 @@ final class AppAttest {
     /// a new key first when there is none or the server no longer knows it.
     func send(_ request: URLRequest) async throws -> HTTPURLResponse {
         guard service.isSupported else { throw Failure.unsupported }
+        let previous = queue
+        let task = Task {
+            await previous?.value
+            return try await sendSigned(request)
+        }
+        queue = Task { _ = await task.result }
+        return try await task.value
+    }
+
+    private func sendSigned(_ request: URLRequest) async throws -> HTTPURLResponse {
         var retried = false
         while true {
-            let keyID = try await attestedKey()
             do {
+                let keyID = try await attestedKey()
                 let (data, response) = try await URLSession.shared.data(for: try await signed(request, keyID: keyID))
                 guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
                 if http.statusCode == 401, !retried, Self.serverError(data) == "unknown key" {
@@ -63,6 +74,7 @@ final class AppAttest {
                 }
                 return http
             } catch let error as DCError where error.code == .invalidKey && !retried {
+                // From the stored key, or from a pending one a restore brought back.
                 Logger.notifications.info("The App Attest key is no longer valid, attesting a new one")
                 defaults.removeObject(forKey: DefaultsKey.keyID)
                 retried = true
@@ -72,11 +84,7 @@ final class AppAttest {
 
     private func attestedKey() async throws -> String {
         if let keyID = defaults.string(forKey: DefaultsKey.keyID) { return keyID }
-        if let attesting { return try await attesting.value }
-        let task = Task { try await attestNewKey() }
-        attesting = task
-        defer { attesting = nil }
-        return try await task.value
+        return try await attestNewKey()
     }
 
     private func attestNewKey() async throws -> String {
@@ -87,6 +95,8 @@ final class AppAttest {
             // The challenge first: a failed fetch then leaves no unused key behind.
             let challenge = try await fetchChallenge(purpose: "attest")
             pending = Pending(keyID: try await service.generateKey(), challenge: challenge)
+            // Saved before attesting: if the app is terminated meanwhile, the next sync reuses this key.
+            savePending(pending)
         }
 
         if pending.attestation == nil {
@@ -94,7 +104,7 @@ final class AppAttest {
                 pending.attestation = try await service.attestKey(
                     pending.keyID, clientDataHash: Data(SHA256.hash(data: Data(pending.challenge.utf8))))
             } catch let error as DCError where error.code == .serverUnavailable {
-                savePending(pending)
+                // The key stays pending: the next sync retries with the same key and hash.
                 throw error
             } catch {
                 // Apple: for any other error, discard the key and create a new one next time.

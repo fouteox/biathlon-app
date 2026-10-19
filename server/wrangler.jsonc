@@ -21,7 +21,9 @@
   "vars": {
     "APNS_TOPIC": "com.fouteox.biathlon",
     // Each push is one subrequest; the Free plan allows 50 per invocation.
-    "MAX_PUSHES_PER_RUN": "30"
+    "MAX_PUSHES_PER_RUN": "30",
+    // Oldest app build (CFBundleVersion) App Attest accepts: raise it to shut out builds before a fix.
+    "APP_ATTEST_MIN_BUNDLE_VERSION": "1"
   },
   "secrets": {
     // Apple recommends one team-scoped key per APNs environment.
