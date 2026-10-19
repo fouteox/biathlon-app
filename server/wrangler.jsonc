@@ -21,10 +21,21 @@
   "vars": {
     "APNS_TOPIC": "com.fouteox.biathlon",
     // Each push is one subrequest; the Free plan allows 50 per invocation.
-    "MAX_PUSHES_PER_RUN": "30"
+    "MAX_PUSHES_PER_RUN": "30",
+    // Oldest app build (CFBundleVersion) App Attest accepts: raise it to shut out builds before a fix.
+    "APP_ATTEST_MIN_BUNDLE_VERSION": "1"
   },
   "secrets": {
     // Apple recommends one team-scoped key per APNs environment.
-    "required": ["APNS_TEAM_ID", "APNS_SANDBOX_KEY", "APNS_SANDBOX_KEY_ID", "APNS_PRODUCTION_KEY", "APNS_PRODUCTION_KEY_ID"]
+    // APP_ATTEST_APP_ID: "<App ID prefix>.<bundle ID>". APP_ATTEST_SECRET: random key that signs challenges.
+    "required": [
+      "APNS_TEAM_ID",
+      "APNS_SANDBOX_KEY",
+      "APNS_SANDBOX_KEY_ID",
+      "APNS_PRODUCTION_KEY",
+      "APNS_PRODUCTION_KEY_ID",
+      "APP_ATTEST_APP_ID",
+      "APP_ATTEST_SECRET"
+    ]
   }
 }

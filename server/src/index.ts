@@ -1,6 +1,8 @@
 import { probe } from "./apns";
-import { deleteDevice, isDeviceToken, parseRegistration, saveDevice } from "./devices";
+import { deleteOwnedDevice, isDeviceToken, ownsDevice, parseRegistration, saveDevice } from "./devices";
 import { IBU_BASE_URL } from "./ibu";
+import { isPurpose, issueChallenge } from "./challenges";
+import { authorize, pruneKeys, registerKey } from "./keys";
 import { runCron } from "./watcher";
 
 export default {
@@ -9,20 +11,30 @@ export default {
     const device = url.pathname.match(/^\/v1\/devices\/([^/]+)$/);
 
     if (device) {
+      if (request.method !== "PUT" && request.method !== "DELETE") return new Response(null, { status: 405 });
       const token = decodeURIComponent(device[1] ?? "").toLowerCase();
-      if (request.method === "PUT") {
-        const body = await request.json().catch(() => undefined);
-        const registration = parseRegistration(token, body);
-        if (typeof registration === "string") return json({ error: registration }, 400);
-        await saveDevice(env.DB, registration, Date.now());
-        return new Response(null, { status: 204 });
-      }
-      if (request.method === "DELETE") {
-        if (!isDeviceToken(token)) return json({ error: "invalid device token" }, 400);
-        await deleteDevice(env.DB, token);
-        return new Response(null, { status: 204 });
-      }
-      return new Response(null, { status: 405 });
+      // Read once: the assertion signs these exact bytes.
+      const body = new Uint8Array(await request.arrayBuffer());
+      const registration = request.method === "PUT" ? parseRegistration(token, parseJSON(body)) : undefined;
+      if (typeof registration === "string") return json({ error: registration }, 400);
+      if (!isDeviceToken(token)) return json({ error: "invalid device token" }, 400);
+      const auth = await authorize(env, request, body, Date.now());
+      if ("error" in auth) return json({ error: auth.error }, auth.status);
+      if (!(await ownsDevice(env.DB, token, auth.keyId))) return json({ error: "token registered by another key" }, 403);
+      if (registration) await saveDevice(env.DB, registration, auth.keyId, Date.now());
+      else await deleteOwnedDevice(env.DB, token, auth.keyId);
+      return new Response(null, { status: 204 });
+    }
+
+    if (url.pathname === "/v1/app-attest/challenges" && request.method === "POST") {
+      const purpose = url.searchParams.get("purpose");
+      if (!isPurpose(purpose)) return json({ error: "purpose must be attest or assert" }, 400);
+      return json({ challenge: await issueChallenge(env.APP_ATTEST_SECRET, purpose, Date.now()) }, 201);
+    }
+
+    if (url.pathname === "/v1/app-attest/keys" && request.method === "POST") {
+      const failure = await registerKey(env, await request.json().catch(() => undefined), Date.now());
+      return failure ? json({ error: failure.error }, failure.status) : new Response(null, { status: 204 });
     }
 
     if (url.pathname === "/v1/health" && request.method === "GET") {
@@ -37,7 +49,13 @@ export default {
   },
 
   async scheduled(controller, env, ctx): Promise<void> {
-    await runCron(env, controller.scheduledTime);
+    try {
+      await runCron(env, controller.scheduledTime);
+    } finally {
+      // Once a day is enough, and keeps the scan of the keys table off every run.
+      const time = new Date(controller.scheduledTime);
+      if (time.getUTCHours() === 3 && time.getUTCMinutes() === 0) await pruneKeys(env.DB, controller.scheduledTime);
+    }
   },
 } satisfies ExportedHandler<Env>;
 
@@ -76,6 +94,14 @@ async function proxyIBU(url: URL, ctx: ExecutionContext): Promise<Response> {
   });
   ctx.waitUntil(cache.put(cacheKey, response.clone()));
   return response;
+}
+
+function parseJSON(bytes: Uint8Array): unknown {
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return undefined;
+  }
 }
 
 function json(body: unknown, status = 200): Response {

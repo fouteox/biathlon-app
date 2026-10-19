@@ -36,6 +36,8 @@ targets:
       properties:
         # Xcode sets it from the provisioning profile: production for App Store and TestFlight builds.
         aps-environment: development
+        # App Attest sandbox while developing; TestFlight and App Store builds always use production.
+        com.apple.developer.devicecheck.appattest-environment: development
     info:
       path: App/Resources/Info.plist
       properties:
