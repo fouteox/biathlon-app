@@ -59,7 +59,8 @@ final class LiveActivities {
     /// shortly before a later race (`RaceLiveState.activityStart`).
     func follow(raceID: String, name: String) async throws {
         guard !followedRaceIDs.contains(raceID) else { return }
-        try await withChannel(raceID: raceID) { try Self.request(raceID: raceID, name: name, on: $0) }
+        let requested = try await withChannel(raceID: raceID) { try Self.request(raceID: raceID, name: name, on: $0) }
+        if requested { await reconcile(raceID: raceID) }
     }
 
     /// Removes the race's activity from the Lock Screen at once, or cancels its request.
@@ -76,11 +77,21 @@ final class LiveActivities {
         for raceID in startedRaceIDs { await reconcile(raceID: raceID) }
     }
 
-    private func reconcile(raceID: String) async {
+    /// A new activity subscribes after the channel lookup: whatever the server sent in
+    /// between, the end above all, is missed, the channel storing no messages. A second
+    /// lookup once subscribed catches it.
+    private func reconcile(raceID: String, attempt: Int = 1) async {
         do {
-            try await replaceOutdatedActivities(raceID: raceID)
+            if try await replaceOutdatedActivities(raceID: raceID) {
+                try await replaceOutdatedActivities(raceID: raceID)
+            }
         } catch Failure.noChannel {
-            // Its new channel isn't open yet: nothing to move to.
+            // The server opens a channel in place of one APNs dropped at its next run.
+            guard attempt < Self.channelLookups else { return }
+            Task { [weak self] in
+                try? await Task.sleep(for: Self.channelLookupInterval)
+                await self?.reconcile(raceID: raceID, attempt: attempt + 1)
+            }
         } catch let Failure.ended(finalState) {
             // The end was sent while the device was offline, which the channel doesn't keep.
             await Self.end(raceID: raceID, finalState: finalState)
@@ -95,9 +106,12 @@ final class LiveActivities {
     /// (`RaceLiveState.needsNewActivity`). The replacement is requested first, so the race
     /// stays followed if it can't be, and only when no activity matches already, like one
     /// requested by a reconciliation the app was quit during.
-    private func replaceOutdatedActivities(raceID: String) async throws {
-        guard let name = Self.activities(of: raceID).first?.attributes.name else { return }
+    /// `true` when it requested a replacement.
+    @discardableResult
+    private func replaceOutdatedActivities(raceID: String) async throws -> Bool {
+        guard let name = Self.activities(of: raceID).first?.attributes.name else { return false }
         var outdated: [String] = []
+        var requested = false
         let checked = try await withChannel(raceID: raceID) { channel in
             let shown = Self.activities(of: raceID).filter { Self.shownStates.contains($0.activityState) }
             let isCurrent = { (activity: Activity<RaceActivityAttributes>) in
@@ -109,11 +123,13 @@ final class LiveActivities {
             outdated = shown.filter { !isCurrent($0) }.map(\.id)
             if !outdated.isEmpty && !shown.contains(where: isCurrent) {
                 try Self.request(raceID: raceID, name: name, on: channel)
+                requested = true
             }
         }
-        guard checked else { return }
+        guard checked else { return false }
         for activityID in outdated { await Self.end(raceID: raceID, activityID: activityID) }
         refresh()
+        return requested
     }
 
     /// Runs `body` with the race's channel, unless `stopFollowing` cancels the request
@@ -168,6 +184,10 @@ final class LiveActivities {
     private nonisolated static func activities(of raceID: String) -> [Activity<RaceActivityAttributes>] {
         Activity<RaceActivityAttributes>.activities.filter { $0.attributes.raceID == raceID }
     }
+
+    /// The server's cron runs every minute: a few lookups a minute apart find a new channel.
+    private static let channelLookups = 3
+    private static let channelLookupInterval = Duration.seconds(60)
 
     /// Activities on screen or scheduled to show.
     private static let shownStates: [ActivityState] = [.pending, .active, .stale]

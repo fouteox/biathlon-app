@@ -422,6 +422,20 @@ describe("Live Activity channels", () => {
     expect(new Set([...deleted(first), ...deleted(second)])).toEqual(new Set(["a", "b", "c", "d", "e", "f"]));
   });
 
+  it("clears the leaders of a live race the calendar schedules again", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race({ StartTime: "2026-11-27T15:15:00Z" })], NOW + 60_000);
+
+    const states = broadcasts(sent).map((request) => (request.body as { aps: { "content-state": { leaders: unknown[] } } }).aps["content-state"]);
+    expect(states.map(({ leaders }) => leaders)).toEqual([[], []]);
+  });
+
   it("moves the start time of a live race from the calendar while its results can't be read", async () => {
     const env = await makeEnv();
     stubNetwork();
