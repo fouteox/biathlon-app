@@ -133,17 +133,27 @@ jobs:
               return { sha, state: 'pending', description: 'Waiting for the Codex 👍', retry: true };
             }
 
-            // The 👍 lands a few seconds after the summary comment is edited.
+            async function publish(result) {
+              core.info(`${result.state}: ${result.description}`);
+              await github.rest.repos.createCommitStatus({
+                owner, repo, sha: result.sha, context: CONTEXT,
+                state: result.state, description: result.description.slice(0, 140),
+                target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              });
+            }
+
             let result = await evaluate();
+            if (!result.state) return core.info('Pull request is closed.');
+            // Publish right away so a stale success never outlives a new
+            // review; then poll for the 👍, which lands a few seconds after
+            // the summary comment is edited.
+            await publish(result);
             for (let attempt = 0; result.retry && attempt < 8; attempt++) {
               await sleep(15000);
-              result = await evaluate();
+              const next = await evaluate();
+              if (!next.state) return core.info('Pull request is closed.');
+              if (next.state !== result.state || next.description !== result.description || next.sha !== result.sha) {
+                await publish(next);
+              }
+              result = next;
             }
-            if (!result.state) return core.info('Pull request is closed.');
-
-            core.info(`${result.state}: ${result.description}`);
-            await github.rest.repos.createCommitStatus({
-              owner, repo, sha: result.sha, context: CONTEXT,
-              state: result.state, description: result.description.slice(0, 140),
-              target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
-            });
