@@ -36,3 +36,5 @@ tar -xzf "$WORK/swift.tar.gz" --directory / --strip-components=1
 chmod -R o+r /usr/lib/swift
 rm -rf "$WORK" "$GNUPGHOME"
 swift --version
+# Échoue si un autre swift (ancien lien swiftly, etc.) passe avant /usr/bin dans le PATH.
+swift --version 2>/dev/null | grep -q "Swift version ${SWIFT_VERSION}" || { echo "swift dans le PATH n'est pas ${SWIFT_VERSION}" >&2; exit 1; }
