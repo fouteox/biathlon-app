@@ -119,10 +119,9 @@ struct RaceView: View {
 
     private func load() async {
         await loader.load { try await ibu.results(raceID: race.id) }
-        // A failed load leaves the activity as the server last published it.
         guard let loadedState else { return }
         do {
-            try await liveActivities.update(raceID: race.id, with: loadedState)
+            try await liveActivities.reschedule(raceID: race.id, for: loadedState)
         } catch {
             Logger.notifications.error(
                 "Rescheduling the Live Activity failed: \(String(describing: error), privacy: .public)")

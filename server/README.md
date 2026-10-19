@@ -51,7 +51,7 @@ Each `PUT` and `DELETE` on `/v1/devices/:token` then carries three headers: `X-A
 
 Each request to APNs or to the IBU API is a subrequest, and the Free plan allows 50 per invocation (D1 queries count separately, up to 1,000). `MAX_PUSHES_PER_RUN` (30 by default) caps the alerts sent per minute; the rest wait in the `outbox` table for the next runs, and alerts older than 30 minutes are dropped. On the Paid plan, raise it.
 
-Live Activities take the rest: at most 4 channel creations per run, then for each race running or just over, one IBU request and one broadcast per environment, and for an hour after the end, one broadcast per environment every 10 minutes. A broadcast reaches every subscriber at once, so their number doesn't count.
+Live Activities take the rest: at most 2 channel creations per environment and run, then for each race running or just over, one IBU request and one broadcast per environment, and for an hour after the end, one broadcast per environment every 10 minutes. A broadcast reaches every subscriber at once, so their number doesn't count.
 
 ## Develop
 

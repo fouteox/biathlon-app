@@ -17,12 +17,16 @@ const MAX_ATTEMPTS = 5;
  * Activities, then send a batch of alerts.
  */
 export async function runCron(env: Env, now: number): Promise<void> {
+  let races: RaceSnapshot[] | undefined;
   try {
-    const { races } = await pollRaces(env, now);
-    await syncLiveActivities(env, races, now);
+    ({ races } = await pollRaces(env, now));
   } finally {
-    // Alerts queued by earlier runs still go out while the IBU API is down.
-    await drainOutbox(env, now);
+    // Ended activities and alerts queued by earlier runs still go out while the IBU API is down.
+    try {
+      await syncLiveActivities(env, races, now);
+    } finally {
+      await drainOutbox(env, now);
+    }
   }
 }
 

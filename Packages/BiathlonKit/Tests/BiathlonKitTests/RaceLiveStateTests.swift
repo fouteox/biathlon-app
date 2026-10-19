@@ -54,6 +54,27 @@ struct RaceLiveStateTests {
         #expect(RaceLiveState.activityStart(raceStart: start, now: date("2026-11-26T15:30:00Z")) == nil)
     }
 
+    @Test func aMovedRaceNeedsANewActivityWhereItsStartNoLongerFits() {
+        let now = date("2026-11-26T09:00:00Z")
+        let race = RaceLiveState(phase: .scheduled, startTime: date("2026-11-26T15:15:00Z"), leaders: [])
+        let shownAt = date("2026-11-26T14:45:00Z")
+        // Still on time.
+        #expect(!race.needsNewActivity(scheduledStart: shownAt, isPending: true, now: now))
+        // Moved: a pending activity would show at the old time.
+        #expect(race.needsNewActivity(scheduledStart: date("2026-11-26T12:30:00Z"), isPending: true, now: now))
+        // Postponed after the activity showed: it would run out before the new start.
+        #expect(race.needsNewActivity(scheduledStart: nil, isPending: false, now: now))
+        #expect(race.needsNewActivity(scheduledStart: date("2026-11-26T08:30:00Z"), isPending: false, now: now))
+        // Brought forward to within the lead: a pending activity must show at once.
+        let soon = date("2026-11-26T15:00:00Z")
+        #expect(race.needsNewActivity(scheduledStart: date("2026-11-26T15:30:00Z"), isPending: true, now: soon))
+        #expect(!race.needsNewActivity(scheduledStart: shownAt, isPending: false, now: soon))
+        // A race that is over only ends its activity.
+        var cancelled = race
+        cancelled.phase = .cancelled
+        #expect(!cancelled.needsNewActivity(scheduledStart: date("2026-11-26T12:30:00Z"), isPending: true, now: now))
+    }
+
     @Test func onlyLiveAndUpcomingRacesCanBeFollowed() {
         #expect(Competition.State.allCases.filter(\.canBeFollowedLive) == [.scheduled, .live])
     }

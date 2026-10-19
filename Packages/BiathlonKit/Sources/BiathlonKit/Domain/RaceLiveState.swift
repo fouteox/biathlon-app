@@ -34,6 +34,15 @@ extension RaceLiveState {
         return start > now ? start : nil
     }
 
+    /// Whether an activity shown from `scheduledStart` (`nil`: at once) must be requested
+    /// again, ActivityKit being unable to move its start: a pending one whose race moved,
+    /// or one already shown for a race postponed beyond the lead.
+    public func needsNewActivity(scheduledStart: Date?, isPending: Bool, now: Date) -> Bool {
+        guard phase.canBeFollowedLive else { return false }
+        let start = Self.activityStart(raceStart: startTime, now: now)
+        return start != scheduledStart && (start != nil || isPending)
+    }
+
     /// A race nobody has results for yet, from the calendar alone (`calendarState` on the server).
     public init(race: Competition) {
         self.init(phase: race.state, startTime: race.startTime, leaders: [])

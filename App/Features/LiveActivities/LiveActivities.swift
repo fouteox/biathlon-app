@@ -6,8 +6,8 @@ import Observation
 /// Starts, updates and ends the races' Live Activities.
 ///
 /// An activity subscribes to its race's APNs broadcast channel, which the server opens
-/// for upcoming races and publishes each new state on. While a race is on screen, the
-/// app also updates its activity itself, as Apple recommends: a device may miss pushes.
+/// for upcoming races and publishes each new state on. The server is the only source of
+/// the activity's content: the app's cached results could be older than a push.
 @Observable
 final class LiveActivities {
     enum Failure: Error {
@@ -66,17 +66,18 @@ final class LiveActivities {
         refresh()
     }
 
-    /// Shows `state` in the race's activity, ending it once the race is over. A scheduled
-    /// activity whose race moved is scheduled again at the new time.
-    func update(raceID: String, with state: RaceLiveState) async throws {
-        let start = RaceLiveState.activityStart(raceStart: state.startTime, now: .now)
+    /// Requests a new activity for a race that moved since its activity was scheduled
+    /// (`RaceLiveState.needsNewActivity`), then ends the old one.
+    func reschedule(raceID: String, for state: RaceLiveState) async throws {
         let moved = Self.activities(of: raceID).first {
-            $0.activityState == .pending && $0.attributes.scheduledStart != start
+            Self.shownStates.contains($0.activityState)
+                && state.needsNewActivity(
+                    scheduledStart: $0.attributes.scheduledStart, isPending: $0.activityState == .pending, now: .now)
         }
-        guard let moved else { return await Self.update(raceID: raceID, with: state) }
+        guard let moved else { return }
         let (movedID, name) = (moved.id, moved.attributes.name)
         // The replacement first: the race stays followed if it can't be scheduled.
-        guard try await self.start(raceID: raceID, name: name, state: state) else { return }
+        guard try await start(raceID: raceID, name: name, state: state) else { return }
         await Self.end(raceID: raceID, activityID: movedID)
         refresh()
     }
@@ -109,19 +110,8 @@ final class LiveActivities {
         return true
     }
 
-    // `Activity` isn't `Sendable` and its `update` and `end` run off the main actor:
-    // the activities are looked up and changed off the main actor as well.
-
-    @concurrent private static func update(raceID: String, with state: RaceLiveState) async {
-        for activity in activities(of: raceID) where activity.content.state != state {
-            let content = ActivityContent(state: state, staleDate: nil)
-            if state.phase.canBeFollowedLive {
-                await activity.update(content)
-            } else {
-                await activity.end(content, dismissalPolicy: .default)
-            }
-        }
-    }
+    // `Activity` isn't `Sendable` and its `end` runs off the main actor: the activities
+    // are looked up and ended off the main actor as well.
 
     /// Ends the race's activities, or only `activityID`.
     @concurrent private static func end(raceID: String, activityID: String? = nil) async {
@@ -134,10 +124,13 @@ final class LiveActivities {
         Activity<RaceActivityAttributes>.activities.filter { $0.attributes.raceID == raceID }
     }
 
+    /// Activities on screen or scheduled to show.
+    private static let shownStates: [ActivityState] = [.pending, .active, .stale]
+
     private func refresh() {
         startedRaceIDs = Set(
             Activity<RaceActivityAttributes>.activities
-                .filter { [.pending, .active, .stale].contains($0.activityState) }
+                .filter { Self.shownStates.contains($0.activityState) }
                 .map(\.attributes.raceID))
     }
 

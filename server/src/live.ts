@@ -51,9 +51,10 @@ const LEADER_COUNT = 3;
 const REFERENCE_DATE_S = 978_307_200;
 /**
  * Each creation is one subrequest; the Free plan allows 50 per invocation, and
- * the outbox spends up to `MAX_PUSHES_PER_RUN` of them.
+ * the outbox spends up to `MAX_PUSHES_PER_RUN` of them. Counted per environment,
+ * so failures in one never hold up the other.
  */
-const MAX_CHANNEL_CREATIONS_PER_RUN = 4;
+const MAX_CHANNEL_CREATIONS_PER_ENVIRONMENT = 2;
 /**
  * The channels store no messages, as Apple advises for frequent updates like sports
  * scores, so a device offline when the end is sent never gets it: the end is sent
@@ -104,20 +105,22 @@ interface ChannelRow {
 /**
  * Opens the channels of upcoming races, broadcasts each new state of the races
  * that have channels, and ends the activities of races that are over or no longer
- * watched (`races` is the watcher's current list).
+ * watched (`races` is the watcher's current list). Without `races`, when the
+ * calendar can't be read, only the activities already ended are looked after.
  */
-export async function syncLiveActivities(env: Env, races: RaceSnapshot[], now: number): Promise<void> {
+export async function syncLiveActivities(env: Env, races: RaceSnapshot[] | undefined, now: number): Promise<void> {
   const tokens = new ProviderTokens(env, now);
   const { results: rows } = await env.DB.prepare(
     "SELECT race_id AS raceId, environment, channel_id AS channelId, state, ended_at AS endedAt, end_sent_at AS endSentAt FROM live_channels",
   ).all<ChannelRow>();
+  for (const channel of rows) if (channel.endedAt !== null) await resendEnd(env, tokens, channel, now);
+  if (!races) return;
   await openChannels(env, tokens, races, rows, now);
 
   const byRace = Map.groupBy(rows, (row) => row.raceId);
   const watched = new Map(races.map((race) => [race.id, race]));
   for (const [raceId, channels] of byRace) {
     const followed = channels.filter((channel) => channel.endedAt === null);
-    for (const channel of channels) if (channel.endedAt !== null) await resendEnd(env, tokens, channel, now);
     if (followed.length === 0) continue;
 
     const race = watched.get(raceId);
@@ -154,11 +157,13 @@ async function currentState(raceId: string, race: RaceSnapshot | undefined): Pro
 
 async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapshot[], rows: ChannelRow[], now: number) {
   const open = new Set(rows.map((row) => `${row.raceId} ${row.environment}`));
-  const missing = races
-    .filter((race) => race.status === "scheduled" || race.status === "live")
-    .flatMap((race) => ENVIRONMENTS.map((environment) => ({ race, environment })))
-    .filter(({ race, environment }) => !open.has(`${race.id} ${environment}`))
-    .slice(0, MAX_CHANNEL_CREATIONS_PER_RUN);
+  const followable = races.filter((race) => race.status === "scheduled" || race.status === "live");
+  const missing = ENVIRONMENTS.flatMap((environment) =>
+    followable
+      .filter((race) => !open.has(`${race.id} ${environment}`))
+      .slice(0, MAX_CHANNEL_CREATIONS_PER_ENVIRONMENT)
+      .map((race) => ({ race, environment })),
+  );
 
   for (const { race, environment } of missing) {
     const outcome = await tokens.send(environment, (token) => createChannel(environment, env.APNS_TOPIC, token));

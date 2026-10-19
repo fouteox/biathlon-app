@@ -45,7 +45,7 @@ interface Sent {
 }
 
 /** Answers like APNs and the IBU API, and records every request. */
-function stubNetwork(options: { results?: unknown; broadcastReason?: string } = {}): Sent[] {
+function stubNetwork(options: { results?: unknown; broadcastReason?: string; failingHost?: string } = {}): Sent[] {
   const sent: Sent[] = [];
   let channels = 0;
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
@@ -53,6 +53,7 @@ function stubNetwork(options: { results?: unknown; broadcastReason?: string } = 
     const headers = Object.fromEntries(new Headers(init.headers).entries());
     sent.push({ method: init.method ?? "GET", url, headers, body: init.body ? JSON.parse(String(init.body)) : undefined });
     if (url.includes("biathlonresults.com")) return Response.json(options.results ?? live.results);
+    if (options.failingHost && url.includes(options.failingHost)) return new Response(null, { status: 500 });
     if (url.includes("api-manage-broadcast") && init.method === "POST") {
       channels += 1;
       return new Response(null, { status: 201, headers: { "apns-channel-id": `channel-${channels}` } });
@@ -230,6 +231,44 @@ describe("Live Activity channels", () => {
     await syncLiveActivities(env, races, NOW);
 
     expect(sent.filter((request) => request.url.includes("api-manage-broadcast")).length).toBe(4);
+  });
+
+  it("keeps opening channels in one environment while the other fails", async () => {
+    const env = await makeEnv();
+    const races = ["A", "B", "C", "D", "E"].map((suffix) => race({ RaceId: RACE_ID + suffix }));
+    for (const { id } of races) {
+      await env.DB.prepare(
+        "INSERT INTO races (id, category, name, start_time, status, updated_at) VALUES (?1, 'SM', 'x', 'x', 'scheduled', 0)",
+      )
+        .bind(id)
+        .run();
+    }
+
+    stubNetwork({ failingHost: "api-manage-broadcast.push.apple.com" });
+    for (const run of [0, 1, 2]) await syncLiveActivities(env, races, NOW + run * 60_000);
+
+    expect((await channels(env)).map(({ environment }) => environment)).toEqual(Array(5).fill("sandbox"));
+  });
+
+  it("sends the end again while the calendar can't be read, without ending followed races", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    const followed = race({ RaceId: `${RACE_ID}B` });
+    await env.DB.prepare(
+      "INSERT INTO races (id, category, name, start_time, status, updated_at) VALUES (?1, 'SM', 'x', 'x', 'scheduled', 0)",
+    )
+      .bind(followed.id)
+      .run();
+    await syncLiveActivities(env, [race(), followed], NOW);
+    stubNetwork({ results: relay.results });
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" }), followed], NOW);
+
+    const sent = stubNetwork();
+    await syncLiveActivities(env, undefined, NOW + 10 * 60_000);
+
+    expect(broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
+    expect(sent.filter((request) => request.url.includes("api-manage-broadcast"))).toEqual([]);
+    expect((await channels(env)).length).toBe(4);
   });
 });
 
