@@ -86,9 +86,15 @@ export function liveState(results: IBUResults): LiveState | undefined {
   };
 }
 
-/** The state of a race nobody has results for yet, from the calendar alone. */
-function calendarState(race: RaceSnapshot): LiveState {
-  return { phase: race.status, startTime: referenceSeconds(race.startTime), leaders: [] };
+/** What the calendar tells of a race: everything but its leaders. */
+type CalendarFields = Pick<LiveState, "phase" | "startTime">;
+
+function calendarFields(race: RaceSnapshot): CalendarFields {
+  return { phase: race.status, startTime: referenceSeconds(race.startTime) };
+}
+
+function isTerminal(phase: RaceStatus): boolean {
+  return phase === "finished" || phase === "cancelled";
 }
 
 function referenceSeconds(time: string): number {
@@ -143,16 +149,15 @@ export async function syncLiveActivities(
 
   for (const [raceId, channels] of Map.groupBy(open, (row) => row.raceId)) {
     const race = watched.get(raceId);
-    const state = await currentState(raceId, race, budget);
+    const known = await currentState(raceId, race, budget);
     for (const channel of channels) {
-      const stored = JSON.parse(channel.state) as LiveState;
-      if (!race) {
-        // No longer watched: the activity ends with the latest state there is.
-        await end(env, tokens, channel, state ?? stored, now);
-      } else if (race.status === "finished" || race.status === "cancelled") {
-        // The results can lag behind the calendar's phase, or be unreadable.
-        await end(env, tokens, channel, { ...(state ?? stored), phase: race.status }, now);
-      } else if (state && JSON.stringify(state) !== channel.state) {
+      const state: LiveState = { ...(JSON.parse(channel.state) as LiveState), ...known };
+      // The results can lag behind the calendar's end, or be ahead of it.
+      if (race && isTerminal(race.status)) state.phase = race.status;
+      if (!race || isTerminal(state.phase)) {
+        // Over, or no longer watched: the activity ends with the latest state there is.
+        await end(env, tokens, channel, state, now);
+      } else if (JSON.stringify(state) !== channel.state) {
         await publish(env, tokens, channel, state, now);
       }
     }
@@ -164,18 +169,19 @@ function isFollowable(race: RaceSnapshot | undefined): race is RaceSnapshot {
 }
 
 /**
- * Upcoming races change only through the calendar; the others need their results.
- * `undefined` when the results can't be read: the next run tries again.
+ * What is known of a race now, over its last published state. Upcoming races change
+ * only through the calendar; the others need their results, and keep their last
+ * leaders when the results can't be read or don't describe the race.
  */
 async function currentState(
   raceId: string,
   race: RaceSnapshot | undefined,
   budget: SubrequestBudget,
-): Promise<LiveState | undefined> {
-  if (race?.status === "scheduled" || race?.status === "cancelled") return calendarState(race);
+): Promise<LiveState | CalendarFields | undefined> {
+  if (race?.status === "scheduled" || race?.status === "cancelled") return calendarFields(race);
   try {
     const state = liveState(await fetchIBU<IBUResults>("Results", { RaceId: raceId }, budget));
-    return state ?? (race && calendarState(race));
+    return state ?? (race && calendarFields(race));
   } catch (error) {
     console.warn("Live Activity results unavailable", raceId, String(error));
     return undefined;
@@ -204,7 +210,7 @@ async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapsho
       `INSERT INTO live_channels (race_id, environment, channel_id, state, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
        ON CONFLICT (race_id, environment) DO NOTHING`,
     )
-      .bind(race.id, environment, outcome.channelId, JSON.stringify(calendarState(race)), now)
+      .bind(race.id, environment, outcome.channelId, JSON.stringify({ ...calendarFields(race), leaders: [] }), now)
       .run();
     if (meta.changes === 0) {
       // An overlapping run recorded its channel first: this one is deleted by a later run.
@@ -249,20 +255,23 @@ async function end(env: Env, tokens: ProviderTokens, channel: ChannelRow, state:
   }
 }
 
+/** The ended row a run read, not the open one an overlapping run may have replaced it with. Binds ?2 to ?4. */
+const SAME_ENDED_CHANNEL = "race_id = ?2 AND environment = ?3 AND channel_id = ?4 AND ended_at IS NOT NULL";
+
 /** Sends the end again for devices that were offline, then deletes the channel at APNs once the grace period is over. */
 async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, now: number) {
   if (now - (channel.endedAt ?? now) >= END_GRACE_MS) {
     if (!(await deleteAtAPNs(env, tokens, channel.environment, channel.channelId))) return;
-    await env.DB.prepare("UPDATE live_channels SET deleted_at = ?1 WHERE race_id = ?2 AND environment = ?3")
-      .bind(now, channel.raceId, channel.environment)
+    await env.DB.prepare(`UPDATE live_channels SET deleted_at = ?1 WHERE ${SAME_ENDED_CHANNEL}`)
+      .bind(now, channel.raceId, channel.environment, channel.channelId)
       .run();
     return;
   }
   if (now - (channel.endSentAt ?? now) < END_RESEND_INTERVAL_MS) return;
   const outcome = await send(env, tokens, channel, "end", JSON.parse(channel.state) as LiveState, now);
   if (outcome === "sent") {
-    await env.DB.prepare("UPDATE live_channels SET end_sent_at = ?1 WHERE race_id = ?2 AND environment = ?3")
-      .bind(now, channel.raceId, channel.environment)
+    await env.DB.prepare(`UPDATE live_channels SET end_sent_at = ?1 WHERE ${SAME_ENDED_CHANNEL}`)
+      .bind(now, channel.raceId, channel.environment, channel.channelId)
       .run();
   } else if (outcome === "unregistered") {
     await forget(env, channel);

@@ -73,41 +73,45 @@ final class LiveActivities {
     /// comes back: a broadcast can update an activity but can't move its scheduled start
     /// or subscribe it to a new channel.
     func reconcile() async {
-        for raceID in startedRaceIDs {
-            do {
-                try await reconcile(raceID: raceID)
-            } catch Failure.noChannel {
-                // Its new channel isn't open yet: nothing to move to.
-            } catch let Failure.ended(finalState) {
-                // The end was sent while the device was offline, which the channel doesn't keep.
-                await Self.end(raceID: raceID, finalState: finalState)
-            } catch {
-                Logger.notifications.error(
-                    "Reconciling the Live Activity failed: \(String(describing: error), privacy: .public)")
-            }
+        for raceID in startedRaceIDs { await reconcile(raceID: raceID) }
+    }
+
+    private func reconcile(raceID: String) async {
+        do {
+            try await replaceOutdatedActivities(raceID: raceID)
+        } catch Failure.noChannel {
+            // Its new channel isn't open yet: nothing to move to.
+        } catch let Failure.ended(finalState) {
+            // The end was sent while the device was offline, which the channel doesn't keep.
+            await Self.end(raceID: raceID, finalState: finalState)
+        } catch {
+            Logger.notifications.error(
+                "Reconciling the Live Activity failed: \(String(describing: error), privacy: .public)")
         }
     }
 
     /// Replaces the race's activities that no longer match its channel: the server opened
     /// a new one, or the race moved since the activity was scheduled
     /// (`RaceLiveState.needsNewActivity`). The replacement is requested first, so the race
-    /// stays followed if it can't be.
-    private func reconcile(raceID: String) async throws {
+    /// stays followed if it can't be, and only when no activity matches already, like one
+    /// requested by a reconciliation the app was quit during.
+    private func replaceOutdatedActivities(raceID: String) async throws {
         guard let name = Self.activities(of: raceID).first?.attributes.name else { return }
         var outdated: [String] = []
-        let requested = try await withChannel(raceID: raceID) { channel in
-            outdated = Self.activities(of: raceID)
-                .filter { activity in
-                    Self.shownStates.contains(activity.activityState)
-                        && (activity.attributes.channelID != channel.channelId
-                            || channel.state.needsNewActivity(
-                                scheduledStart: activity.attributes.scheduledStart,
-                                isPending: activity.activityState == .pending, now: .now))
-                }
-                .map(\.id)
-            if !outdated.isEmpty { try Self.request(raceID: raceID, name: name, on: channel) }
+        let checked = try await withChannel(raceID: raceID) { channel in
+            let shown = Self.activities(of: raceID).filter { Self.shownStates.contains($0.activityState) }
+            let isCurrent = { (activity: Activity<RaceActivityAttributes>) in
+                activity.attributes.channelID == channel.channelId
+                    && !channel.state.needsNewActivity(
+                        scheduledStart: activity.attributes.scheduledStart,
+                        isPending: activity.activityState == .pending, now: .now)
+            }
+            outdated = shown.filter { !isCurrent($0) }.map(\.id)
+            if !outdated.isEmpty && !shown.contains(where: isCurrent) {
+                try Self.request(raceID: raceID, name: name, on: channel)
+            }
         }
-        guard requested else { return }
+        guard checked else { return }
         for activityID in outdated { await Self.end(raceID: raceID, activityID: activityID) }
         refresh()
     }
@@ -175,12 +179,24 @@ final class LiveActivities {
                 .map(\.attributes.raceID))
     }
 
-    /// Ended and dismissed activities leave `followedRaceIDs`, wherever they end.
+    /// Ended and dismissed activities leave `followedRaceIDs`, wherever they end, and a
+    /// broadcast that moves the race reschedules its activity while the app runs.
     private func observeState(of activity: Activity<RaceActivityAttributes>) {
-        observers.append(
+        let raceID = activity.attributes.raceID
+        let scheduledStart = activity.attributes.scheduledStart
+        observers.append(contentsOf: [
             Task { [weak self] in
                 for await _ in activity.activityStateUpdates { self?.refresh() }
-            })
+            },
+            Task { [weak self] in
+                for await content in activity.contentUpdates
+                where content.state.needsNewActivity(
+                    scheduledStart: scheduledStart, isPending: activity.activityState == .pending, now: .now)
+                {
+                    await self?.reconcile(raceID: raceID)
+                }
+            },
+        ])
     }
 
     private func channel(raceID: String) async throws -> Channel {

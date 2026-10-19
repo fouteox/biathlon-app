@@ -251,6 +251,68 @@ describe("Live Activity channels", () => {
     ]);
   });
 
+  it("keeps the last leaders when the results stop describing the race", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+    const withoutCompetition = { RaceId: RACE_ID, Results: [] };
+
+    const unchanged = stubNetwork({ results: withoutCompetition });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
+    expect(broadcasts(unchanged)).toEqual([]);
+
+    const sent = stubNetwork({ results: withoutCompetition });
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 120_000);
+    expect(broadcasts(sent).map((request) => (request.body as { aps: { "content-state": unknown } }).aps["content-state"])).toEqual([
+      { ...(live.state as object), phase: "finished" },
+      { ...(live.state as object), phase: "finished" },
+    ]);
+  });
+
+  it("ends the activity once the results are final, before the calendar says so", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+
+    const sent = stubNetwork({ results: relay.results });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    expect(broadcasts(sent).map((request) => request.body)).toEqual([
+      { aps: { timestamp: NOW / 1000, event: "end", "content-state": relay.state } },
+      { aps: { timestamp: NOW / 1000, event: "end", "content-state": relay.state } },
+    ]);
+  });
+
+  it("leaves alone the new channel an overlapping run opened while the old one was being deleted", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    const cancelled = [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })];
+    stubNetwork();
+    await syncLiveActivities(env, cancelled, NOW);
+    stubNetwork();
+    const fetchStub = globalThis.fetch;
+    // The other run replaces the row with an open channel while this one deletes the old channel.
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      if (init.method === "DELETE") {
+        await env.DB.prepare(
+          "UPDATE live_channels SET channel_id = 'new-' || environment, ended_at = NULL, end_sent_at = NULL",
+        ).run();
+      }
+      return fetchStub(input, init);
+    });
+
+    await syncLiveActivities(env, cancelled, NOW + 60 * 60_000);
+
+    const { results } = await env.DB.prepare("SELECT channel_id AS channelId, deleted_at AS deletedAt FROM live_channels ORDER BY environment").all();
+    expect(results).toEqual([
+      { channelId: "new-production", deletedAt: null },
+      { channelId: "new-sandbox", deletedAt: null },
+    ]);
+  });
+
   it("replaces the ended channels of a race that can be followed again", async () => {
     const env = await makeEnv();
     stubNetwork();
