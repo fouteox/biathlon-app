@@ -38,7 +38,7 @@ targets:
       path: App/Resources/Info.plist
       properties:
         # Cloudflare Worker base URL (see server/README.md); push alerts stay off while empty.
-        BiathlonServerURL: ""
+        BiathlonServerURL: https://biathlon-server.fouteox.workers.dev
         CFBundleDisplayName: Biathlon Live
         CFBundleDevelopmentRegion: $(DEVELOPMENT_LANGUAGE)
         UILaunchScreen: {}
