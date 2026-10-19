@@ -1,5 +1,6 @@
 import ActivityKit
 import BiathlonKit
+import Foundation
 
 /// A race's Live Activity, on the Lock Screen and in the Dynamic Island.
 ///
@@ -11,4 +12,7 @@ nonisolated struct RaceActivityAttributes: ActivityAttributes {
 
     let raceID: String
     let name: String
+    /// When ActivityKit shows a scheduled activity (`RaceLiveState.activityStart`), which
+    /// it can't move: the app schedules it again when the race moves. `nil` once started.
+    let scheduledStart: Date?
 }

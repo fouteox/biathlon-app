@@ -161,33 +161,47 @@ describe("Live Activity channels", () => {
     expect(sent.some((request) => request.url.includes("biathlonresults.com"))).toBe(false);
   });
 
-  it("ends the activity with the final results, then deletes the channels", async () => {
+  it("ends the activity with the final results, sends the end again for offline devices, then deletes the channels", async () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
+    const finished = [race({ StatusId: 11, ScheduleStatus: "FINISHED" })];
 
     const sent = stubNetwork({ results: relay.results });
-    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW);
-
+    await syncLiveActivities(env, finished, NOW);
     expect(broadcasts(sent).map((request) => request.body)).toEqual([
       { aps: { timestamp: NOW / 1000, event: "end", "content-state": relay.state } },
       { aps: { timestamp: NOW / 1000, event: "end", "content-state": relay.state } },
     ]);
-    const deletions = sent.filter((request) => request.method === "DELETE");
-    expect(deletions.map((request) => request.headers["apns-channel-id"])).toEqual(["channel-1", "channel-2"]);
+
+    // No message storage: devices offline at the end only get a later send.
+    const later = stubNetwork({ results: relay.results });
+    await syncLiveActivities(env, finished, NOW + 60_000);
+    expect(broadcasts(later)).toEqual([]);
+    await syncLiveActivities(env, finished, NOW + 10 * 60_000);
+    expect(broadcasts(later).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
+    expect(later.some((request) => request.url.includes("biathlonresults.com"))).toBe(false);
+    expect(later.some((request) => request.method === "DELETE")).toBe(false);
+
+    const last = stubNetwork();
+    await syncLiveActivities(env, finished, NOW + 60 * 60_000);
+    expect(last.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"])).toEqual([
+      "channel-1",
+      "channel-2",
+    ]);
+    expect(broadcasts(last)).toEqual([]);
     expect(await channels(env)).toEqual([]);
   });
 
-  it("ends the channels of races no longer watched", async () => {
+  it("ends a race from the calendar when its results don't describe it", async () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
 
-    const sent = stubNetwork({ results: relay.results });
-    await syncLiveActivities(env, [], NOW);
+    const sent = stubNetwork({ results: { RaceId: RACE_ID, Results: [] } });
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW);
 
     expect(broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
-    expect(await channels(env)).toEqual([]);
   });
 
   it("forgets a channel APNs no longer knows, to open a new one", async () => {

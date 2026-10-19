@@ -91,8 +91,7 @@ struct RaceView: View {
             Task {
                 guard follow else { return await liveActivities.stopFollowing(raceID: race.id) }
                 do {
-                    try await liveActivities.follow(
-                        RaceActivityAttributes(raceID: race.id, name: race.shortDescription), state: state)
+                    try await liveActivities.follow(raceID: race.id, name: race.shortDescription, state: state)
                 } catch {
                     Logger.notifications.error(
                         "Starting the Live Activity failed: \(String(describing: error), privacy: .public)")
@@ -117,6 +116,12 @@ struct RaceView: View {
 
     private func load() async {
         await loader.load { try await ibu.results(raceID: race.id) }
-        if let liveState { await liveActivities.update(raceID: race.id, with: liveState) }
+        guard let liveState else { return }
+        do {
+            try await liveActivities.update(raceID: race.id, with: liveState)
+        } catch {
+            Logger.notifications.error(
+                "Rescheduling the Live Activity failed: \(String(describing: error), privacy: .public)")
+        }
     }
 }

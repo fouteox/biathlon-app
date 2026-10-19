@@ -7,7 +7,7 @@ import { ProviderTokens } from "./providerTokens";
  * per update reaches every subscriber, whatever their number (Apple, WWDC24 session
  * 10069). The watcher opens a channel per race and APNs environment while the race
  * is upcoming, publishes each change of its state, then ends the activity and
- * deletes the channel when the race is over (channels are limited to 10,000).
+ * deletes the channel a while after the race is over (channels are limited to 10,000).
  */
 
 /** `Results?RaceId=`: the race and its rows. */
@@ -54,6 +54,13 @@ const REFERENCE_DATE_S = 978_307_200;
  * the outbox spends up to `MAX_PUSHES_PER_RUN` of them.
  */
 const MAX_CHANNEL_CREATIONS_PER_RUN = 4;
+/**
+ * The channels store no messages, as Apple advises for frequent updates like sports
+ * scores, so a device offline when the end is sent never gets it: the end is sent
+ * again at this interval, until the channel is deleted.
+ */
+const END_RESEND_INTERVAL_MS = 10 * 60_000;
+const END_GRACE_MS = 60 * 60_000;
 
 /** The state the app shows, from a race's results; `undefined` without a `Competition` block. */
 export function liveState(results: IBUResults): LiveState | undefined {
@@ -90,6 +97,8 @@ interface ChannelRow {
   environment: APNsEnvironment;
   channelId: string;
   state: string;
+  endedAt: number | null;
+  endSentAt: number | null;
 }
 
 /**
@@ -100,16 +109,20 @@ interface ChannelRow {
 export async function syncLiveActivities(env: Env, races: RaceSnapshot[], now: number): Promise<void> {
   const tokens = new ProviderTokens(env, now);
   const { results: rows } = await env.DB.prepare(
-    "SELECT race_id AS raceId, environment, channel_id AS channelId, state FROM live_channels",
+    "SELECT race_id AS raceId, environment, channel_id AS channelId, state, ended_at AS endedAt, end_sent_at AS endSentAt FROM live_channels",
   ).all<ChannelRow>();
   await openChannels(env, tokens, races, rows, now);
 
   const byRace = Map.groupBy(rows, (row) => row.raceId);
   const watched = new Map(races.map((race) => [race.id, race]));
   for (const [raceId, channels] of byRace) {
+    const followed = channels.filter((channel) => channel.endedAt === null);
+    for (const channel of channels) if (channel.endedAt !== null) await resendEnd(env, tokens, channel, now);
+    if (followed.length === 0) continue;
+
     const race = watched.get(raceId);
     const state = await currentState(raceId, race);
-    for (const channel of channels) {
+    for (const channel of followed) {
       if (!race) {
         // No longer watched: the activity ends with the latest state there is.
         await end(env, tokens, channel, state ?? (JSON.parse(channel.state) as LiveState), now);
@@ -131,7 +144,8 @@ export async function syncLiveActivities(env: Env, races: RaceSnapshot[], now: n
 async function currentState(raceId: string, race: RaceSnapshot | undefined): Promise<LiveState | undefined> {
   if (race?.status === "scheduled" || race?.status === "cancelled") return calendarState(race);
   try {
-    return liveState(await fetchIBU<IBUResults>("Results", { RaceId: raceId }));
+    const state = liveState(await fetchIBU<IBUResults>("Results", { RaceId: raceId }));
+    return state ?? (race && calendarState(race));
   } catch (error) {
     console.warn("Live Activity results unavailable", raceId, String(error));
     return undefined;
@@ -173,15 +187,39 @@ async function publish(env: Env, tokens: ProviderTokens, channel: ChannelRow, st
   }
 }
 
-/** Sends the final state, then deletes the channel; both are retried at the next run until they succeed. */
+/** Sends the final state, retried at the next run until it succeeds. */
 async function end(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
   const outcome = await send(env, tokens, channel, "end", state, now);
-  if (outcome === "failed") return;
-  const deletion = await tokens.send(channel.environment, (token) =>
-    deleteChannel(channel.environment, env.APNS_TOPIC, channel.channelId, token),
-  );
-  if (deletion.kind === "sent" || deletion.kind === "unregistered") await forget(env, channel);
-  else console.error("APNs channel deletion failed", channel.raceId, channel.environment, deletion);
+  if (outcome === "sent") {
+    await env.DB.prepare(
+      "UPDATE live_channels SET state = ?1, ended_at = ?2, end_sent_at = ?2 WHERE race_id = ?3 AND environment = ?4",
+    )
+      .bind(JSON.stringify(state), now, channel.raceId, channel.environment)
+      .run();
+  } else if (outcome === "unregistered") {
+    await forget(env, channel);
+  }
+}
+
+/** Sends the end again for devices that were offline, then deletes the channel once the grace period is over. */
+async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, now: number) {
+  if (now - (channel.endedAt ?? now) >= END_GRACE_MS) {
+    const deletion = await tokens.send(channel.environment, (token) =>
+      deleteChannel(channel.environment, env.APNS_TOPIC, channel.channelId, token),
+    );
+    if (deletion.kind === "sent" || deletion.kind === "unregistered") await forget(env, channel);
+    else console.error("APNs channel deletion failed", channel.raceId, channel.environment, deletion);
+    return;
+  }
+  if (now - (channel.endSentAt ?? now) < END_RESEND_INTERVAL_MS) return;
+  const outcome = await send(env, tokens, channel, "end", JSON.parse(channel.state) as LiveState, now);
+  if (outcome === "sent") {
+    await env.DB.prepare("UPDATE live_channels SET end_sent_at = ?1 WHERE race_id = ?2 AND environment = ?3")
+      .bind(now, channel.raceId, channel.environment)
+      .run();
+  } else if (outcome === "unregistered") {
+    await forget(env, channel);
+  }
 }
 
 /** Broadcasts an ActivityKit event; "unregistered" when APNs no longer knows the channel. */

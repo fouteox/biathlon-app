@@ -18,9 +18,10 @@ final class LiveActivities {
 
     /// Races with an activity on the Lock Screen or scheduled to show there, and races
     /// whose activity is being requested: a second tap meanwhile starts no duplicate.
-    var followedRaceIDs: Set<String> { startedRaceIDs.union(requestedRaceIDs) }
+    var followedRaceIDs: Set<String> { startedRaceIDs.union(requests.keys) }
     private var startedRaceIDs: Set<String> = []
-    private var requestedRaceIDs: Set<String> = []
+    /// The request in flight for each race, which `stopFollowing` cancels.
+    private var requests: [String: UUID] = [:]
     /// Whether the user allows Live Activities for the app (Settings).
     private(set) var areEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
 
@@ -53,16 +54,21 @@ final class LiveActivities {
 
     /// Starts the race's activity on its broadcast channel, or schedules it to start
     /// shortly before a later race (`RaceLiveState.activityStart`).
-    func follow(_ attributes: RaceActivityAttributes, state: RaceLiveState) async throws {
-        guard !followedRaceIDs.contains(attributes.raceID) else { return }
-        requestedRaceIDs.insert(attributes.raceID)
+    func follow(raceID: String, name: String, state: RaceLiveState) async throws {
+        guard !followedRaceIDs.contains(raceID) else { return }
+        let request = UUID()
+        requests[raceID] = request
         defer {
-            requestedRaceIDs.remove(attributes.raceID)
+            if requests[raceID] == request { requests[raceID] = nil }
             refresh()
         }
-        let channelID = try await channel(raceID: attributes.raceID)
+        let channelID = try await channel(raceID: raceID)
+        // Turned off meanwhile.
+        guard requests[raceID] == request else { return }
+        let start = RaceLiveState.activityStart(raceStart: state.startTime, now: .now)
+        let attributes = RaceActivityAttributes(raceID: raceID, name: name, scheduledStart: start)
         let content = ActivityContent(state: state, staleDate: nil)
-        if let start = RaceLiveState.activityStart(raceStart: state.startTime, now: .now) {
+        if let start {
             let minutes = Int(RaceLiveState.activityLead / 60)
             _ = try Activity.request(
                 attributes: attributes, content: content, pushType: .channel(channelID), style: .standard,
@@ -74,18 +80,34 @@ final class LiveActivities {
         }
     }
 
-    /// Removes the race's activity from the Lock Screen at once.
+    /// Removes the race's activity from the Lock Screen at once, or cancels its request.
     func stopFollowing(raceID: String) async {
+        requests[raceID] = nil
         await Self.end(raceID: raceID)
         refresh()
+    }
+
+    /// Shows `state` in the race's activity, ending it once the race is over. A scheduled
+    /// activity whose race moved is scheduled again at the new time.
+    func update(raceID: String, with state: RaceLiveState) async throws {
+        let start = RaceLiveState.activityStart(raceStart: state.startTime, now: .now)
+        let moved = Self.activities(of: raceID).first {
+            $0.activityState == .pending && $0.attributes.scheduledStart != start
+        }
+        if let moved {
+            let name = moved.attributes.name
+            await stopFollowing(raceID: raceID)
+            try await follow(raceID: raceID, name: name, state: state)
+        } else {
+            await Self.update(raceID: raceID, with: state)
+        }
     }
 
     // `Activity` isn't `Sendable` and its `update` and `end` run off the main actor:
     // the activities are looked up and changed off the main actor as well.
 
-    /// Shows `state` in the race's activity, ending it once the race is over.
-    @concurrent func update(raceID: String, with state: RaceLiveState) async {
-        for activity in Self.activities(of: raceID) where activity.content.state != state {
+    @concurrent private static func update(raceID: String, with state: RaceLiveState) async {
+        for activity in activities(of: raceID) where activity.content.state != state {
             let content = ActivityContent(state: state, staleDate: nil)
             if state.phase.canBeFollowedLive {
                 await activity.update(content)

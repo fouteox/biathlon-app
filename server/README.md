@@ -4,7 +4,7 @@ Cloudflare Worker that:
 
 - polls biathlonresults.com every minute (Cron Trigger) during World Cup events and detects cancelled races and start time changes;
 - sends the matching alerts through APNs to registered devices (texts are localized on the device, see `src/payload.ts`);
-- runs one Live Activity per race (`src/live.ts`): it opens an APNs broadcast channel per race and environment for the upcoming races, publishes each new state (start time, phase, first three) on it while the race runs, then ends the activity and deletes the channel;
+- runs one Live Activity per race (`src/live.ts`): it opens an APNs broadcast channel per race and environment for the upcoming races, publishes each new state (start time, phase, first three) on it while the race runs, then ends the activity, sends the end again every 10 minutes for an hour for devices that were offline (the channels store no messages), and deletes the channel;
 - exposes a read-only cache of the IBU API under `/ibu/`, which the app reads instead of biathlonresults.com. The Cache API also works on `*.workers.dev` (`cf-cache-status: HIT`, measured on 2026-10-19).
 
 ## API
@@ -51,7 +51,7 @@ Each `PUT` and `DELETE` on `/v1/devices/:token` then carries three headers: `X-A
 
 Each request to APNs or to the IBU API is a subrequest, and the Free plan allows 50 per invocation (D1 queries count separately, up to 1,000). `MAX_PUSHES_PER_RUN` (30 by default) caps the alerts sent per minute; the rest wait in the `outbox` table for the next runs, and alerts older than 30 minutes are dropped. On the Paid plan, raise it.
 
-Live Activities take the rest: at most 4 channel creations per run, then for each race running or just over, one IBU request and one broadcast per environment. A broadcast reaches every subscriber at once, so their number doesn't count.
+Live Activities take the rest: at most 4 channel creations per run, then for each race running or just over, one IBU request and one broadcast per environment, and for an hour after the end, one broadcast per environment every 10 minutes. A broadcast reaches every subscriber at once, so their number doesn't count.
 
 ## Develop
 
