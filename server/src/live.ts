@@ -57,6 +57,8 @@ const REFERENCE_DATE_S = 978_307_200;
  * so failures in one never hold up the other.
  */
 const MAX_CHANNEL_CREATIONS_PER_ENVIRONMENT = 2;
+/** Channels lost to overlapping runs are rare: a couple of deletions per run clears them. */
+const MAX_ORPHAN_DELETIONS_PER_RUN = 2;
 /**
  * The channels store no messages, as Apple advises for frequent updates like sports
  * scores, so a device offline when the end is sent never gets it: the end is sent
@@ -152,10 +154,6 @@ export async function syncLiveActivities(
     const known = await currentState(raceId, race, budget);
     for (const channel of channels) {
       const state: LiveState = { ...(JSON.parse(channel.state) as LiveState), ...known };
-      // The calendar decides the phase, which the results can lag behind or be ahead of:
-      // an ended channel then always means the calendar ended the race, or stopped
-      // listing it, so a race it lists as followable again gets new channels.
-      if (race) state.phase = race.status;
       if (!race || isTerminal(race.status)) {
         // Over, or no longer watched: the activity ends with the latest state there is.
         await end(env, tokens, channel, state, now);
@@ -171,22 +169,25 @@ function isFollowable(race: RaceSnapshot | undefined): race is RaceSnapshot {
 }
 
 /**
- * What is known of a race now, over its last published state. Upcoming races change
- * only through the calendar; the others need their results, and keep their last
- * leaders when the results can't be read or don't describe the race.
+ * What is known of a race now, over its last published state. The calendar decides
+ * its phase and start time, which the results can lag behind or be ahead of: an ended
+ * channel then always means the calendar ended the race, or stopped listing it, so a
+ * race it lists as followable again gets new channels. The results give the leaders
+ * of the races under way, which keep their last ones when the results can't be read
+ * or don't describe the race.
  */
 async function currentState(
   raceId: string,
   race: RaceSnapshot | undefined,
   budget: SubrequestBudget,
-): Promise<LiveState | CalendarFields | undefined> {
+): Promise<Partial<LiveState> | undefined> {
   if (race?.status === "scheduled" || race?.status === "cancelled") return calendarFields(race);
   try {
     const state = liveState(await fetchIBU<IBUResults>("Results", { RaceId: raceId }, budget));
-    return state ?? (race && calendarFields(race));
+    return { ...state, ...(race && calendarFields(race)) };
   } catch (error) {
     console.warn("Live Activity results unavailable", raceId, String(error));
-    return undefined;
+    return race && calendarFields(race);
   }
 }
 
@@ -291,11 +292,11 @@ async function replace(env: Env, tokens: ProviderTokens, channel: ChannelRow): P
   return true;
 }
 
-/** Deletes the channels left by overlapping runs, those the budget covers. */
+/** Deletes a few of the channels left by overlapping runs, so failures can't starve the races. */
 async function deleteOrphans(env: Env, tokens: ProviderTokens) {
-  const { results } = await env.DB.prepare(
-    "SELECT environment, channel_id AS channelId FROM orphaned_channels",
-  ).all<{ environment: APNsEnvironment; channelId: string }>();
+  const { results } = await env.DB.prepare("SELECT environment, channel_id AS channelId FROM orphaned_channels LIMIT ?1")
+    .bind(MAX_ORPHAN_DELETIONS_PER_RUN)
+    .all<{ environment: APNsEnvironment; channelId: string }>();
   for (const { environment, channelId } of results) {
     if (!(await deleteAtAPNs(env, tokens, environment, channelId))) continue;
     await env.DB.prepare("DELETE FROM orphaned_channels WHERE environment = ?1 AND channel_id = ?2")

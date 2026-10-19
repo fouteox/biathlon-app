@@ -25,6 +25,8 @@ describe("Live Activity state shared with the app", () => {
 });
 
 const [live, relay] = cases as [(typeof cases)[number], (typeof cases)[number]];
+/** The relay's final state on the calendar of `race()`, which decides the start time. */
+const relayFinal = { ...(relay.state as object), startTime: (live.state as { startTime: number }).startTime };
 const RACE_ID = "BT2627SWRLCP01SMIN";
 const NOW = Date.parse("2026-11-26T15:30:00Z");
 
@@ -182,8 +184,8 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork({ results: relay.results });
     await syncLiveActivities(env, finished, NOW);
     expect(broadcasts(sent).map((request) => request.body)).toEqual([
-      { aps: { timestamp: NOW / 1000, event: "end", "content-state": relay.state } },
-      { aps: { timestamp: NOW / 1000, event: "end", "content-state": relay.state } },
+      { aps: { timestamp: NOW / 1000, event: "end", "content-state": relayFinal } },
+      { aps: { timestamp: NOW / 1000, event: "end", "content-state": relayFinal } },
     ]);
 
     // No message storage: devices offline at the end only get a later send.
@@ -203,7 +205,7 @@ describe("Live Activity channels", () => {
     ]);
     expect(broadcasts(last)).toEqual([]);
     // The rows stay, for the app to learn that the activity is over.
-    expect((await channels(env)).map(({ state }) => JSON.parse(state))).toEqual([relay.state, relay.state]);
+    expect((await channels(env)).map(({ state }) => JSON.parse(state))).toEqual([relayFinal, relayFinal]);
 
     const after = stubNetwork();
     await syncLiveActivities(env, finished, NOW + 70 * 60_000);
@@ -275,7 +277,7 @@ describe("Live Activity channels", () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
-    const ahead = { ...(relay.state as object), phase: "live" };
+    const ahead = { ...relayFinal, phase: "live" };
 
     const sent = stubNetwork({ results: relay.results });
     await syncLiveActivities(env, [race({ IsLive: true })], NOW);
@@ -403,6 +405,35 @@ describe("Live Activity channels", () => {
     expect((await channels(env)).map(({ channelId }) => channelId)).toEqual(["other", "other"]);
   });
 
+  it("deletes a few orphaned channels per run, leaving the rest of the budget to the races", async () => {
+    const env = await makeEnv();
+    for (const id of ["a", "b", "c", "d", "e"]) {
+      await env.DB.prepare("INSERT INTO orphaned_channels (environment, channel_id) VALUES ('sandbox', ?1)").bind(id).run();
+    }
+    const sent = stubNetwork({ failingHost: "api-manage-broadcast" });
+
+    await syncLiveActivities(env, [], NOW);
+
+    expect(sent.filter((request) => request.method === "DELETE").length).toBe(2);
+  });
+
+  it("moves the start time of a live race from the calendar while its results can't be read", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    const sent = stubNetwork({ resultsStatus: 503 });
+    await syncLiveActivities(env, [race({ IsLive: true, StartTime: "2026-11-26T16:15:00Z" })], NOW + 60_000);
+
+    const states = broadcasts(sent).map((request) => (request.body as { aps: { "content-state": { startTime: number } } }).aps["content-state"]);
+    expect(states).toEqual([
+      { ...(live.state as { startTime: number }), startTime: (live.state as { startTime: number }).startTime + 3600 },
+      { ...(live.state as { startTime: number }), startTime: (live.state as { startTime: number }).startTime + 3600 },
+    ]);
+  });
+
   it("spends no more subrequests than the run has left", async () => {
     const env = await makeEnv();
     const sent = stubNetwork();
@@ -509,7 +540,7 @@ describe("GET /v1/races/:id/channels/:environment", () => {
       await syncLiveActivities(env, finished, now);
       const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
       expect(response.status).toBe(410);
-      expect(await response.json()).toEqual({ state: relay.state });
+      expect(await response.json()).toEqual({ state: relayFinal });
     }
   });
 
