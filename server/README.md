@@ -10,10 +10,18 @@ Cloudflare Worker that:
 
 | Method | Path | Body |
 |---|---|---|
+| `POST` | `/v1/app-attest/challenges` | Returns `{"challenge":"…"}`, valid once for 5 minutes. |
+| `POST` | `/v1/app-attest/keys` | `{ "keyId": "<base64>", "attestation": "<base64>", "challenge": "…" }` |
 | `PUT` | `/v1/devices/:token` | `{ "environment": "sandbox" \| "production", "categories": ["SM","SW","MX"], "cancellation": true, "rescheduling": true, "locale": "fr-FR", "timeZone": "Europe/Paris" }` |
 | `DELETE` | `/v1/devices/:token` | |
 | `GET` | `/v1/health` | Returns `{"apns":{"http2":true}}` when the Worker reaches APNs over HTTP/2. |
 | `GET` | `/ibu/<endpoint>?…` | Same paths and query strings as the IBU API. |
+
+### App Attest
+
+Device registrations must come from the app on a genuine Apple device ([App Attest](https://developer.apple.com/documentation/devicecheck/validating-apps-that-connect-to-your-server)). At its first sync, the app generates a key, attests it with the SHA-256 of a challenge as `clientDataHash`, and posts the attestation to `/v1/app-attest/keys`. The server checks it against Apple's App Attestation Root CA and the App ID `APNS_TEAM_ID.APNS_TOPIC`, then stores the public key.
+
+Each `PUT` and `DELETE` on `/v1/devices/:token` then carries three headers: `X-App-Attest-Key-Id`, `X-App-Attest-Challenge` (a fresh challenge) and `X-App-Attest-Assertion`, an assertion whose `clientData` is the UTF-8 bytes of `"<challenge>\n<METHOD> <path>\n"` followed by the raw request body. A `401` with `{"error":"unknown key"}` tells the app to attest a new key. Each key holds one device token.
 
 ## Deploy
 
@@ -25,7 +33,7 @@ Cloudflare Worker that:
    npx wrangler login
    npx wrangler d1 create biathlon          # paste the printed database_id into wrangler.jsonc
    npx wrangler d1 migrations apply biathlon --remote
-   npx wrangler secret put APNS_TEAM_ID
+   npx wrangler secret put APNS_TEAM_ID   # also the App ID prefix App Attest checks
    npx wrangler secret put APNS_SANDBOX_KEY_ID
    npx wrangler secret put APNS_SANDBOX_KEY < AuthKey_SANDBOXKEYID.p8
    npx wrangler secret put APNS_PRODUCTION_KEY_ID

@@ -1,0 +1,292 @@
+import { CBORError, decode, decodeItem, type CBORValue } from "./cbor";
+import { children, DERError, isCertificateAuthority, parseCertificate, readSingle, TAG, type Certificate } from "./der";
+
+/**
+ * Apple App Attest verification, following "Validating apps that connect to
+ * your server" and the "Attestation Object Validation Guide" (Apple Developer
+ * documentation, read on 2026-10-19). Pure functions: storage is in keys.ts.
+ */
+
+/**
+ * Apple App Attestation Root CA, from
+ * https://www.apple.com/certificateauthority/Apple_App_Attestation_Root_CA.pem
+ * (SHA-256 fingerprint 1C:B9:82:3B:A2:8B:A6:AD:2D:33:A0:06:94:1D:E2:AE:4F:51:3E:F1:D4:E8:31:B9:F7:E0:FA:7B:62:42:C9:32).
+ */
+const APPLE_ROOT_CA =
+  "MIICITCCAaegAwIBAgIQC/O+DvHN0uD7jG5yH2IXmDAKBggqhkjOPQQDAzBSMSYwJAYDVQQDDB1BcHBsZSBBcHAgQXR0ZXN0YXRpb24gUm9vdCBDQTETMBEGA1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTAeFw0yMDAzMTgxODMyNTNaFw00NTAzMTUwMDAwMDBaMFIxJjAkBgNVBAMMHUFwcGxlIEFwcCBBdHRlc3RhdGlvbiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJbmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAERTHhmLW07ATaFQIEVwTtT4dyctdhNbJhFs/Ii2FdCgAHGbpphY3+d8qjuDngIN3WVhQUBHAoMeQ/cLiP1sOUtgjqK9auYen1mMEvRq9Sk3Jm5X8U62H+xTD3FE9TgS41o0IwQDAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBSskRBTM72+aEH/pwyp5frq5eWKoTAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwMDaAAwZQIwQgFGnByvsiVbpTKwSga0kP0e8EeDS4+sQmTvb7vn53O5+FRXgeLhpJ06ysC5PrOyAjEAp5U4xDgEgllF7En3VcE3iexZZtKeYnpqtijVoyFraWVIyd/dganmrduC1bmTBGwD";
+
+/** Extension of the credential certificate that holds the nonce. */
+const NONCE_OID = "1.2.840.113635.100.8.2";
+
+const SIGNATURE_HASHES: Record<string, string> = {
+  "1.2.840.10045.4.3.2": "SHA-256",
+  "1.2.840.10045.4.3.3": "SHA-384",
+};
+const CURVES: Record<string, { name: string; size: number }> = {
+  "1.2.840.10045.3.1.7": { name: "P-256", size: 32 },
+  "1.3.132.0.34": { name: "P-384", size: 48 },
+};
+
+export type AttestEnvironment = "development" | "production";
+
+export class AttestationError extends Error {}
+
+export interface AttestedKey {
+  /** X9.62 uncompressed P-256 point of the attested key. */
+  publicKey: Uint8Array;
+  environment: AttestEnvironment;
+  /** Kept for Apple's fraud metric, which this server doesn't query yet. */
+  receipt: Uint8Array;
+  /** `apple_validation_category_01`, when the device sends it. */
+  validationCategory?: number;
+  /** `apple_bundle_version_01`, when the device sends it. */
+  bundleVersion?: string;
+}
+
+interface AuthenticatorData {
+  rpIdHash: Uint8Array;
+  counter: number;
+  aaguid?: Uint8Array;
+  credentialId?: Uint8Array;
+  validationCategory?: number;
+  bundleVersion?: string;
+}
+
+/**
+ * Verifies the object `DCAppAttestService.attestKey` returned for `keyId` and
+ * `clientDataHash`, which the app computes as the SHA-256 of the challenge.
+ */
+export async function verifyAttestation(input: {
+  attestation: Uint8Array;
+  keyId: Uint8Array;
+  clientDataHash: Uint8Array;
+  appId: string;
+  now: number;
+  root?: Uint8Array;
+}): Promise<AttestedKey> {
+  return guarded(async () => {
+    const object = asMap(decode(input.attestation));
+    if (object.get("fmt") !== "apple-appattest") throw new AttestationError("unexpected format");
+    const statement = asMap(object.get("attStmt"));
+    const x5c = statement.get("x5c");
+    const receipt = statement.get("receipt");
+    const authDataBytes = object.get("authData");
+    if (!Array.isArray(x5c) || !(receipt instanceof Uint8Array) || !(authDataBytes instanceof Uint8Array)) {
+      throw new AttestationError("malformed attestation");
+    }
+
+    // 1. The x5c chain (credential certificate, then intermediate) leads to Apple's root.
+    const [leafBytes, intermediateBytes] = x5c;
+    if (!(leafBytes instanceof Uint8Array) || !(intermediateBytes instanceof Uint8Array)) {
+      throw new AttestationError("missing certificates");
+    }
+    const leaf = parseCertificate(leafBytes);
+    const intermediate = parseCertificate(intermediateBytes);
+    const root = parseCertificate(input.root ?? fromBase64(APPLE_ROOT_CA));
+    if (!isCertificateAuthority(intermediate)) throw new AttestationError("intermediate is not a CA");
+    await verifyIssued(leaf, intermediate, input.now);
+    await verifyIssued(intermediate, root, input.now);
+
+    // 2-4. nonce = SHA-256(authData || clientDataHash) is in the credential certificate.
+    const nonce = await sha256(concat(authDataBytes, input.clientDataHash));
+    const extension = leaf.extensions.get(NONCE_OID);
+    if (!extension) throw new AttestationError("missing nonce extension");
+    const [wrapper] = children(readSingle(extension, TAG.sequence));
+    const [octets] = children(wrapper!);
+    if (octets?.tag !== TAG.octetString || !equal(octets.contents, nonce)) throw new AttestationError("nonce mismatch");
+
+    // 5. The key identifier is the SHA-256 of the certificate's public key.
+    if (!equal(await sha256(leaf.publicKey), input.keyId)) throw new AttestationError("key identifier mismatch");
+
+    const authData = parseAuthenticatorData(authDataBytes, true);
+    // 6. RP ID is the SHA-256 of the App ID.
+    if (!equal(authData.rpIdHash, await sha256(new TextEncoder().encode(input.appId)))) {
+      throw new AttestationError("App ID mismatch");
+    }
+    // 7. A new key has never signed an assertion.
+    if (authData.counter !== 0) throw new AttestationError("counter is not zero");
+    // 8. aaguid tells the App Attest environment.
+    const environment = attestEnvironment(authData.aaguid!);
+    // 9. credentialId is the key identifier too.
+    if (!equal(authData.credentialId!, input.keyId)) throw new AttestationError("credential mismatch");
+
+    // 10-11. Apple doesn't document the raw values of the validation category,
+    // so they are recorded, not enforced (parseAuthenticatorData checks their types).
+    return {
+      publicKey: leaf.publicKey,
+      environment,
+      receipt,
+      validationCategory: authData.validationCategory,
+      bundleVersion: authData.bundleVersion,
+    };
+  });
+}
+
+/**
+ * Verifies an object `DCAppAttestService.generateAssertion` returned for
+ * `clientData`, and returns its counter, which the caller stores.
+ */
+export async function verifyAssertion(input: {
+  assertion: Uint8Array;
+  clientData: Uint8Array;
+  publicKey: Uint8Array;
+  appId: string;
+  previousCounter: number;
+}): Promise<number> {
+  return guarded(async () => {
+    const object = asMap(decode(input.assertion));
+    const signature = object.get("signature");
+    const authDataBytes = object.get("authenticatorData");
+    if (!(signature instanceof Uint8Array) || !(authDataBytes instanceof Uint8Array)) {
+      throw new AttestationError("malformed assertion");
+    }
+
+    // 1-3. The signature covers nonce = SHA-256(authenticatorData || SHA-256(clientData)).
+    const nonce = await sha256(concat(authDataBytes, await sha256(input.clientData)));
+    const key = await crypto.subtle.importKey("raw", copy(input.publicKey), { name: "ECDSA", namedCurve: "P-256" }, false, [
+      "verify",
+    ]);
+    const valid = await crypto.subtle.verify(
+      { name: "ECDSA", hash: "SHA-256" },
+      key,
+      copy(rawSignature(signature, 32)),
+      copy(nonce),
+    );
+    if (!valid) throw new AttestationError("invalid signature");
+
+    const authData = parseAuthenticatorData(authDataBytes, false);
+    // 4. RP ID is the SHA-256 of the App ID.
+    if (!equal(authData.rpIdHash, await sha256(new TextEncoder().encode(input.appId)))) {
+      throw new AttestationError("App ID mismatch");
+    }
+    // 5. The counter only grows, which rejects replayed assertions.
+    if (authData.counter <= input.previousCounter) throw new AttestationError("counter did not increase");
+    // 6. The caller checks the challenge embedded in clientData. 7-8: see verifyAttestation.
+    return authData.counter;
+  });
+}
+
+/**
+ * WebAuthn authenticator data: rpIdHash (32), flags (1), counter (4), then for
+ * an attestation aaguid (16), credentialId length (2), credentialId and the
+ * COSE public key. Apple's extensions map follows; Apple's own sample sends it
+ * without setting the ED flag, so it is read whenever bytes remain.
+ */
+function parseAuthenticatorData(data: Uint8Array, attested: boolean): AuthenticatorData {
+  if (data.length < 37) throw new AttestationError("authenticator data too short");
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
+  const result: AuthenticatorData = { rpIdHash: data.subarray(0, 32), counter: view.getUint32(33) };
+  let offset = 37;
+  if (attested) {
+    if (data.length < 55) throw new AttestationError("authenticator data too short");
+    result.aaguid = data.subarray(37, 53);
+    const length = view.getUint16(53);
+    result.credentialId = data.subarray(55, 55 + length);
+    if (result.credentialId.length !== length) throw new AttestationError("authenticator data too short");
+    offset = decodeItem(data, 55 + length).end;
+  }
+  if (offset < data.length) {
+    const { value, end } = decodeItem(data, offset);
+    if (end !== data.length) throw new AttestationError("trailing authenticator data");
+    const extensions = asMap(value);
+    const category = extensions.get("apple_validation_category_01");
+    if (category !== undefined) {
+      if (!(category instanceof Uint8Array) || category.length !== 4) throw new AttestationError("invalid validation category");
+      // Apple's sample encodes category 1 as 01 00 00 00: little-endian.
+      result.validationCategory = new DataView(category.buffer, category.byteOffset, 4).getUint32(0, true);
+    }
+    const version = extensions.get("apple_bundle_version_01");
+    if (version !== undefined) {
+      if (typeof version !== "string") throw new AttestationError("invalid bundle version");
+      result.bundleVersion = version;
+    }
+  }
+  return result;
+}
+
+function attestEnvironment(aaguid: Uint8Array): AttestEnvironment {
+  const text = new TextDecoder().decode(aaguid);
+  if (text === "appattest\0\0\0\0\0\0\0") return "production";
+  // "appattestdevelop" per the validation article and guide; the article on
+  // testing names "appattestsandbox" for the same sandbox environment.
+  if (text === "appattestdevelop" || text === "appattestsandbox") return "development";
+  throw new AttestationError("unknown aaguid");
+}
+
+async function verifyIssued(certificate: Certificate, issuer: Certificate, now: number): Promise<void> {
+  for (const item of [certificate, issuer]) {
+    if (now < item.notBefore || now > item.notAfter) throw new AttestationError("certificate outside its validity period");
+  }
+  if (!equal(certificate.issuer, issuer.subject)) throw new AttestationError("certificate chain mismatch");
+  const hash = SIGNATURE_HASHES[certificate.signatureAlgorithm];
+  const curve = CURVES[issuer.curve];
+  if (!hash || !curve) throw new AttestationError("unsupported certificate algorithm");
+  const key = await crypto.subtle.importKey("spki", copy(issuer.spki), { name: "ECDSA", namedCurve: curve.name }, false, [
+    "verify",
+  ]);
+  const valid = await crypto.subtle.verify(
+    { name: "ECDSA", hash },
+    key,
+    copy(rawSignature(certificate.signature, curve.size)),
+    copy(certificate.tbs),
+  );
+  if (!valid) throw new AttestationError("invalid certificate signature");
+}
+
+/** DER `SEQUENCE { r INTEGER, s INTEGER }` to the r || s form WebCrypto expects. */
+export function rawSignature(der: Uint8Array, size: number): Uint8Array {
+  const parts = children(readSingle(der, TAG.sequence));
+  if (parts.length !== 2) throw new AttestationError("invalid signature encoding");
+  const result = new Uint8Array(size * 2);
+  parts.forEach((part, index) => {
+    if (part.tag !== TAG.integer) throw new AttestationError("invalid signature encoding");
+    let value = part.contents;
+    while (value.length > 1 && value[0] === 0) value = value.subarray(1);
+    if (value.length > size) throw new AttestationError("invalid signature encoding");
+    result.set(value, (index + 1) * size - value.length);
+  });
+  return result;
+}
+
+/** Turns decoding errors into verification failures. */
+async function guarded<T>(body: () => Promise<T>): Promise<T> {
+  try {
+    return await body();
+  } catch (error) {
+    if (error instanceof DERError || error instanceof CBORError) throw new AttestationError(error.message);
+    throw error;
+  }
+}
+
+function asMap(value: CBORValue | undefined): Map<CBORValue, CBORValue> {
+  if (!(value instanceof Map)) throw new AttestationError("expected a CBOR map");
+  return value;
+}
+
+export async function sha256(data: Uint8Array): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", copy(data)));
+}
+
+export function fromBase64(text: string): Uint8Array {
+  return Uint8Array.from(atob(text), (character) => character.charCodeAt(0));
+}
+
+export function toBase64(data: Uint8Array): string {
+  return btoa(String.fromCharCode(...data));
+}
+
+function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
+  const result = new Uint8Array(a.length + b.length);
+  result.set(a);
+  result.set(b, a.length);
+  return result;
+}
+
+function equal(a: Uint8Array, b: Uint8Array): boolean {
+  return a.length === b.length && a.every((byte, index) => byte === b[index]);
+}
+
+/** WebCrypto wants buffers backed by a plain ArrayBuffer. */
+function copy(data: Uint8Array): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(data);
+}

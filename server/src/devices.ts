@@ -46,27 +46,39 @@ export function parseRegistration(token: string, body: unknown): DeviceRegistrat
   };
 }
 
-export async function saveDevice(db: D1Database, device: DeviceRegistration, now: number): Promise<void> {
-  await db
-    .prepare(
-      `INSERT INTO devices (token, environment, categories, cancellation, rescheduling, locale, time_zone, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-       ON CONFLICT (token) DO UPDATE SET
-         environment = excluded.environment, categories = excluded.categories,
-         cancellation = excluded.cancellation, rescheduling = excluded.rescheduling,
-         locale = excluded.locale, time_zone = excluded.time_zone, updated_at = excluded.updated_at`,
-    )
-    .bind(
-      device.token,
-      device.environment,
-      device.categories.join(","),
-      device.cancellation ? 1 : 0,
-      device.rescheduling ? 1 : 0,
-      device.locale,
-      device.timeZone,
-      now,
-    )
-    .run();
+/**
+ * Saves the device for the App Attest key that signed the request. A key holds
+ * one token: registering a new token (APNs issued another one) replaces the
+ * previous token, so one attested install can't register many tokens.
+ */
+export async function saveDevice(db: D1Database, device: DeviceRegistration, keyId: string, now: number): Promise<void> {
+  await db.batch([
+    db
+      .prepare("DELETE FROM outbox WHERE token IN (SELECT token FROM devices WHERE app_attest_key_id = ?1 AND token <> ?2)")
+      .bind(keyId, device.token),
+    db.prepare("DELETE FROM devices WHERE app_attest_key_id = ?1 AND token <> ?2").bind(keyId, device.token),
+    db
+      .prepare(
+        `INSERT INTO devices (token, environment, categories, cancellation, rescheduling, locale, time_zone, updated_at, app_attest_key_id)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+         ON CONFLICT (token) DO UPDATE SET
+           environment = excluded.environment, categories = excluded.categories,
+           cancellation = excluded.cancellation, rescheduling = excluded.rescheduling,
+           locale = excluded.locale, time_zone = excluded.time_zone, updated_at = excluded.updated_at,
+           app_attest_key_id = excluded.app_attest_key_id`,
+      )
+      .bind(
+        device.token,
+        device.environment,
+        device.categories.join(","),
+        device.cancellation ? 1 : 0,
+        device.rescheduling ? 1 : 0,
+        device.locale,
+        device.timeZone,
+        now,
+        keyId,
+      ),
+  ]);
 }
 
 export async function deleteDevice(db: D1Database, token: string): Promise<void> {
