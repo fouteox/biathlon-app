@@ -16,7 +16,7 @@ on:
   pull_request_target:
     types: [opened, reopened, synchronize, ready_for_review]
   issue_comment:
-    types: [created, edited]
+    types: [created, edited, deleted]
   pull_request_review:
     types: [submitted]
   pull_request_review_comment:
@@ -81,28 +81,12 @@ jobs:
                 return { sha, state: 'failure', description: `${unanswered} Codex thread(s) without a reply` };
               }
 
-              // Codex signals a clean review of the head commit either with a
-              // "Didn't find any major issues" comment naming that commit, or
-              // with a 👍 on the description once its summary shows the head
-              // commit as reviewed. A review with findings on the head commit
-              // is a negative signal. The latest signal wins.
+              // Codex keeps a machine-readable state in its review summary
+              // comment. Its full commit SHA must match the head before any
+              // verdict counts, so an abbreviated "Reviewed commit" cannot
+              // vouch for a different commit.
               const comments = await github.paginate(github.rest.issues.listComments,
                 { owner, repo, issue_number: number, per_page: 100 });
-              const reviewedHead = (body) => {
-                const commit = body?.match(/\*\*Reviewed commit:\*\* `([0-9a-f]{7,40})`/)?.[1];
-                return commit !== undefined && sha.startsWith(commit);
-              };
-              const signals = comments
-                .filter((c) => isCodex(c.user?.login) && c.body?.includes("Didn't find any major issues") && reviewedHead(c.body))
-                .map((c) => ({ ok: true, at: c.created_at }));
-
-              const reviews = await github.paginate(github.rest.pulls.listReviews,
-                { owner, repo, pull_number: number, per_page: 100 });
-              signals.push(...reviews
-                .filter((r) => isCodex(r.user?.login) && r.commit_id === sha)
-                .map((r) => ({ ok: false, at: r.submitted_at })));
-
-              // Codex keeps a machine-readable state in its review summary comment.
               const summary = comments
                 .filter((c) => isCodex(c.user?.login) && c.body?.includes('codex-review-state:v1'))
                 .pop();
@@ -112,14 +96,32 @@ jobs:
               const reactions = await github.paginate(github.rest.reactions.listForIssue,
                 { owner, repo, issue_number: number, per_page: 100 });
               const codex = reactions.filter((r) => isCodex(r.user?.login));
-              if (codex.some((r) => r.content === 'eyes')) {
+              if (codex.some((r) => r.content === 'eyes') || (review?.commit_sha === sha && review.status !== 'completed')) {
                 return { sha, state: 'pending', description: 'Codex review in progress', retry: true };
               }
-              if (review?.commit_sha === sha && review.status === 'completed') {
-                signals.push(...codex
-                  .filter((r) => r.content === '+1')
-                  .map((r) => ({ ok: true, at: r.created_at })));
+              if (review?.commit_sha !== sha) {
+                return { sha, state: 'pending', description: `Codex has not reviewed ${sha.slice(0, 7)} yet (comment "@codex review")` };
               }
+
+              // A clean review is a 👍 on the description or a "Didn't find any
+              // major issues" comment naming the head commit; a review with
+              // findings on the head commit is a negative signal. The latest
+              // signal wins.
+              const namesHead = (body) => {
+                const commit = body?.match(/\*\*Reviewed commit:\*\* `([0-9a-f]{7,40})`/)?.[1];
+                return commit !== undefined && sha.startsWith(commit);
+              };
+              const signals = comments
+                .filter((c) => isCodex(c.user?.login) && c.body?.includes("Didn't find any major issues") && namesHead(c.body))
+                .map((c) => ({ ok: true, at: c.updated_at }));
+              signals.push(...codex
+                .filter((r) => r.content === '+1')
+                .map((r) => ({ ok: true, at: r.created_at })));
+              const reviews = await github.paginate(github.rest.pulls.listReviews,
+                { owner, repo, pull_number: number, per_page: 100 });
+              signals.push(...reviews
+                .filter((r) => isCodex(r.user?.login) && r.commit_id === sha)
+                .map((r) => ({ ok: false, at: r.submitted_at })));
 
               const latest = signals.sort((x, y) => Date.parse(x.at) - Date.parse(y.at)).pop();
               if (latest?.ok) {
@@ -128,10 +130,7 @@ jobs:
               if (latest) {
                 return { sha, state: 'failure', description: 'Codex found issues on this commit: fix them, then "@codex review"' };
               }
-              if (review?.commit_sha === sha && review.status === 'completed') {
-                return { sha, state: 'pending', description: 'Waiting for the Codex 👍', retry: true };
-              }
-              return { sha, state: 'pending', description: `Codex has not reviewed ${sha.slice(0, 7)} yet (comment "@codex review")` };
+              return { sha, state: 'pending', description: 'Waiting for the Codex 👍', retry: true };
             }
 
             // The 👍 lands a few seconds after the summary comment is edited.
