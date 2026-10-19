@@ -66,7 +66,7 @@ export async function saveDevice(db: D1Database, device: DeviceRegistration, key
            cancellation = excluded.cancellation, rescheduling = excluded.rescheduling,
            locale = excluded.locale, time_zone = excluded.time_zone, updated_at = excluded.updated_at,
            app_attest_key_id = excluded.app_attest_key_id
-         WHERE devices.app_attest_key_id = excluded.app_attest_key_id`,
+         WHERE devices.app_attest_key_id IS NULL OR devices.app_attest_key_id = excluded.app_attest_key_id`,
       )
       .bind(
         device.token,
@@ -88,18 +88,32 @@ export async function saveDevice(db: D1Database, device: DeviceRegistration, key
  * the device is restored or migrated, the same events that end an App Attest key,
  * so a new key never needs a token an older key holds (Apple engineer, March 2026:
  * https://developer.apple.com/forums/thread/818187).
+ * A row without a key, written before App Attest, goes to the first key that claims it.
+ * `saveDevice` and `deleteOwnedDevice` repeat this check in their own statements, so a
+ * request racing with another key's can't slip between the check and the write.
  */
 export async function ownsDevice(db: D1Database, token: string, keyId: string): Promise<boolean> {
   const row = await db
     .prepare("SELECT app_attest_key_id AS keyId FROM devices WHERE token = ?1")
     .bind(token)
     .first<{ keyId: string | null }>();
-  return row === null || row.keyId === keyId;
+  return row === null || row.keyId === null || row.keyId === keyId;
 }
 
+/** Deletes a token APNs reported as no longer valid. */
 export async function deleteDevice(db: D1Database, token: string): Promise<void> {
   await db.batch([
     db.prepare("DELETE FROM devices WHERE token = ?1").bind(token),
     db.prepare("DELETE FROM outbox WHERE token = ?1").bind(token),
+  ]);
+}
+
+/** Deletes `token` on behalf of `keyId`, only if that key may (see `ownsDevice`). */
+export async function deleteOwnedDevice(db: D1Database, token: string, keyId: string): Promise<void> {
+  const owned = "SELECT token FROM devices WHERE token = ?1 AND (app_attest_key_id IS NULL OR app_attest_key_id = ?2)";
+  await db.batch([
+    // The outbox first: its condition reads the device row.
+    db.prepare(`DELETE FROM outbox WHERE token IN (${owned})`).bind(token, keyId),
+    db.prepare(`DELETE FROM devices WHERE token IN (${owned})`).bind(token, keyId),
   ]);
 }

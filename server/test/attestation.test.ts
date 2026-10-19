@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fromBase64, rawSignature, sha256, toBase64, verifyAssertion, verifyAttestation } from "../src/attestation";
 import { decode } from "../src/cbor";
+import { deleteOwnedDevice } from "../src/devices";
 import { DERError, parseCertificate, readNode } from "../src/der";
 import worker from "../src/index";
 import { checkChallenge, issueChallenge } from "../src/challenges";
@@ -266,6 +267,26 @@ describe("device registration endpoint", () => {
     expect(put.status).toBe(403);
     expect((await other.call(await other.signed("DELETE", token))).status).toBe(403);
     expect(await owner.tokens()).toEqual([token]);
+  });
+
+  it("lets a key claim a token registered before App Attest", async () => {
+    const { env, call, signed } = await setUp();
+    await call(await signed("PUT", token, registration));
+    await env.DB.prepare("UPDATE devices SET app_attest_key_id = NULL").run();
+    const other = await setUp(env);
+    expect((await other.call(await other.signed("PUT", token, registration))).status).toBe(204);
+    expect((await call(await signed("DELETE", token))).status).toBe(403);
+    expect(await other.tokens()).toEqual([token]);
+  });
+
+  it("checks ownership in the delete itself", async () => {
+    const { env, call, signed, tokens } = await setUp();
+    await call(await signed("PUT", token, registration));
+    const owner = (await env.DB.prepare("SELECT app_attest_key_id AS keyId FROM devices").first<{ keyId: string }>())!.keyId;
+    await deleteOwnedDevice(env.DB, token, "another key");
+    expect(await tokens()).toEqual([token]);
+    await deleteOwnedDevice(env.DB, token, owner);
+    expect(await tokens()).toEqual([]);
   });
 
   it("keeps one token per key", async () => {
