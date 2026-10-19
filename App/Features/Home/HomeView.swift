@@ -20,13 +20,13 @@ struct HomeView: View {
                             TopResults(rows: results.standings, limit: 5, favorites: favorites)
                         }
                     } header: {
-                        Label("En direct", systemImage: "dot.radiowaves.left.and.right")
+                        Label("Live", systemImage: "dot.radiowaves.left.and.right")
                             .foregroundStyle(.red)
                     }
                 }
 
                 if let next = snapshot.next {
-                    Section("Prochaine course") {
+                    Section("Next race") {
                         NavigationLink(value: Route.race(next)) {
                             VStack(alignment: .leading, spacing: 4) {
                                 RaceRow(race: next)
@@ -41,25 +41,25 @@ struct HomeView: View {
                 if let results = snapshot.latestResults, let race = snapshot.latestFinished {
                     let mine = favoriteRows(in: results)
                     if !mine.isEmpty {
-                        Section("Mes favoris · \(race.shortDescription)") {
+                        Section("My favorites · \(race.shortDescription)") {
                             TopResults(rows: mine, limit: mine.count, favorites: favorites)
                         }
                     }
                     Section {
                         TopResults(rows: results.standings, limit: 3, favorites: favorites)
-                        NavigationLink("Tous les résultats", value: Route.race(race))
+                        NavigationLink("All results", value: Route.race(race))
                     } header: {
-                        Text("Dernier résultat · \(race.shortDescription)")
+                        Text("Latest result · \(race.shortDescription)")
                     }
                 }
 
                 if let event = snapshot.event {
                     Section {
                         NavigationLink(value: Route.event(event)) {
-                            Label("\(Nation.flag(event.nation)) \(event.shortDescription)", systemImage: "mappin.and.ellipse")
+                            Label("\(Nation.flag(event.nation)) \(event.shortDescription)" as String, systemImage: "mappin.and.ellipse")
                         }
                     } header: {
-                        Text("Étape")
+                        Text("Event")
                     }
                 }
             }
@@ -84,7 +84,7 @@ struct HomeView: View {
         }
         .ibuAttribution()
         .task { await reload() }
-        // Rafraîchissement automatique tant qu'une course est en direct.
+        // Auto-refresh while a race is live.
         .task(id: model.isLive) {
             guard model.isLive else { return }
             while !Task.isCancelled {
@@ -115,7 +115,7 @@ private struct LiveHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(race.shortDescription).font(.title3.bold())
-            Text("Départ \(race.startTime, format: .dateTime.hour().minute())")
+            Text("Start \(race.startTime, format: .dateTime.hour().minute())")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }

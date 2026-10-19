@@ -7,23 +7,23 @@ struct FavoritesView: View {
 
     var body: some View {
         List {
-            section(.athlete, title: "Biathlètes")
-            section(.nation, title: "Équipes")
+            section(.athlete, title: "Biathletes")
+            section(.nation, title: "Teams")
         }
         .overlay {
             if favorites.isEmpty {
                 ContentUnavailableView(
-                    "Aucun favori",
+                    "No favorites",
                     systemImage: "star",
-                    description: Text("Touchez l'étoile d'un biathlète ou d'une équipe pour suivre ses résultats depuis l'accueil.")
+                    description: Text("Tap the star on a biathlete or a team to follow their results from the home screen.")
                 )
             }
         }
-        .navigationTitle("Favoris")
+        .navigationTitle("Favorites")
     }
 
     @ViewBuilder
-    private func section(_ kind: Favorite.Kind, title: String) -> some View {
+    private func section(_ kind: Favorite.Kind, title: LocalizedStringKey) -> some View {
         let items = favorites.filter { $0.kind == kind }
         if !items.isEmpty {
             Section(title) {
@@ -53,7 +53,7 @@ struct FavoritesView: View {
     }
 }
 
-/// Étoile réutilisable dans les fiches et les listes.
+/// Reusable star for detail screens and lists.
 struct FavoriteButton: View {
     let kind: Favorite.Kind
     let key: String
@@ -81,6 +81,6 @@ struct FavoriteButton: View {
         }
         .buttonStyle(.borderless)
         .sensoryFeedback(.selection, trigger: matches.isEmpty)
-        .accessibilityLabel(matches.isEmpty ? "Ajouter aux favoris" : "Retirer des favoris")
+        .accessibilityLabel(matches.isEmpty ? Text("Add to favorites") : Text("Remove from favorites"))
     }
 }

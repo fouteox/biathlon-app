@@ -26,7 +26,7 @@ struct AthleteView: View {
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(bio.fullName).font(.title3.bold())
-                            Text("\(Nation.flag(bio.nation)) \(bio.nation ?? "")")
+                            Text(verbatim: "\(Nation.flag(bio.nation)) \(bio.nation ?? "")")
                             if let birthdate = bio.birthdate {
                                 Text(birthdate, format: Self.birthdateStyle)
                                     .font(.subheadline)
@@ -38,14 +38,14 @@ struct AthleteView: View {
                 if let nation = bio.nation {
                     Section {
                         HStack {
-                            Text("Suivre l'équipe \(Nation.flag(nation)) \(nation)")
+                            Text("Follow team \(Nation.flag(nation)) \(nation)")
                             Spacer()
                             FavoriteButton(kind: .nation, key: nation, name: nation, nation: nation)
                         }
                     }
                 }
                 if !results.isEmpty {
-                    Section("Derniers résultats") {
+                    Section("Latest results") {
                         ForEach(results.prefix(30)) { result in
                             HStack {
                                 VStack(alignment: .leading) {
@@ -71,7 +71,7 @@ struct AthleteView: View {
         .task { await load() }
     }
 
-    /// Les dates de naissance arrivent à minuit UTC : on les formate en UTC.
+    /// Birthdates arrive at midnight UTC, so they are formatted in UTC.
     private static let birthdateStyle: Date.FormatStyle = {
         var style = Date.FormatStyle.dateTime.day().month(.wide).year()
         style.timeZone = .gmt

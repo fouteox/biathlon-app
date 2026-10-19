@@ -6,7 +6,7 @@ struct CalendarView: View {
     @State private var season = SeasonID.current
     @State private var state: Loadable<[BiathlonEvent]> = .loading
 
-    /// Saison en cours et les quatre précédentes.
+    /// Current season and the four before it.
     private var seasons: [SeasonID] {
         sequence(first: SeasonID.current) { $0.previous }.prefix(5).map(\.self)
     }
@@ -25,20 +25,20 @@ struct CalendarView: View {
                         }
                         Spacer()
                         if event.isWorldChampionships {
-                            Text("Mondiaux").font(.caption.bold()).foregroundStyle(.orange)
+                            Text("World Championships").font(.caption.bold()).foregroundStyle(.orange)
                         }
                     }
                 }
             }
             .overlay {
                 if events.isEmpty {
-                    ContentUnavailableView("Calendrier non publié", systemImage: "calendar.badge.exclamationmark")
+                    ContentUnavailableView("Calendar not published", systemImage: "calendar.badge.exclamationmark")
                 }
             }
         }
-        .navigationTitle("Calendrier")
+        .navigationTitle("Calendar")
         .toolbar {
-            Picker("Saison", selection: $season) {
+            Picker("Season", selection: $season) {
                 ForEach(seasons, id: \.self) { Text($0.displayName).tag($0) }
             }
         }
@@ -67,7 +67,7 @@ struct EventView: View {
                 NavigationLink(value: Route.race(race)) { RaceRow(race: race) }
             }
         }
-        .navigationTitle("\(Nation.flag(event.nation)) \(event.shortDescription)")
+        .navigationTitle("\(Nation.flag(event.nation)) \(event.shortDescription)" as String)
         .ibuAttribution()
         .task { await load() }
     }

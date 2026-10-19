@@ -1,12 +1,12 @@
 import Foundation
 
-/// Identifiant de saison IBU, par exemple `2627` pour l'hiver 2026-27.
+/// IBU season ID, for example `2627` for the 2026-27 winter.
 public struct SeasonID: RawRepresentable, Hashable, Sendable, Codable, CustomStringConvertible {
     public let rawValue: String
 
     public init(rawValue: String) { self.rawValue = rawValue }
 
-    /// La saison bascule au 1er juillet.
+    /// The season rolls over on July 1.
     public static func containing(_ date: Date, calendar: Calendar = .init(identifier: .gregorian)) -> SeasonID {
         let year = calendar.component(.year, from: date)
         let month = calendar.component(.month, from: date)
@@ -35,7 +35,7 @@ public struct SeasonID: RawRepresentable, Hashable, Sendable, Codable, CustomStr
     public var description: String { rawValue }
 }
 
-/// Niveau de compétition dans l'API (`Level=`).
+/// Competition level in the API (`Level=`).
 public enum CompetitionLevel: Int, Sendable, CaseIterable {
     case worldCup = 1
     case ibuCup = 2
