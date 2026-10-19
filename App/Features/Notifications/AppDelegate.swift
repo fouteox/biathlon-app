@@ -7,7 +7,8 @@ import os
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     let settings = NotificationSettings()
     let push = PushRegistration()
-    let client = IBUClient()
+    /// IBU data goes through the server's cache when there is a server, to spare the IBU API.
+    let client = IBUClient(baseURL: Bundle.main.serverURL?.appending(path: "ibu/") ?? IBUClient.ibuBaseURL)
 
     private var preferenceChanges: Task<Void, Never>?
     private var pendingChange: Task<Void, Never>?

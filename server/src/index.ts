@@ -43,16 +43,15 @@ export default {
 
 /**
  * Read-only cache in front of biathlonresults.com, with the same paths and
- * query strings (`/ibu/Results?RaceId=…`). Cloudflare documents a working
- * Cache API for Workers on custom domains.
+ * query strings (`/ibu/Results?RaceId=…`), for the endpoints the app calls.
+ * Measured on 2026-10-19: the Cache API works on `*.workers.dev` too
+ * (`cf-cache-status: HIT` on the second request).
  */
 const CACHE_SECONDS: Record<string, number> = {
   Results: 15,
-  AnalyticResults: 15,
   Competitions: 60,
   CupResults: 300,
   Events: 3600,
-  Cups: 3600,
   CISBios: 3600,
   AllResults: 3600,
 };

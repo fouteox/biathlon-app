@@ -4,7 +4,7 @@ Cloudflare Worker that:
 
 - polls biathlonresults.com every minute (Cron Trigger) during World Cup events and detects cancelled races and start time changes;
 - sends the matching alerts through APNs to registered devices (texts are localized on the device, see `src/payload.ts`);
-- exposes a read-only cache of the IBU API under `/ibu/` (Cloudflare documents a working Cache API only for Workers on a custom domain).
+- exposes a read-only cache of the IBU API under `/ibu/`, which the app reads instead of biathlonresults.com. The Cache API also works on `*.workers.dev` (`cf-cache-status: HIT`, measured on 2026-10-19).
 
 ## API
 
