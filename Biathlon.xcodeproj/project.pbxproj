@@ -1,0 +1,345 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		5BA423F2DEE4F8DE0F65D101 /* BiathlonKit in Frameworks */ = {isa = PBXBuildFile; productRef = 94A0F087BCF6D13CA6B12B18 /* BiathlonKit */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		04C043EF7AEA82F7842EDA8E /* Project.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Project.xcconfig; sourceTree = "<group>"; };
+		04E44D7D253DB6C6132F1082 /* Biathlon.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Biathlon.xcconfig; sourceTree = "<group>"; };
+		0DF4B3ABD5A37131609C06AD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4F003F40EA5A3DE9F47CDCD5 /* Biathlon.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Biathlon.entitlements; sourceTree = "<group>"; };
+		B6D0567317C60662CDA2C0B7 /* BiathlonKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = BiathlonKit; path = Packages/BiathlonKit; sourceTree = SOURCE_ROOT; };
+		ECF86E7BC7C9A2BB896BBC22 /* Biathlon.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Biathlon.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		13ED62A56C352343FF009E8E /* App */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			explicitFileTypes = {
+			};
+			explicitFolders = (
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		06311A37DDB4E666EEB91038 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5BA423F2DEE4F8DE0F65D101 /* BiathlonKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		859B4406C4B9BFFA40313599 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				B6D0567317C60662CDA2C0B7 /* BiathlonKit */,
+			);
+			path = Packages;
+			sourceTree = "<group>";
+		};
+		B53C8A6198F25C1ED9004AC3 = {
+			isa = PBXGroup;
+			children = (
+				13ED62A56C352343FF009E8E /* App */,
+				C72D25359A83CFF1E36987D6 /* Configs */,
+				859B4406C4B9BFFA40313599 /* Packages */,
+				D4CEB0848E362B765EBD3E7E /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		C72D25359A83CFF1E36987D6 /* Configs */ = {
+			isa = PBXGroup;
+			children = (
+				4F003F40EA5A3DE9F47CDCD5 /* Biathlon.entitlements */,
+				04E44D7D253DB6C6132F1082 /* Biathlon.xcconfig */,
+				0DF4B3ABD5A37131609C06AD /* Info.plist */,
+				04C043EF7AEA82F7842EDA8E /* Project.xcconfig */,
+			);
+			path = Configs;
+			sourceTree = "<group>";
+		};
+		D4CEB0848E362B765EBD3E7E /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				ECF86E7BC7C9A2BB896BBC22 /* Biathlon.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B929537D5C5472FBEA585959 /* Biathlon */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7F0D3BCAA8360D8C60420F79 /* Build configuration list for PBXNativeTarget "Biathlon" */;
+			buildPhases = (
+				0A7B5E4138FD8A80F550369B /* Sources */,
+				E2634EB8C33744C8EB519711 /* Resources */,
+				06311A37DDB4E666EEB91038 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				13ED62A56C352343FF009E8E /* App */,
+			);
+			name = Biathlon;
+			packageProductDependencies = (
+				94A0F087BCF6D13CA6B12B18 /* BiathlonKit */,
+			);
+			productName = Biathlon;
+			productReference = ECF86E7BC7C9A2BB896BBC22 /* Biathlon.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		04467F6A15AE3EECC3E0FC96 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					B929537D5C5472FBEA585959 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 9DFD2235E7C4EB3796CD5C36 /* Build configuration list for PBXProject "Biathlon" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = B53C8A6198F25C1ED9004AC3;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				6C0E9EA9787134A360953F11 /* XCLocalSwiftPackageReference "Packages/BiathlonKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = D4CEB0848E362B765EBD3E7E /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B929537D5C5472FBEA585959 /* Biathlon */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		E2634EB8C33744C8EB519711 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0A7B5E4138FD8A80F550369B /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		4A35666FBE502095A863FA58 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 04C043EF7AEA82F7842EDA8E /* Project.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+			};
+			name = Release;
+		};
+		531281DB6A13217470841B75 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 04E44D7D253DB6C6132F1082 /* Biathlon.xcconfig */;
+			buildSettings = {
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+			};
+			name = Release;
+		};
+		81A2CE237F519135DBB0614F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 04E44D7D253DB6C6132F1082 /* Biathlon.xcconfig */;
+			buildSettings = {
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				SDKROOT = iphoneos;
+			};
+			name = Debug;
+		};
+		B3F5425816512A878644AFC1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 04C043EF7AEA82F7842EDA8E /* Project.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		7F0D3BCAA8360D8C60420F79 /* Build configuration list for PBXNativeTarget "Biathlon" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				81A2CE237F519135DBB0614F /* Debug */,
+				531281DB6A13217470841B75 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9DFD2235E7C4EB3796CD5C36 /* Build configuration list for PBXProject "Biathlon" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B3F5425816512A878644AFC1 /* Debug */,
+				4A35666FBE502095A863FA58 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		6C0E9EA9787134A360953F11 /* XCLocalSwiftPackageReference "Packages/BiathlonKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/BiathlonKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		94A0F087BCF6D13CA6B12B18 /* BiathlonKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BiathlonKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 04467F6A15AE3EECC3E0FC96 /* Project object */;
+}

@@ -47,8 +47,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: xcodebuild -version && swift --version
-      - run: brew install xcodegen
-      - run: xcodegen
       - name: Build
         run: |
           set -o pipefail
@@ -58,8 +56,8 @@ jobs:
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO | tee build.log
-      # The concurrency and language settings come from project.yml through
-      # XcodeGen: check that the compiler actually received them.
+      # The concurrency and language settings come from Configs/*.xcconfig:
+      # check that the compiler actually received them.
       - name: Check compiler settings
         run: |
           for feature in NonisolatedNonsendingByDefault InferIsolatedConformances ExistentialAny; do
@@ -68,3 +66,9 @@ jobs:
           done
       - name: Check privacy manifest
         run: test -f build/Build/Products/Debug-iphonesimulator/Biathlon.app/PrivacyInfo.xcprivacy
+      # xcconfig files read // as a comment: check the server URL survived.
+      - name: Check Info.plist
+        run: |
+          plist=build/Build/Products/Debug-iphonesimulator/Biathlon.app/Info.plist
+          test "$(plutil -extract BiathlonServerURL raw "$plist")" = https://biathlon-server.fouteox.workers.dev
+          test "$(plutil -extract CFBundleShortVersionString raw "$plist")" = 1.0.0
