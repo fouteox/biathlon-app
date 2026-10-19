@@ -60,15 +60,16 @@ final class LiveActivities {
 
     /// Removes the race's activity from the Lock Screen at once.
     func stopFollowing(raceID: String) async {
-        for activity in activities(of: raceID) {
-            await activity.end(nil, dismissalPolicy: .immediate)
-        }
+        await Self.end(raceID: raceID)
         refresh()
     }
 
+    // `Activity` isn't `Sendable` and its `update` and `end` run off the main actor:
+    // the activities are looked up and changed off the main actor as well.
+
     /// Shows `state` in the race's activity, ending it once the race is over.
-    func update(raceID: String, with state: RaceLiveState) async {
-        for activity in activities(of: raceID) where activity.content.state != state {
+    @concurrent func update(raceID: String, with state: RaceLiveState) async {
+        for activity in Self.activities(of: raceID) where activity.content.state != state {
             let content = ActivityContent(state: state, staleDate: nil)
             if state.phase.canBeFollowedLive {
                 await activity.update(content)
@@ -78,7 +79,13 @@ final class LiveActivities {
         }
     }
 
-    private func activities(of raceID: String) -> [Activity<RaceActivityAttributes>] {
+    @concurrent private static func end(raceID: String) async {
+        for activity in activities(of: raceID) {
+            await activity.end(nil, dismissalPolicy: .immediate)
+        }
+    }
+
+    private nonisolated static func activities(of raceID: String) -> [Activity<RaceActivityAttributes>] {
         Activity<RaceActivityAttributes>.activities.filter { $0.attributes.raceID == raceID }
     }
 
