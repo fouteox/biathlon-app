@@ -89,7 +89,8 @@ final class AppAttest {
 
     private func attestNewKey() async throws -> String {
         var pending: Pending
-        if let saved = loadPending() {
+        let saved = loadPending()
+        if let saved {
             pending = saved
         } else {
             // The challenge first: a failed fetch then leaves no unused key behind.
@@ -130,7 +131,11 @@ final class AppAttest {
         // "key already attested": an earlier try was stored but its answer was lost.
         guard status == 204 || error == "key already attested" else {
             // Any other refusal, an expired challenge included, won't change: start over.
-            if (400..<500).contains(status) { clearPending() }
+            if (400..<500).contains(status) {
+                clearPending()
+                // A key saved by an earlier sync gets one immediate retry with a new key.
+                if saved != nil { return try await attestNewKey() }
+            }
             throw Failure.server(status: status)
         }
         defaults.set(pending.keyID, forKey: DefaultsKey.keyID)
