@@ -11,7 +11,7 @@ SWIFT_VERSION=6.4.1
 # Swift 6.x Release Signing Key <swift-infrastructure@forums.swift.org>
 SWIFT_SIGNING_KEY=52BB7E3DE28A71BE22EC05FFEF80A866B47A981F
 
-if command -v swift >/dev/null && swift --version 2>/dev/null | grep -q "Swift version ${SWIFT_VERSION}"; then exit 0; fi
+if command -v swift >/dev/null && swift --version 2>/dev/null | grep -qF "Swift version ${SWIFT_VERSION} ("; then exit 0; fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get -q update
@@ -37,4 +37,4 @@ chmod -R o+r /usr/lib/swift
 rm -rf "$WORK" "$GNUPGHOME"
 swift --version
 # Échoue si un autre swift (ancien lien swiftly, etc.) passe avant /usr/bin dans le PATH.
-swift --version 2>/dev/null | grep -q "Swift version ${SWIFT_VERSION}" || { echo "swift dans le PATH n'est pas ${SWIFT_VERSION}" >&2; exit 1; }
+swift --version 2>/dev/null | grep -qF "Swift version ${SWIFT_VERSION} (" || { echo "swift dans le PATH n'est pas ${SWIFT_VERSION}" >&2; exit 1; }
