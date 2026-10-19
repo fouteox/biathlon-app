@@ -79,12 +79,10 @@ struct RaceView: View {
         FavoriteSet(favorites).contains(row)
     }
 
-    /// From the calendar while the results load or fail.
-    private var liveState: RaceLiveState { loadedState ?? RaceLiveState(race: race) }
-
-    /// From the results, or from the calendar when they don't describe the race yet.
-    private var loadedState: RaceLiveState? {
-        loader.state.value.map { RaceLiveState($0) ?? RaceLiveState(race: race) }
+    /// From the results, or from the calendar while they load, fail or don't describe
+    /// the race yet.
+    private var liveState: RaceLiveState {
+        loader.state.value.flatMap(RaceLiveState.init) ?? RaceLiveState(race: race)
     }
 
     private var following: Binding<Bool> {
@@ -119,12 +117,5 @@ struct RaceView: View {
 
     private func load() async {
         await loader.load { try await ibu.results(raceID: race.id) }
-        guard let loadedState else { return }
-        do {
-            try await liveActivities.reschedule(raceID: race.id, for: loadedState)
-        } catch {
-            Logger.notifications.error(
-                "Rescheduling the Live Activity failed: \(String(describing: error), privacy: .public)")
-        }
     }
 }

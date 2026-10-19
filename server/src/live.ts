@@ -129,7 +129,7 @@ export async function syncLiveActivities(
       kept.push(channel);
     } else if (isFollowable(watched.get(channel.raceId))) {
       // A race followable again, like a cancellation called off, gets new channels.
-      if (!(await deleteEnded(env, tokens, channel))) kept.push(channel);
+      if (!(await deleteChannelAndRow(env, tokens, channel))) kept.push(channel);
     } else {
       await resendEnd(env, tokens, channel, now);
       kept.push(channel);
@@ -197,11 +197,16 @@ async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapsho
       continue;
     }
     // A live race starts from the calendar too: its first results are published at the next run.
-    await env.DB.prepare(
-      "INSERT INTO live_channels (race_id, environment, channel_id, state, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+    const { meta } = await env.DB.prepare(
+      `INSERT INTO live_channels (race_id, environment, channel_id, state, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
+       ON CONFLICT (race_id, environment) DO NOTHING`,
     )
       .bind(race.id, environment, outcome.channelId, JSON.stringify(calendarState(race)), now)
       .run();
+    if (meta.changes === 0) {
+      // An overlapping run recorded its channel first: this one would never be deleted.
+      await deleteChannelAndRow(env, tokens, { raceId: race.id, environment, channelId: outcome.channelId });
+    }
   }
 }
 
@@ -240,7 +245,7 @@ async function end(env: Env, tokens: ProviderTokens, channel: ChannelRow, state:
 /** Sends the end again for devices that were offline, then deletes the channel once the grace period is over. */
 async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, now: number) {
   if (now - (channel.endedAt ?? now) >= END_GRACE_MS) {
-    await deleteEnded(env, tokens, channel);
+    await deleteChannelAndRow(env, tokens, channel);
     return;
   }
   if (now - (channel.endSentAt ?? now) < END_RESEND_INTERVAL_MS) return;
@@ -254,8 +259,12 @@ async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, 
   }
 }
 
-/** Deletes an ended channel; `false` when it is still there, for the next run to retry. */
-async function deleteEnded(env: Env, tokens: ProviderTokens, channel: ChannelRow): Promise<boolean> {
+/** Deletes a channel at APNs, then its row; `false` when it is still there, for the next run to retry. */
+async function deleteChannelAndRow(
+  env: Env,
+  tokens: ProviderTokens,
+  channel: Pick<ChannelRow, "raceId" | "environment" | "channelId">,
+): Promise<boolean> {
   const deletion = await tokens.send(channel.environment, (token) =>
     deleteChannel(channel.environment, env.APNS_TOPIC, channel.channelId, token),
   );

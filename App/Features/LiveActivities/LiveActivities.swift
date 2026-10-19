@@ -2,6 +2,7 @@ import ActivityKit
 import BiathlonKit
 import Foundation
 import Observation
+import os
 
 /// Starts, updates and ends the races' Live Activities.
 ///
@@ -56,7 +57,7 @@ final class LiveActivities {
     /// shortly before a later race (`RaceLiveState.activityStart`).
     func follow(raceID: String, name: String) async throws {
         guard !followedRaceIDs.contains(raceID) else { return }
-        try await start(raceID: raceID, name: name)
+        try await withChannel(raceID: raceID) { try Self.request(raceID: raceID, name: name, on: $0) }
     }
 
     /// Removes the race's activity from the Lock Screen at once, or cancels its request.
@@ -66,38 +67,68 @@ final class LiveActivities {
         refresh()
     }
 
-    /// Requests a new activity for a race that moved since its activity was scheduled
-    /// (`RaceLiveState.needsNewActivity`), then ends the old one.
-    func reschedule(raceID: String, for state: RaceLiveState) async throws {
-        let moved = Self.activities(of: raceID).first {
-            Self.shownStates.contains($0.activityState)
-                && state.needsNewActivity(
-                    scheduledStart: $0.attributes.scheduledStart, isPending: $0.activityState == .pending, now: .now)
+    /// Brings every followed race's activities in line with their channels, when the app
+    /// comes back: a broadcast can update an activity but can't move its scheduled start
+    /// or subscribe it to a new channel.
+    func reconcile() async {
+        for raceID in startedRaceIDs {
+            do {
+                try await reconcile(raceID: raceID)
+            } catch Failure.noChannel {
+                // Over, or its new channel isn't open yet: nothing to move to.
+            } catch {
+                Logger.notifications.error(
+                    "Reconciling the Live Activity failed: \(String(describing: error), privacy: .public)")
+            }
         }
-        guard let moved else { return }
-        let (movedID, name) = (moved.id, moved.attributes.name)
-        // The replacement first: the race stays followed if it can't be scheduled.
-        guard try await start(raceID: raceID, name: name) else { return }
-        await Self.end(raceID: raceID, activityID: movedID)
+    }
+
+    /// Replaces the race's activities that no longer match its channel: the server opened
+    /// a new one, or the race moved since the activity was scheduled
+    /// (`RaceLiveState.needsNewActivity`). The replacement is requested first, so the race
+    /// stays followed if it can't be.
+    private func reconcile(raceID: String) async throws {
+        guard let name = Self.activities(of: raceID).first?.attributes.name else { return }
+        var outdated: [String] = []
+        let requested = try await withChannel(raceID: raceID) { channel in
+            outdated = Self.activities(of: raceID)
+                .filter { activity in
+                    Self.shownStates.contains(activity.activityState)
+                        && (activity.attributes.channelID != channel.channelId
+                            || channel.state.needsNewActivity(
+                                scheduledStart: activity.attributes.scheduledStart,
+                                isPending: activity.activityState == .pending, now: .now))
+                }
+                .map(\.id)
+            if !outdated.isEmpty { try Self.request(raceID: raceID, name: name, on: channel) }
+        }
+        guard requested else { return }
+        for activityID in outdated { await Self.end(raceID: raceID, activityID: activityID) }
         refresh()
     }
 
-    /// Requests the race's activity on its channel; `false` when `stopFollowing` cancels
-    /// the request meanwhile.
+    /// Runs `body` with the race's channel, unless `stopFollowing` cancels the request
+    /// during the lookup; `false` then.
     @discardableResult
-    private func start(raceID: String, name: String) async throws -> Bool {
+    private func withChannel(raceID: String, _ body: (Channel) throws -> Void) async throws -> Bool {
         let request = UUID()
         requests[raceID] = request
         defer {
             if requests[raceID] == request { requests[raceID] = nil }
             refresh()
         }
-        // The channel stores no messages: the activity starts from the state last published
-        // on it, which the app's cached results could lag behind.
         let channel = try await channel(raceID: raceID)
         guard requests[raceID] == request else { return false }
+        try body(channel)
+        return true
+    }
+
+    /// Requests the race's activity on `channel`, from the state last published on it:
+    /// the channel stores no messages, and the app's cached results could lag behind.
+    private static func request(raceID: String, name: String, on channel: Channel) throws {
         let start = RaceLiveState.activityStart(raceStart: channel.state.startTime, now: .now)
-        let attributes = RaceActivityAttributes(raceID: raceID, name: name, scheduledStart: start)
+        let attributes = RaceActivityAttributes(
+            raceID: raceID, name: name, channelID: channel.channelId, scheduledStart: start)
         let content = ActivityContent(state: channel.state, staleDate: nil)
         if let start {
             let minutes = Int(RaceLiveState.activityLead / 60)
@@ -109,7 +140,6 @@ final class LiveActivities {
         } else {
             _ = try Activity.request(attributes: attributes, content: content, pushType: .channel(channel.channelId))
         }
-        return true
     }
 
     // `Activity` isn't `Sendable` and its `end` runs off the main actor: the activities

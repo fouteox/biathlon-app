@@ -243,6 +243,32 @@ describe("Live Activity channels", () => {
     expect(rows.every(({ state }) => JSON.parse(state).phase === "scheduled")).toBe(true);
   });
 
+  it("deletes the channel it opened when an overlapping run opened one first", async () => {
+    const env = await makeEnv();
+    const sent = stubNetwork();
+    const fetchStub = globalThis.fetch;
+    // The other run records its channels while this one is creating its own.
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      if (init.method === "POST" && String(input).includes("api-manage-broadcast")) {
+        const environment = String(input).includes("sandbox") ? "sandbox" : "production";
+        await env.DB.prepare(
+          "INSERT INTO live_channels (race_id, environment, channel_id, state, created_at) VALUES (?1, ?2, 'other', '{}', 0)",
+        )
+          .bind(RACE_ID, environment)
+          .run();
+      }
+      return fetchStub(input, init);
+    });
+
+    await syncLiveActivities(env, [race()], NOW);
+
+    expect(sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"])).toEqual([
+      "channel-1",
+      "channel-2",
+    ]);
+    expect((await channels(env)).map(({ channelId }) => channelId)).toEqual(["other", "other"]);
+  });
+
   it("spends no more subrequests than the run has left", async () => {
     const env = await makeEnv();
     const sent = stubNetwork();

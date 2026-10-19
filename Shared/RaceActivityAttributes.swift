@@ -12,6 +12,9 @@ nonisolated struct RaceActivityAttributes: ActivityAttributes {
 
     let raceID: String
     let name: String
+    /// The broadcast channel it subscribes to: the server replaces a channel APNs no
+    /// longer knows, and the app then moves the activity to the new one.
+    let channelID: String
     /// When ActivityKit shows a scheduled activity (`RaceLiveState.activityStart`), which
     /// it can't move: the app schedules it again when the race moves. `nil` once started.
     let scheduledStart: Date?
