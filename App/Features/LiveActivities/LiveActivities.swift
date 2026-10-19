@@ -80,17 +80,18 @@ final class LiveActivities {
     /// A new activity subscribes after the channel lookup: whatever the server sent in
     /// between, the end above all, is missed, the channel storing no messages. A second
     /// lookup once subscribed catches it.
-    private func reconcile(raceID: String, attempt: Int = 1) async {
+    private func reconcile(raceID: String) async {
         do {
             if try await replaceOutdatedActivities(raceID: raceID) {
                 try await replaceOutdatedActivities(raceID: raceID)
             }
         } catch Failure.noChannel {
-            // The server opens a channel in place of one APNs dropped at its next run.
-            guard attempt < Self.channelLookups else { return }
+            // The server opens a channel in place of one APNs dropped at one of its next
+            // runs, a few per run: looked up again while the race's activity is shown.
             Task { [weak self] in
                 try? await Task.sleep(for: Self.channelLookupInterval)
-                await self?.reconcile(raceID: raceID, attempt: attempt + 1)
+                guard let self, startedRaceIDs.contains(raceID) else { return }
+                await reconcile(raceID: raceID)
             }
         } catch let Failure.ended(finalState) {
             // The end was sent while the device was offline, which the channel doesn't keep.
@@ -185,8 +186,7 @@ final class LiveActivities {
         Activity<RaceActivityAttributes>.activities.filter { $0.attributes.raceID == raceID }
     }
 
-    /// The server's cron runs every minute: a few lookups a minute apart find a new channel.
-    private static let channelLookups = 3
+    /// The server's cron runs every minute.
     private static let channelLookupInterval = Duration.seconds(60)
 
     /// Activities on screen or scheduled to show.
