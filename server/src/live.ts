@@ -8,7 +8,8 @@ import { SubrequestBudget } from "./subrequests";
  * per update reaches every subscriber, whatever their number (Apple, WWDC24 session
  * 10069). The watcher opens a channel per race and APNs environment while the race
  * is upcoming, publishes each change of its state, then ends the activity and
- * deletes the channel a while after the race is over (channels are limited to 10,000).
+ * deletes the channel at APNs a while after the race is over (channels are limited
+ * to 10,000).
  */
 
 /** `Results?RaceId=`: the race and its rows. */
@@ -101,6 +102,7 @@ interface ChannelRow {
   state: string;
   endedAt: number | null;
   endSentAt: number | null;
+  deletedAt: number | null;
 }
 
 /**
@@ -119,7 +121,7 @@ export async function syncLiveActivities(
   const tokens = new ProviderTokens(env, now, budget);
   await deleteOrphans(env, tokens);
   const { results: rows } = await env.DB.prepare(
-    "SELECT race_id AS raceId, environment, channel_id AS channelId, state, ended_at AS endedAt, end_sent_at AS endSentAt FROM live_channels",
+    "SELECT race_id AS raceId, environment, channel_id AS channelId, state, ended_at AS endedAt, end_sent_at AS endSentAt, deleted_at AS deletedAt FROM live_channels",
   ).all<ChannelRow>();
   const watched = new Map(races?.map((race) => [race.id, race]));
   const open: ChannelRow[] = [];
@@ -130,9 +132,9 @@ export async function syncLiveActivities(
       kept.push(channel);
     } else if (isFollowable(watched.get(channel.raceId))) {
       // A race followable again, like a cancellation called off, gets new channels.
-      if (!(await deleteChannelAndRow(env, tokens, channel))) kept.push(channel);
+      if (!(await replace(env, tokens, channel))) kept.push(channel);
     } else {
-      await resendEnd(env, tokens, channel, now);
+      if (channel.deletedAt === null) await resendEnd(env, tokens, channel, now);
       kept.push(channel);
     }
   }
@@ -216,8 +218,8 @@ async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapsho
 async function publish(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
   const outcome = await send(env, tokens, channel, "update", state, now);
   if (outcome === "sent") {
-    await env.DB.prepare(`UPDATE live_channels SET state = ?1 WHERE ${SAME_OPEN_CHANNEL}`)
-      .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId)
+    await env.DB.prepare(`UPDATE live_channels SET state = ?1 WHERE ${UNCHANGED_OPEN_CHANNEL}`)
+      .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state)
       .run();
   } else if (outcome === "unregistered") {
     // A new channel opens at the next run while the race is still upcoming or live.
@@ -226,29 +228,34 @@ async function publish(env: Env, tokens: ProviderTokens, channel: ChannelRow, st
 }
 
 /**
- * Cron runs can overlap: a run only changes the row it read, while it is still open,
- * so an older run never overwrites a newer end. Binds ?2 to ?4.
+ * Cron runs can overlap: a run only changes the row it read, while it is still open
+ * and holds the state it read, so an older run never overwrites a newer state or end.
+ * Binds ?2 to ?5.
  */
-const SAME_OPEN_CHANNEL = "race_id = ?2 AND environment = ?3 AND channel_id = ?4 AND ended_at IS NULL";
+const UNCHANGED_OPEN_CHANNEL =
+  "race_id = ?2 AND environment = ?3 AND channel_id = ?4 AND state = ?5 AND ended_at IS NULL";
 
 /** Sends the final state, retried at the next run until it succeeds. */
 async function end(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
   const outcome = await send(env, tokens, channel, "end", state, now);
   if (outcome === "sent") {
     await env.DB.prepare(
-      `UPDATE live_channels SET state = ?1, ended_at = ?5, end_sent_at = ?5 WHERE ${SAME_OPEN_CHANNEL}`,
+      `UPDATE live_channels SET state = ?1, ended_at = ?6, end_sent_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`,
     )
-      .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, now)
+      .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state, now)
       .run();
   } else if (outcome === "unregistered") {
     await forget(env, channel);
   }
 }
 
-/** Sends the end again for devices that were offline, then deletes the channel once the grace period is over. */
+/** Sends the end again for devices that were offline, then deletes the channel at APNs once the grace period is over. */
 async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, now: number) {
   if (now - (channel.endedAt ?? now) >= END_GRACE_MS) {
-    await deleteChannelAndRow(env, tokens, channel);
+    if (!(await deleteAtAPNs(env, tokens, channel.environment, channel.channelId))) return;
+    await env.DB.prepare("UPDATE live_channels SET deleted_at = ?1 WHERE race_id = ?2 AND environment = ?3")
+      .bind(now, channel.raceId, channel.environment)
+      .run();
     return;
   }
   if (now - (channel.endSentAt ?? now) < END_RESEND_INTERVAL_MS) return;
@@ -262,9 +269,11 @@ async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, 
   }
 }
 
-/** Deletes a channel at APNs, then its row; `false` when it is still there, for the next run to retry. */
-async function deleteChannelAndRow(env: Env, tokens: ProviderTokens, channel: ChannelRow): Promise<boolean> {
-  if (!(await deleteAtAPNs(env, tokens, channel.environment, channel.channelId))) return false;
+/** Deletes an ended channel and its row, for a new one to open; `false` when APNs still has it, for the next run to retry. */
+async function replace(env: Env, tokens: ProviderTokens, channel: ChannelRow): Promise<boolean> {
+  if (channel.deletedAt === null && !(await deleteAtAPNs(env, tokens, channel.environment, channel.channelId))) {
+    return false;
+  }
   await env.DB.prepare("DELETE FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3")
     .bind(channel.raceId, channel.environment, channel.channelId)
     .run();
@@ -320,18 +329,19 @@ async function forget(env: Env, channel: ChannelRow) {
 /**
  * The channel the app subscribes a race's Live Activity to, for its APNs environment,
  * with the state last published on it: the channel stores no messages, so a new
- * activity starts from it. None once the end is sent, which a new subscriber would miss.
+ * activity starts from it. Once the end is sent, which a new subscriber would miss,
+ * only the final state, for the app to end the activities that missed it.
  */
 export async function channelFor(
   db: D1Database,
   raceId: string,
   environment: APNsEnvironment,
-): Promise<{ channelId: string; state: LiveState } | undefined> {
+): Promise<{ channelId: string; state: LiveState } | { ended: LiveState } | undefined> {
   const row = await db
-    .prepare(
-      "SELECT channel_id AS channelId, state FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND ended_at IS NULL",
-    )
+    .prepare("SELECT channel_id AS channelId, state, ended_at AS endedAt FROM live_channels WHERE race_id = ?1 AND environment = ?2")
     .bind(raceId, environment)
-    .first<{ channelId: string; state: string }>();
-  return row ? { channelId: row.channelId, state: JSON.parse(row.state) as LiveState } : undefined;
+    .first<{ channelId: string; state: string; endedAt: number | null }>();
+  if (!row) return undefined;
+  const state = JSON.parse(row.state) as LiveState;
+  return row.endedAt === null ? { channelId: row.channelId, state } : { ended: state };
 }

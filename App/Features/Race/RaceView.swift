@@ -108,6 +108,8 @@ struct RaceView: View {
         switch error {
         case LiveActivities.Failure.noChannel:
             String(localized: "This race can't be followed live yet. Try again closer to the start.")
+        case LiveActivities.Failure.ended:
+            String(localized: "This race is over.")
         case is ActivityAuthorizationError, is URLError:
             error.localizedDescription
         default:

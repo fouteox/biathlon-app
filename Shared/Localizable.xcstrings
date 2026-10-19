@@ -591,6 +591,16 @@
         }
       }
     },
+    "This race is over.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette course est terminée."
+          }
+        }
+      }
+    },
     "Try again": {
       "localizations": {
         "fr": {

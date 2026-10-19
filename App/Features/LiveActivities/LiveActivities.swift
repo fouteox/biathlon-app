@@ -14,6 +14,8 @@ final class LiveActivities {
     enum Failure: Error {
         /// The server has no channel for the race yet.
         case noChannel
+        /// The race's activity is over, with its final state.
+        case ended(RaceLiveState)
         case server(status: Int)
     }
 
@@ -75,7 +77,10 @@ final class LiveActivities {
             do {
                 try await reconcile(raceID: raceID)
             } catch Failure.noChannel {
-                // Over, or its new channel isn't open yet: nothing to move to.
+                // Its new channel isn't open yet: nothing to move to.
+            } catch let Failure.ended(finalState) {
+                // The end was sent while the device was offline, which the channel doesn't keep.
+                await Self.end(raceID: raceID, finalState: finalState)
             } catch {
                 Logger.notifications.error(
                     "Reconciling the Live Activity failed: \(String(describing: error), privacy: .public)")
@@ -145,10 +150,14 @@ final class LiveActivities {
     // `Activity` isn't `Sendable` and its `end` runs off the main actor: the activities
     // are looked up and ended off the main actor as well.
 
-    /// Ends the race's activities, or only `activityID`.
-    @concurrent private static func end(raceID: String, activityID: String? = nil) async {
+    /// Ends the race's activities, or only `activityID`: showing `finalState` until the system
+    /// dismisses them, like the server's end event, or removing them at once without it.
+    @concurrent private static func end(
+        raceID: String, activityID: String? = nil, finalState: RaceLiveState? = nil
+    ) async {
+        let content = finalState.map { ActivityContent(state: $0, staleDate: nil) }
         for activity in activities(of: raceID) where activityID == nil || activity.id == activityID {
-            await activity.end(nil, dismissalPolicy: .immediate)
+            await activity.end(content, dismissalPolicy: content == nil ? .immediate : .default)
         }
     }
 
@@ -182,12 +191,17 @@ final class LiveActivities {
         // Default strategies, like ActivityKit's for the `content-state` of the broadcasts.
         case 200: return try JSONDecoder().decode(Channel.self, from: data)
         case 404: throw Failure.noChannel
+        case 410: throw Failure.ended(try JSONDecoder().decode(Ended.self, from: data).state)
         case let status: throw Failure.server(status: status ?? 0)
         }
     }
 
     private struct Channel: Decodable {
         let channelId: String
+        let state: RaceLiveState
+    }
+
+    private struct Ended: Decodable {
         let state: RaceLiveState
     }
 }

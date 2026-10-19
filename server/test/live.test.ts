@@ -202,7 +202,12 @@ describe("Live Activity channels", () => {
       "channel-2",
     ]);
     expect(broadcasts(last)).toEqual([]);
-    expect(await channels(env)).toEqual([]);
+    // The rows stay, for the app to learn that the activity is over.
+    expect((await channels(env)).map(({ state }) => JSON.parse(state))).toEqual([relay.state, relay.state]);
+
+    const after = stubNetwork();
+    await syncLiveActivities(env, finished, NOW + 70 * 60_000);
+    expect(after.filter((request) => !request.url.includes("biathlonresults.com"))).toEqual([]);
   });
 
   it("ends a race from the calendar when its results don't describe it", async () => {
@@ -260,6 +265,41 @@ describe("Live Activity channels", () => {
     const rows = await channels(env);
     expect(rows.map(({ channelId }) => channelId)).toEqual(["channel-1", "channel-2"]);
     expect(rows.every(({ state }) => JSON.parse(state).phase === "scheduled")).toBe(true);
+  });
+
+  it("opens new channels for a race followable again once its old ones are deleted", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], NOW + 60 * 60_000);
+
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race()], NOW + 61 * 60_000);
+
+    expect(sent.filter((request) => request.method === "DELETE")).toEqual([]);
+    expect((await channels(env)).map(({ channelId }) => channelId)).toEqual(["channel-1", "channel-2"]);
+  });
+
+  it("keeps the newer state an overlapping run stored meanwhile", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    const fetchStub = globalThis.fetch;
+    // The other run publishes and stores a newer state while this one is broadcasting.
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      if (String(input).includes("/4/broadcasts/")) {
+        await env.DB.prepare("UPDATE live_channels SET state = '{\"newer\":true}'").run();
+      }
+      return fetchStub(input, init);
+    });
+
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    expect((await channels(env)).map(({ state }) => state)).toEqual(['{"newer":true}', '{"newer":true}']);
   });
 
   it("deletes the channels it opened when an overlapping run opened them first, until APNs confirms", async () => {
@@ -388,14 +428,21 @@ describe("GET /v1/races/:id/channels/:environment", () => {
     expect(await response.json()).toEqual({ channelId: "channel-2", state: live.state });
   });
 
-  it("answers 404 once the race's activity has ended", async () => {
+  it("answers 410 with the final state once the race's activity has ended, even after its channel is deleted", async () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
+    const finished = [race({ StatusId: 11, ScheduleStatus: "FINISHED" })];
     stubNetwork({ results: relay.results });
-    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW);
+    await syncLiveActivities(env, finished, NOW);
 
-    expect((await get(env, `/v1/races/${RACE_ID}/channels/sandbox`)).status).toBe(404);
+    for (const now of [NOW, NOW + 60 * 60_000]) {
+      stubNetwork();
+      await syncLiveActivities(env, finished, now);
+      const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
+      expect(response.status).toBe(410);
+      expect(await response.json()).toEqual({ state: relay.state });
+    }
   });
 
   it("answers 404 for a race without a channel and 400 for an unknown environment", async () => {

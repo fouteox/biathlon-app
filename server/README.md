@@ -4,7 +4,7 @@ Cloudflare Worker that:
 
 - polls biathlonresults.com every minute (Cron Trigger) during World Cup events and detects cancelled races and start time changes;
 - sends the matching alerts through APNs to registered devices (texts are localized on the device, see `src/payload.ts`);
-- runs one Live Activity per race (`src/live.ts`): it opens an APNs broadcast channel per race and environment for the upcoming races, publishes each new state (start time, phase, first three) on it while the race runs, then ends the activity, sends the end again every 10 minutes for an hour for devices that were offline (the channels store no messages), and deletes the channel;
+- runs one Live Activity per race (`src/live.ts`): it opens an APNs broadcast channel per race and environment for the upcoming races, publishes each new state (start time, phase, first three) on it while the race runs, then ends the activity, sends the end again every 10 minutes for an hour for devices that were offline (the channels store no messages), and deletes the channel at APNs;
 - exposes a read-only cache of the IBU API under `/ibu/`, which the app reads instead of biathlonresults.com. The Cache API also works on `*.workers.dev` (`cf-cache-status: HIT`, measured on 2026-10-19).
 
 ## API
@@ -15,7 +15,7 @@ Cloudflare Worker that:
 | `POST` | `/v1/app-attest/keys` | `{ "keyId": "<base64>", "attestation": "<base64>", "challenge": "…" }` |
 | `PUT` | `/v1/devices/:token` | `{ "environment": "sandbox" \| "production", "categories": ["SM","SW","MX"], "cancellation": true, "rescheduling": true, "locale": "fr-FR", "timeZone": "Europe/Paris" }` |
 | `DELETE` | `/v1/devices/:token` | |
-| `GET` | `/v1/races/:raceId/channels/:environment` | Returns `{"channelId":"…","state":{…}}`, the broadcast channel the app subscribes the race's Live Activity to and the state last published on it, which the activity starts from (`404` when the race has none, or once its end is sent). |
+| `GET` | `/v1/races/:raceId/channels/:environment` | Returns `{"channelId":"…","state":{…}}`, the broadcast channel the app subscribes the race's Live Activity to and the state last published on it, which the activity starts from. `410` with `{"state":{…}}`, the final state, once its end is sent: the app ends the activities that missed it. `404` when the race has no channel yet. |
 | `GET` | `/v1/health` | Returns `{"apns":{"pushes":{"http2":true},"channels":{"http2":true}}}` when the Worker reaches APNs over HTTP/2, for pushes and for channel management. |
 | `GET` | `/ibu/<endpoint>?…` | Same paths and query strings as the IBU API. |
 

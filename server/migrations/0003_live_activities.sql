@@ -1,5 +1,5 @@
 -- APNs broadcast channels of the races' Live Activities (see src/live.ts):
--- one per race and APNs environment, deleted a while after the race is over.
+-- one per race and APNs environment, deleted at APNs a while after the race is over.
 CREATE TABLE live_channels (
   race_id TEXT NOT NULL REFERENCES races (id),
   environment TEXT NOT NULL CHECK (environment IN ('sandbox', 'production')),
@@ -11,6 +11,8 @@ CREATE TABLE live_channels (
   -- When the end event was first sent, then last sent; NULL while the race is followed.
   ended_at INTEGER,
   end_sent_at INTEGER,
+  -- When the channel was deleted at APNs: the row stays, for the app to learn the activity is over.
+  deleted_at INTEGER,
   PRIMARY KEY (race_id, environment)
 );
 

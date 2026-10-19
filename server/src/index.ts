@@ -43,7 +43,8 @@ export default {
       const [, raceId = "", environment = ""] = channel.map(decodeURIComponent);
       if (!isEnvironment(environment)) return json({ error: "invalid environment" }, 400);
       const live = await channelFor(env.DB, raceId, environment);
-      return live ? json(live) : json({ error: "no channel for this race" }, 404);
+      if (!live) return json({ error: "no channel for this race" }, 404);
+      return "ended" in live ? json({ state: live.ended }, 410) : json(live);
     }
 
     if (url.pathname === "/v1/health" && request.method === "GET") {
