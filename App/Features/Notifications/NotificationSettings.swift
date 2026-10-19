@@ -31,12 +31,21 @@ struct NotificationPreferences: Equatable, Sendable {
 final class NotificationSettings {
     static let reminderChoices = [5, 10, 15, 30, 60]
 
-    var preferences: NotificationPreferences { didSet { save() } }
+    var preferences: NotificationPreferences {
+        didSet {
+            save()
+            continuation.yield(preferences)
+        }
+    }
 
+    /// Every later change of `preferences`, for the code that applies them (server, reminders).
+    @ObservationIgnored let changes: AsyncStream<NotificationPreferences>
+    @ObservationIgnored private let continuation: AsyncStream<NotificationPreferences>.Continuation
     @ObservationIgnored private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        (changes, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
         var preferences = NotificationPreferences()
         preferences.reminderEnabled = defaults.bool(forKey: Keys.reminderEnabled)
         let minutes = defaults.integer(forKey: Keys.reminderMinutes)

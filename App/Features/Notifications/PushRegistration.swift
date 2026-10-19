@@ -1,6 +1,5 @@
 import BiathlonKit
 import Foundation
-import Observation
 import UIKit
 import os
 
@@ -42,8 +41,7 @@ final class PushRegistration {
     /// Applies every later change of the preferences, wherever it is made.
     func observe(_ settings: NotificationSettings, client: IBUClient) {
         observation = Task {
-            let changes = Observations { @MainActor in settings.preferences }.dropFirst()
-            for await preferences in changes {
+            for await preferences in settings.changes {
                 scheduleSync(preferences, client: client)
             }
         }
