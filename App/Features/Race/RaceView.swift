@@ -5,15 +5,15 @@ import SwiftUI
 struct RaceView: View {
     let race: Competition
     @Environment(\.ibu) private var ibu
-    @State private var state: Loadable<RaceResults> = .loading
+    @State private var loader = Loader<RaceResults>()
     @Query private var favorites: [Favorite]
 
     private var isLive: Bool {
-        (state.value?.competition ?? race).state == .live
+        (loader.state.value?.competition ?? race).state == .live
     }
 
     var body: some View {
-        LoadableView(state: state, retry: load) { results in
+        LoadableView(state: loader.state, retry: load) { results in
             List {
                 Section {
                     RaceRow(race: results.competition ?? race)
@@ -46,13 +46,7 @@ struct RaceView: View {
         .navigationBarTitleDisplayMode(.inline)
         .ibuAttribution()
         .task { await load() }
-        .task(id: isLive) {
-            guard isLive else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: HomeModel.livePollInterval)
-                await load()
-            }
-        }
+        .refreshingWhileLive(isLive, action: load)
     }
 
     @ViewBuilder
@@ -71,11 +65,6 @@ struct RaceView: View {
     }
 
     private func load() async {
-        do {
-            state = .loaded(try await ibu.results(raceID: race.id))
-        } catch is CancellationError {
-        } catch {
-            if state.value == nil { state = .failed(error) }
-        }
+        await loader.load { try await ibu.results(raceID: race.id) }
     }
 }

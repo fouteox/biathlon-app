@@ -1,16 +1,24 @@
 import BiathlonKit
 import SwiftUI
+import os
 
 struct AthleteView: View {
     let athleteID: String
     let name: String
 
     @Environment(\.ibu) private var ibu
-    @State private var bio: Loadable<AthleteBio> = .loading
-    @State private var results: [AthleteResult] = []
+    @State private var loader = Loader<Profile>()
+
+    private struct Profile {
+        let bio: AthleteBio
+        /// Empty when the history can't be loaded: the profile still shows.
+        let results: [AthleteResult]
+    }
 
     var body: some View {
-        LoadableView(state: bio, retry: load) { bio in
+        LoadableView(state: loader.state, retry: load) { profile in
+            let bio = profile.bio
+            let results = profile.results
             List {
                 Section {
                     HStack(spacing: 16) {
@@ -61,11 +69,12 @@ struct AthleteView: View {
                     }
                 }
             }
+            .refreshable { await load() }
         }
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.value?.nation)
+            FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: loader.state.value?.bio.nation)
         }
         .ibuAttribution()
         .task { await load() }
@@ -79,13 +88,15 @@ struct AthleteView: View {
     }()
 
     private func load() async {
-        do {
-            async let bioTask = ibu.athlete(id: athleteID)
-            async let resultsTask = ibu.athleteResults(id: athleteID)
-            bio = .loaded(try await bioTask)
-            results = (try? await resultsTask) ?? []
-        } catch {
-            bio = .failed(error)
+        await loader.load {
+            async let results = ibu.athleteResults(id: athleteID)
+            let bio = try await ibu.athlete(id: athleteID)
+            do {
+                return Profile(bio: bio, results: try await results)
+            } catch {
+                Logger.data.error("Athlete history failed: \(String(describing: error), privacy: .public)")
+                return Profile(bio: bio, results: [])
+            }
         }
     }
 }

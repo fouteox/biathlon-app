@@ -4,19 +4,19 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(\.ibu) private var ibu
-    @State private var model = HomeModel()
+    @State private var loader = Loader<HomeFeed>()
     @Query private var favorites: [Favorite]
     @State private var showsNotificationSettings = false
 
     var body: some View {
-        LoadableView(state: model.state, retry: reload) { snapshot in
+        LoadableView(state: loader.state, retry: load) { feed in
             List {
-                if let live = snapshot.live {
+                if let live = feed.live {
                     Section {
                         NavigationLink(value: Route.race(live)) {
                             LiveHeader(race: live)
                         }
-                        if let results = snapshot.liveResults {
+                        if let results = feed.liveResults {
                             TopResults(rows: results.standings, limit: 5, favorites: favoriteSet)
                         }
                     } header: {
@@ -25,7 +25,7 @@ struct HomeView: View {
                     }
                 }
 
-                if let next = snapshot.next {
+                if let next = feed.next {
                     Section("Next race") {
                         NavigationLink(value: Route.race(next)) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -38,7 +38,7 @@ struct HomeView: View {
                     }
                 }
 
-                if let results = snapshot.latestResults, let race = snapshot.latestFinished {
+                if let results = feed.latestResults, let race = feed.latestFinished {
                     let mine = results.standings.filter(favoriteSet.contains)
                     if !mine.isEmpty {
                         Section("My favorites · \(race.shortDescription)") {
@@ -53,7 +53,7 @@ struct HomeView: View {
                     }
                 }
 
-                if let event = snapshot.event {
+                if let event = feed.event {
                     Section {
                         NavigationLink(value: Route.event(event)) {
                             Label(
@@ -65,7 +65,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .refreshable { await reload() }
+            .refreshable { await load() }
         }
         .navigationTitle("Biathlon")
         .toolbar {
@@ -81,19 +81,12 @@ struct HomeView: View {
             NavigationStack { NotificationSettingsView() }
         }
         .ibuAttribution()
-        .task { await reload() }
-        // Auto-refresh while a race is live.
-        .task(id: model.isLive) {
-            guard model.isLive else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: HomeModel.livePollInterval)
-                await reload()
-            }
-        }
+        .task { await load() }
+        .refreshingWhileLive(loader.state.value?.live != nil, action: load)
     }
 
-    private func reload() async {
-        await model.load(using: ibu)
+    private func load() async {
+        await loader.load { try await ibu.homeFeed(now: .now) }
     }
 
     private var favoriteSet: FavoriteSet { FavoriteSet(favorites) }

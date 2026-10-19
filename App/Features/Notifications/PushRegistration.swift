@@ -1,24 +1,24 @@
 import BiathlonKit
 import Foundation
+import Observation
 import UIKit
+import os
 
-/// Keeps the notification server in sync with this device's APNs token and preferences.
+/// Keeps the notification server and the local reminders in sync with this
+/// device's APNs token and the user's preferences.
 ///
 /// Apple advises against caching device tokens, so the token only lives in
 /// memory and is requested again at every launch.
-@Observable
 final class PushRegistration {
-    private(set) var deviceToken: String?
+    private var deviceToken: String?
 
     /// Base URL of the Cloudflare Worker, from the `BiathlonServerURL` Info.plist key.
-    @ObservationIgnored private let serverURL: URL? = {
+    private let serverURL: URL? = {
         guard let raw = Bundle.main.object(forInfoDictionaryKey: "BiathlonServerURL") as? String, !raw.isEmpty else {
             return nil
         }
         return URL(string: raw)
     }()
-
-    @ObservationIgnored private let session = URLSession.shared
 
     /// APNs environment matching the `aps-environment` entitlement Xcode signs the build with.
     private var environment: String {
@@ -29,7 +29,8 @@ final class PushRegistration {
         #endif
     }
 
-    @ObservationIgnored private var pendingSync: Task<Void, Never>?
+    private var observation: Task<Void, Never>?
+    private var pendingSync: Task<Void, Never>?
 
     /// Registering doesn't prompt the user. It runs at every launch so the
     /// server also learns when alerts were turned off.
@@ -38,43 +39,68 @@ final class PushRegistration {
         UIApplication.shared.registerForRemoteNotifications()
     }
 
-    /// Applies changed preferences after a short pause, coalescing quick successive changes.
-    func scheduleSync(_ settings: NotificationSettings, client: IBUClient) {
-        pendingSync?.cancel()
-        pendingSync = Task {
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            if deviceToken == nil { register() }
-            await sync(settings)
-            await ReminderScheduler.refresh(settings: settings, client: client)
+    /// Applies every later change of the preferences, wherever it is made.
+    func observe(_ settings: NotificationSettings, client: IBUClient) {
+        observation = Task {
+            for await preferences in Observations { @MainActor in settings.preferences }.dropFirst() {
+                scheduleSync(preferences, client: client)
+            }
         }
     }
 
-    func didReceive(token: Data, settings: NotificationSettings) async {
+    /// Applies changed preferences after a short pause, coalescing quick successive changes.
+    private func scheduleSync(_ preferences: NotificationPreferences, client: IBUClient) {
+        pendingSync?.cancel()
+        pendingSync = Task {
+            do {
+                try await Task.sleep(for: .milliseconds(500))
+            } catch {
+                return
+            }
+            if deviceToken == nil { register() }
+            await sync(preferences)
+            await ReminderScheduler.refresh(preferences, client: client)
+        }
+    }
+
+    func didReceive(token: Data, preferences: NotificationPreferences) async {
         deviceToken = token.map { String(format: "%02x", $0) }.joined()
-        await sync(settings)
+        await sync(preferences)
     }
 
     /// Sends the current preferences, or unregisters when no push alert is wanted.
-    func sync(_ settings: NotificationSettings) async {
+    private func sync(_ preferences: NotificationPreferences) async {
         guard let serverURL, let deviceToken else { return }
+        let method = preferences.wantsPush ? "PUT" : "DELETE"
         var request = URLRequest(url: serverURL.appending(path: "v1/devices/\(deviceToken)"))
-        if settings.wantsPush {
-            request.httpMethod = "PUT"
+        request.httpMethod = method
+        if preferences.wantsPush {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try? JSONEncoder().encode(
-                Body(
-                    environment: environment,
-                    categories: settings.categories.map(\.rawValue).sorted(),
-                    cancellation: settings.cancellationAlerts,
-                    rescheduling: settings.reschedulingAlerts,
-                    locale: Locale.current.identifier(.bcp47),
-                    timeZone: TimeZone.current.identifier
-                ))
-        } else {
-            request.httpMethod = "DELETE"
+            do {
+                request.httpBody = try JSONEncoder().encode(
+                    Body(
+                        environment: environment,
+                        categories: preferences.categories.map(\.rawValue).sorted(),
+                        cancellation: preferences.cancellationAlerts,
+                        rescheduling: preferences.reschedulingAlerts,
+                        locale: Locale.current.identifier(.bcp47),
+                        timeZone: TimeZone.current.identifier
+                    ))
+            } catch {
+                Logger.notifications.fault(
+                    "Encoding the registration failed: \(String(describing: error), privacy: .public)")
+                return
+            }
         }
-        _ = try? await session.data(for: request)
+        // A failed sync is retried at the next launch or preference change.
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+                Logger.notifications.error("Server answered \(http.statusCode) to \(method, privacy: .public)")
+            }
+        } catch {
+            Logger.notifications.error("Server sync failed: \(String(describing: error), privacy: .public)")
+        }
     }
 
     private struct Body: Encodable {

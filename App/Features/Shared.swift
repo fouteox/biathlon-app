@@ -32,17 +32,6 @@ extension View {
     }
 }
 
-/// Generic loading state for screens.
-enum Loadable<Value> {
-    case loading
-    case loaded(Value)
-    case failed(any Error)
-
-    var value: Value? {
-        if case .loaded(let value) = self { value } else { nil }
-    }
-}
-
 struct LoadableView<Value, Content: View>: View {
     let state: Loadable<Value>
     let retry: () async -> Void
@@ -65,13 +54,14 @@ struct LoadableView<Value, Content: View>: View {
         }
     }
 
-    /// IBU errors get a localized message; system errors (URLError…) already have one.
+    /// Network errors already carry a plain system message ("The Internet
+    /// connection appears to be offline."); the details of any other error
+    /// go to the log, not to the screen.
     private static func message(for error: any Error) -> Text {
-        switch error as? IBUError {
-        case .invalidResponse: Text("Invalid server response.")
-        case .http(let code): Text("The server responded with \(code).")
-        case .decoding(let path, _): Text("Unexpected data (\(path)).")
-        case nil: Text(error.localizedDescription)
+        if let error = error as? URLError {
+            Text(error.localizedDescription)
+        } else {
+            Text("Results are temporarily unavailable.")
         }
     }
 }

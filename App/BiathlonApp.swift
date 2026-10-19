@@ -11,7 +11,7 @@ struct BiathlonApp: App {
         WindowGroup {
             RootView()
                 .environment(appDelegate.settings)
-                .environment(appDelegate.push)
+                .environment(\.ibu, appDelegate.client)
         }
         .modelContainer(for: Favorite.self)
         .onChange(of: scenePhase) { _, phase in
@@ -22,6 +22,7 @@ struct BiathlonApp: App {
 }
 
 extension EnvironmentValues {
+    /// The app injects the delegate's client, so screens and reminders share one.
     @Entry var ibu = IBUClient()
 }
 
