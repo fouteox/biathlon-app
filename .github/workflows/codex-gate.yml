@@ -14,7 +14,7 @@ name: Codex gate
 
 on:
   pull_request_target:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize, ready_for_review, edited]
   issue_comment:
     types: [created, edited, deleted]
   pull_request_review:
@@ -123,21 +123,50 @@ jobs:
                 .filter((r) => isCodex(r.user?.login) && r.commit_id === sha)
                 .map((r) => ({ ok: false, at: r.submitted_at })));
 
-              const latest = signals.sort((x, y) => Date.parse(x.at) - Date.parse(y.at)).pop();
+              // A verdict given before the base branch last changed no longer
+              // covers the diff.
+              const timeline = await github.paginate(github.rest.issues.listEventsForTimeline,
+                { owner, repo, issue_number: number, per_page: 100 });
+              const rebased = Math.max(0, ...timeline
+                .filter((e) => e.event === 'base_ref_changed')
+                .map((e) => Date.parse(e.created_at)));
+              const latest = signals
+                .map((x) => ({ ...x, at: Date.parse(x.at) }))
+                .filter((x) => x.at > rebased)
+                .sort((x, y) => x.at - y.at)
+                .pop();
+
+              // A review requested after the latest verdict replaces it.
+              const requested = Math.max(0, ...comments
+                .filter((c) => !isCodex(c.user?.login) && /@codex\s+(security\s+)?review\b/i.test(c.body ?? ''))
+                .map((c) => Date.parse(c.created_at)));
+              if (requested > (latest?.at ?? 0)) {
+                return { sha, state: 'pending', description: 'Codex review requested', retry: true };
+              }
+
               if (latest?.ok) {
                 return { sha, state: 'success', description: 'Codex reviewed this commit with no findings' };
               }
               if (latest) {
                 return { sha, state: 'failure', description: 'Codex found issues on this commit: fix them, then "@codex review"' };
               }
+              if (rebased > 0 && signals.length > 0) {
+                return { sha, state: 'pending', description: 'Base branch changed: comment "@codex review"' };
+              }
               return { sha, state: 'pending', description: 'Waiting for the Codex 👍', retry: true };
             }
 
+            // GitHub keeps at most 1,000 statuses per commit and context, so
+            // unchanged results are not published again.
             async function publish(result) {
               core.info(`${result.state}: ${result.description}`);
+              const description = result.description.slice(0, 140);
+              const { data: statuses } = await github.rest.repos.listCommitStatusesForRef(
+                { owner, repo, ref: result.sha, per_page: 100 });
+              const current = statuses.find((x) => x.context === CONTEXT);
+              if (current?.state === result.state && current?.description === description) return;
               await github.rest.repos.createCommitStatus({
-                owner, repo, sha: result.sha, context: CONTEXT,
-                state: result.state, description: result.description.slice(0, 140),
+                owner, repo, sha: result.sha, context: CONTEXT, state: result.state, description,
                 target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
               });
             }
@@ -150,10 +179,7 @@ jobs:
             await publish(result);
             for (let attempt = 0; result.retry && attempt < 8; attempt++) {
               await sleep(15000);
-              const next = await evaluate();
-              if (!next.state) return core.info('Pull request is closed.');
-              if (next.state !== result.state || next.description !== result.description || next.sha !== result.sha) {
-                await publish(next);
-              }
-              result = next;
+              result = await evaluate();
+              if (!result.state) return core.info('Pull request is closed.');
+              await publish(result);
             }
