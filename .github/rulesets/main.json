@@ -44,6 +44,10 @@
           {
             "context": "App (iOS Simulator)",
             "integration_id": 15368
+          },
+          {
+            "context": "Swift format",
+            "integration_id": 15368
           }
         ]
       }

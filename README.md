@@ -18,6 +18,12 @@ Tests du client API (sans Xcode) :
 cd Packages/BiathlonKit && swift test
 ```
 
+Mise en forme du code Swift (`swift format`, inclus dans la toolchain Swift 6 ; règles dans `.swift-format`) :
+
+```sh
+swift format --in-place --recursive App Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
+```
+
 ## Environnement Claude Code cloud
 
 Le conteneur cloud est sous Linux : il compile et teste `BiathlonKit`, mais pas l'app SwiftUI, qui demande macOS et Xcode. L'app est compilée par la CI GitHub Actions sur un runner macOS.
@@ -29,14 +35,14 @@ Pour avoir Swift dans le conteneur, coller `scripts/cloud-setup.sh` dans le « S
 La branche `main` est protégée par le ruleset `.github/rulesets/main.json` (à importer dans Settings > Rules > Rulesets) : pas de push direct ni de force-push, pas de suppression, et une PR ne fusionne que si :
 
 - toutes les conversations sont résolues ;
-- la CI est verte (`BiathlonKit (Linux)`, `App (iOS Simulator)`) ;
+- la CI est verte (`BiathlonKit (Linux)`, `App (iOS Simulator)`, `Swift format`) ;
 - le statut `Codex approval` est vert. Il est publié par `.github/workflows/codex-gate.yml` quand le dernier verdict de Codex sur le dernier commit est sans remarque (👍 sur la description de la PR, ou commentaire « Didn't find any major issues » qui cite ce commit), et que chaque fil ouvert par Codex a reçu au moins une réponse.
 
 ## Structure
 
 - `Packages/BiathlonKit` : modèles et client de l'API biathlonresults.com, testés avec Swift Testing.
 - `App` : l'app SwiftUI (iOS 26, Swift 6, isolation `MainActor` par défaut, Observation, SwiftData pour les favoris).
-- `server` (à venir) : Cloudflare Worker qui sert de cache et envoie les notifications d'annulation et de décalage.
+- `server` : Cloudflare Worker qui envoie les alertes d'annulation et de départ décalé, et sert de cache à l'API IBU (voir `server/README.md`).
 
 ## Données
 

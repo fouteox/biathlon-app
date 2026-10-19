@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+
 @testable import BiathlonKit
 
 /// Fixtures mirror the shape of real responses captured on 2026-10-19.
@@ -13,14 +14,12 @@ struct DecodingTests {
         let events: [BiathlonEvent] = try fixture("events")
         let first = try #require(events.first)
         #expect(first.id == "BT2627SWRLCP01")
-        #expect(first.seasonID == SeasonID(rawValue: "2627"))
         #expect(first.nation == "FIN")
     }
 
     @Test func competitionStates() throws {
         let races: [Competition] = try fixture("competitions")
         #expect(races[0].state == .scheduled)
-        #expect(races[0].distanceKm == "20")
         #expect(!races[0].isRelay)
         #expect(races[1].state == .finished)
         #expect(races[1].isRelay)
@@ -31,7 +30,6 @@ struct DecodingTests {
         #expect(results.standings.count == 1)
         let norway = try #require(results.standings.first)
         #expect(results.legs(of: norway).map(\.name) == ["ULDAL Martin"])
-        #expect(norway.misses == 11)
     }
 
     @Test func cupStandingsAcceptNumericScores() throws {

@@ -4,14 +4,11 @@ import Foundation
 public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
     public let id: String
     public let fullName: String
-    public let familyName: String?
-    public let givenName: String?
     public let nation: String?
     /// Date without a time, returned at midnight UTC: display it in UTC
     /// (`Date.FormatStyle` with `timeZone = .gmt`) so the day doesn't shift.
     public let birthdate: Date?
     public let photoURL: URL?
-    public let flagURL: URL?
 
     enum CodingKeys: String, CodingKey {
         case id = "IBUId"
@@ -21,20 +18,19 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
         case nation = "NAT"
         case birthdate = "Birthdate"
         case photoURL = "PhotoURI"
-        case flagURL = "FlagURI"
     }
 
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
-        familyName = try c.decodeIfPresent(String.self, forKey: .familyName)
-        givenName = try c.decodeIfPresent(String.self, forKey: .givenName)
-        fullName = try c.decodeIfPresent(String.self, forKey: .fullName)
+        let familyName = try c.decodeIfPresent(String.self, forKey: .familyName)
+        let givenName = try c.decodeIfPresent(String.self, forKey: .givenName)
+        fullName =
+            try c.decodeIfPresent(String.self, forKey: .fullName)
             ?? [givenName, familyName].compactMap(\.self).joined(separator: " ")
         nation = try c.decodeIfPresent(String.self, forKey: .nation)
         birthdate = try? c.decodeIfPresent(Date.self, forKey: .birthdate)
         photoURL = (try? c.decodeIfPresent(String.self, forKey: .photoURL)).flatMap { URL(string: $0) }
-        flagURL = (try? c.decodeIfPresent(String.self, forKey: .flagURL)).flatMap { URL(string: $0) }
     }
 }
 
@@ -47,7 +43,6 @@ public struct AthleteResult: Decodable, Identifiable, Hashable, Sendable {
     public let competition: String?
     public let place: String?
     public let rank: String?
-    public let level: Int?
 
     enum CodingKeys: String, CodingKey {
         case raceID = "RaceId"
@@ -55,7 +50,6 @@ public struct AthleteResult: Decodable, Identifiable, Hashable, Sendable {
         case competition = "Comp"
         case place = "Place"
         case rank = "Rank"
-        case level = "Level"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -65,6 +59,5 @@ public struct AthleteResult: Decodable, Identifiable, Hashable, Sendable {
         competition = try c.decodeIfPresent(String.self, forKey: .competition)
         place = try c.decodeIfPresent(String.self, forKey: .place)
         rank = try c.decodeLooseString(forKey: .rank)
-        level = try c.decodeLooseInt(forKey: .level)
     }
 }

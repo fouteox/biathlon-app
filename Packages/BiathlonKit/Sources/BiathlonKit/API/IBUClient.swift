@@ -1,12 +1,13 @@
 import Foundation
+
 #if canImport(FoundationNetworking)
-import FoundationNetworking
+    import FoundationNetworking
 #endif
 
 /// Client for the biathlonresults.com API.
 ///
-/// `baseURL` will point to our Cloudflare server (acting as a cache) once it
-/// exists; it exposes the same paths as the IBU API.
+/// `baseURL` can also point to the server's read-only cache (`/ibu/`), which
+/// exposes the same paths as the IBU API.
 public struct IBUClient: Sendable {
     public static let ibuBaseURL = URL(string: "https://biathlonresults.com/modules/sportapi/api/")!
 
@@ -20,8 +21,9 @@ public struct IBUClient: Sendable {
 
     // MARK: Calendar
 
-    public func events(season: SeasonID, level: CompetitionLevel = .worldCup) async throws -> [BiathlonEvent] {
-        try await get("Events", ["SeasonId": season.rawValue, "Level": String(level.rawValue)])
+    /// World Cup events (`Level=1`) of a season.
+    public func events(season: SeasonID) async throws -> [BiathlonEvent] {
+        try await get("Events", ["SeasonId": season.rawValue, "Level": "1"])
     }
 
     public func competitions(eventID: String) async throws -> [Competition] {
@@ -36,10 +38,6 @@ public struct IBUClient: Sendable {
 
     // MARK: Standings
 
-    public func cups(season: SeasonID) async throws -> [Cup] {
-        try await get("Cups", ["SeasonId": season.rawValue])
-    }
-
     public func cupStandings(cupID: String) async throws -> CupStandings {
         try await get("CupResults", ["CupId": cupID])
     }
@@ -51,9 +49,12 @@ public struct IBUClient: Sendable {
     }
 
     public func athleteResults(id: String) async throws -> [AthleteResult] {
-        struct Envelope: Decodable { let Results: [AthleteResult]? }
+        struct Envelope: Decodable {
+            let results: [AthleteResult]?
+            enum CodingKeys: String, CodingKey { case results = "Results" }
+        }
         let envelope: Envelope = try await get("AllResults", ["IBUId": id])
-        return envelope.Results ?? []
+        return envelope.results ?? []
     }
 
     // MARK: Transport

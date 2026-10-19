@@ -3,13 +3,19 @@ import SwiftUI
 
 struct StandingsView: View {
     enum Gender: String, CaseIterable, Identifiable {
-        case men = "M", women = "W"
+        case men = "M"
+        case women = "W"
         var id: String { rawValue }
         var label: LocalizedStringResource { self == .men ? "Men" : "Women" }
     }
 
     enum Discipline: String, CaseIterable, Identifiable {
-        case total = "TS", sprint = "SP", pursuit = "PU", individual = "IN", massStart = "MS", nations = "NC"
+        case total = "TS"
+        case sprint = "SP"
+        case pursuit = "PU"
+        case individual = "IN"
+        case massStart = "MS"
+        case nations = "NC"
         var id: String { rawValue }
         var label: LocalizedStringResource {
             switch self {
@@ -41,7 +47,9 @@ struct StandingsView: View {
                     }
                 } footer: {
                     if season != .current {
-                        Text("Season \(season.displayName): the \(SeasonID.current.displayName) standings will appear after the first race.")
+                        Text(
+                            "Season \(season.displayName): the \(SeasonID.current.displayName) standings will appear after the first race."
+                        )
                     } else if let asOf = standings.asOf {
                         Text(asOf)
                     }
@@ -79,7 +87,10 @@ struct StandingsView: View {
             let standings = try await ibu.cupStandings(cupID: Cup.worldCupID(current, "S" + key))
             if standings.rows.isEmpty {
                 let previous = current.previous
-                state = .loaded(SeasonStandings(season: previous, standings: try await ibu.cupStandings(cupID: Cup.worldCupID(previous, "S" + key))))
+                state = .loaded(
+                    SeasonStandings(
+                        season: previous,
+                        standings: try await ibu.cupStandings(cupID: Cup.worldCupID(previous, "S" + key))))
             } else {
                 state = .loaded(SeasonStandings(season: current, standings: standings))
             }

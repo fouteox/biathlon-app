@@ -16,58 +16,54 @@ struct NotificationSettingsView: View {
         Form {
             if authorization == .denied {
                 Section {
-                    Button {
+                    Button("Open Settings") {
                         if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
-                    } label: {
-                        Text("Open Settings", tableName: "Notifications")
                     }
                 } footer: {
-                    Text("Notifications are turned off for Biathlon in Settings.", tableName: "Notifications")
+                    Text("Notifications are turned off for Biathlon in Settings.")
                 }
             }
 
             Section {
-                Toggle(isOn: $settings.reminderEnabled) {
-                    Text("Reminder before the start", tableName: "Notifications")
-                }
+                Toggle("Reminder before the start", isOn: $settings.reminderEnabled)
                 if settings.reminderEnabled {
-                    Picker(selection: $settings.reminderMinutes) {
+                    Picker("Notify me", selection: $settings.reminderMinutes) {
                         ForEach(NotificationSettings.reminderChoices, id: \.self) { minutes in
-                            Text("\(minutes) min", tableName: "Notifications").tag(minutes)
+                            Text("\(minutes) min").tag(minutes)
                         }
-                    } label: {
-                        Text("Notify me", tableName: "Notifications")
                     }
                 }
             } footer: {
-                Text("Scheduled on this iPhone for races in the coming week.", tableName: "Notifications")
+                Text("Scheduled on this iPhone for races in the coming week.")
             }
 
             Section {
-                Toggle(isOn: $settings.cancellationAlerts) {
-                    Text("Race cancelled", tableName: "Notifications")
-                }
-                Toggle(isOn: $settings.reschedulingAlerts) {
-                    Text("Start time changed", tableName: "Notifications")
-                }
+                Toggle("Race cancelled", isOn: $settings.cancellationAlerts)
+                Toggle("Start time changed", isOn: $settings.reschedulingAlerts)
             } header: {
-                Text("Alerts", tableName: "Notifications")
+                Text("Alerts")
             }
 
             Section {
                 ForEach(RaceCategory.allCases) { category in
-                    Toggle(category.title, isOn: Binding(
-                        get: { settings.categories.contains(category) },
-                        set: { isOn in
-                            if isOn { settings.categories.insert(category) } else { settings.categories.remove(category) }
-                        }
-                    ))
+                    Toggle(
+                        category.title,
+                        isOn: Binding(
+                            get: { settings.categories.contains(category) },
+                            set: { isOn in
+                                if isOn {
+                                    settings.categories.insert(category)
+                                } else {
+                                    settings.categories.remove(category)
+                                }
+                            }
+                        ))
                 }
             } header: {
-                Text("Races", tableName: "Notifications")
+                Text("Races")
             }
         }
-        .navigationTitle(Text("Notifications", tableName: "Notifications"))
+        .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .confirmationAction) {

@@ -23,9 +23,9 @@ final class PushRegistration {
     /// APNs environment matching the `aps-environment` entitlement Xcode signs the build with.
     private var environment: String {
         #if DEBUG
-        "sandbox"
+            "sandbox"
         #else
-        "production"
+            "production"
         #endif
     }
 
@@ -62,14 +62,15 @@ final class PushRegistration {
         if settings.wantsPush {
             request.httpMethod = "PUT"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try? JSONEncoder().encode(Body(
-                environment: environment,
-                categories: settings.categories.map(\.rawValue).sorted(),
-                cancellation: settings.cancellationAlerts,
-                rescheduling: settings.reschedulingAlerts,
-                locale: Locale.current.identifier(.bcp47),
-                timeZone: TimeZone.current.identifier
-            ))
+            request.httpBody = try? JSONEncoder().encode(
+                Body(
+                    environment: environment,
+                    categories: settings.categories.map(\.rawValue).sorted(),
+                    cancellation: settings.cancellationAlerts,
+                    rescheduling: settings.reschedulingAlerts,
+                    locale: Locale.current.identifier(.bcp47),
+                    timeZone: TimeZone.current.identifier
+                ))
         } else {
             request.httpMethod = "DELETE"
         }
