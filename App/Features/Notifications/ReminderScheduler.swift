@@ -48,7 +48,7 @@ enum ReminderScheduler {
     private static func request(for race: Competition, minutes: Int, interval: TimeInterval) -> UNNotificationRequest {
         let content = UNMutableNotificationContent()
         content.title = race.shortDescription
-        content.body = String(localized: "Starts in \(minutes) minutes", table: "Notifications")
+        content.body = String(localized: "Starts in \(minutes) minutes")
         content.sound = .default
         content.threadIdentifier = race.id
         content.userInfo = ["raceId": race.id]

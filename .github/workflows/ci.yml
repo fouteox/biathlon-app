@@ -15,6 +15,14 @@ jobs:
       - run: swift test
         working-directory: Packages/BiathlonKit
 
+  format:
+    name: Swift format
+    runs-on: ubuntu-24.04
+    container: swift:6.4
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift format lint --strict --recursive App Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
+
   server:
     name: Server (Cloudflare Worker)
     runs-on: ubuntu-24.04
@@ -43,8 +51,20 @@ jobs:
       - run: xcodegen
       - name: Build
         run: |
+          set -o pipefail
           xcodebuild build \
             -project Biathlon.xcodeproj \
             -scheme Biathlon \
             -destination 'generic/platform=iOS Simulator' \
-            CODE_SIGNING_ALLOWED=NO
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO | tee build.log
+      # The concurrency and language settings come from project.yml through
+      # XcodeGen: check that the compiler actually received them.
+      - name: Check compiler settings
+        run: |
+          for feature in NonisolatedNonsendingByDefault InferIsolatedConformances ExistentialAny; do
+            grep -rqs -- "$feature" build.log build/Build/Intermediates.noindex \
+              || { echo "::error::$feature is not passed to the compiler"; exit 1; }
+          done
+      - name: Check privacy manifest
+        run: test -f build/Build/Products/Debug-iphonesimulator/Biathlon.app/PrivacyInfo.xcprivacy

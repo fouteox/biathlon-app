@@ -11,9 +11,9 @@ enum RaceCategory: String, CaseIterable, Codable, Identifiable {
 
     var title: String {
         switch self {
-        case .men: String(localized: "Men", table: "Notifications")
-        case .women: String(localized: "Women", table: "Notifications")
-        case .mixed: String(localized: "Mixed", table: "Notifications")
+        case .men: String(localized: "Men")
+        case .women: String(localized: "Women")
+        case .mixed: String(localized: "Mixed")
         }
     }
 }

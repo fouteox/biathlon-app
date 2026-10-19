@@ -8,10 +8,12 @@ options:
   createIntermediateGroups: true
 settings:
   base:
+    # Swift 6 language mode: complete data-race checking is implied.
     SWIFT_VERSION: "6.0"
-    SWIFT_STRICT_CONCURRENCY: complete
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY: YES
+    SWIFT_TREAT_WARNINGS_AS_ERRORS: YES
     # String Catalogs: the compiler extracts localizable strings into App/Resources/Localizable.xcstrings.
     LOCALIZATION_PREFERS_STRING_CATALOGS: YES
     SWIFT_EMIT_LOC_STRINGS: YES

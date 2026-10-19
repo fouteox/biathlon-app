@@ -56,7 +56,9 @@ struct HomeView: View {
                 if let event = snapshot.event {
                     Section {
                         NavigationLink(value: Route.event(event)) {
-                            Label("\(Nation.flag(event.nation)) \(event.shortDescription)" as String, systemImage: "mappin.and.ellipse")
+                            Label(
+                                "\(Nation.flag(event.nation)) \(event.shortDescription)" as String,
+                                systemImage: "mappin.and.ellipse")
                         }
                     } header: {
                         Text("Event")
@@ -71,11 +73,7 @@ struct HomeView: View {
                 Button {
                     showsNotificationSettings = true
                 } label: {
-                    Label {
-                        Text("Notifications", tableName: "Notifications")
-                    } icon: {
-                        Image(systemName: "bell")
-                    }
+                    Label("Notifications", systemImage: "bell")
                 }
             }
         }

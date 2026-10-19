@@ -15,7 +15,8 @@ struct FavoritesView: View {
                 ContentUnavailableView(
                     "No favorites",
                     systemImage: "star",
-                    description: Text("Tap the star on a biathlete or a team to follow their results from the home screen.")
+                    description: Text(
+                        "Tap the star on a biathlete or a team to follow their results from the home screen.")
                 )
             }
         }
@@ -31,7 +32,7 @@ struct FavoritesView: View {
                     row(favorite)
                 }
                 .onDelete { offsets in
-                    offsets.map { items[$0] }.forEach { context.delete($0) }
+                    for offset in offsets { context.delete(items[offset]) }
                 }
             }
         }

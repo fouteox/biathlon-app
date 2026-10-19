@@ -34,10 +34,3 @@ public struct SeasonID: RawRepresentable, Hashable, Sendable, Codable, CustomStr
 
     public var description: String { rawValue }
 }
-
-/// Competition level in the API (`Level=`).
-public enum CompetitionLevel: Int, Sendable, CaseIterable {
-    case worldCup = 1
-    case ibuCup = 2
-    case juniorCup = 3
-}

@@ -19,9 +19,12 @@ struct CalendarView: View {
                         Text(Nation.flag(event.nation)).font(.title2)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(event.shortDescription).font(.headline)
-                            Text(event.startDate.formatted(.dateTime.day().month()) + " – " + event.endDate.formatted(.dateTime.day().month()))
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
+                            Text(
+                                event.startDate.formatted(.dateTime.day().month()) + " – "
+                                    + event.endDate.formatted(.dateTime.day().month())
+                            )
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
                         }
                         Spacer()
                         if event.isWorldChampionships {

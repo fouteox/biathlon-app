@@ -1,12 +1,32 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "%lld min": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld min"
+          }
+        }
+      }
+    },
     "Add to favorites": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Ajouter aux favoris"
+          }
+        }
+      }
+    },
+    "Alerts": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alertes"
           }
         }
       }
@@ -231,6 +251,16 @@
         }
       }
     },
+    "Mixed": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mixte"
+          }
+        }
+      }
+    },
     "My favorites · %@": {
       "localizations": {
         "fr": {
@@ -281,6 +311,46 @@
         }
       }
     },
+    "Notifications": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications"
+          }
+        }
+      }
+    },
+    "Notifications are turned off for Biathlon in Settings.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les notifications de Biathlon sont désactivées dans Réglages."
+          }
+        }
+      }
+    },
+    "Notify me": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Me prévenir"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir Réglages"
+          }
+        }
+      }
+    },
     "Overall": {
       "localizations": {
         "fr": {
@@ -301,12 +371,52 @@
         }
       }
     },
+    "Race cancelled": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Course annulée"
+          }
+        }
+      }
+    },
+    "Races": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Courses"
+          }
+        }
+      }
+    },
+    "Reminder before the start": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rappel avant le départ"
+          }
+        }
+      }
+    },
     "Remove from favorites": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Retirer des favoris"
+          }
+        }
+      }
+    },
+    "Scheduled on this iPhone for races in the coming week.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programmé sur cet iPhone pour les courses de la semaine à venir."
           }
         }
       }
@@ -367,6 +477,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Liste de départ"
+          }
+        }
+      }
+    },
+    "Start time changed": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Horaire modifié"
+          }
+        }
+      }
+    },
+    "Starts in %lld minutes": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Starts in %lld minute"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Starts in %lld minutes"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Départ dans %lld minute"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Départ dans %lld minutes"
+                }
+              }
+            }
           }
         }
       }

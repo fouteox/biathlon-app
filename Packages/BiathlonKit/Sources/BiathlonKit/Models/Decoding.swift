@@ -11,7 +11,7 @@ extension JSONDecoder {
             if let date = IBUDateParser.parse(raw) { return date }
             throw DecodingError.dataCorruptedError(
                 in: container,
-                debugDescription: "Date IBU illisible : \(raw)"
+                debugDescription: "Unreadable IBU date: \(raw)"
             )
         }
         return decoder
