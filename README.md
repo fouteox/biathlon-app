@@ -24,6 +24,14 @@ Le conteneur cloud est sous Linux : il compile et teste `BiathlonKit`, mais pas 
 
 Pour avoir Swift dans le conteneur, coller `scripts/cloud-setup.sh` dans le « Setup script » de l'environnement cloud (il a besoin de `download.swift.org` et `keyserver.ubuntu.com` en HTTPS).
 
+## Règles de fusion
+
+La branche `main` est protégée par le ruleset `.github/rulesets/main.json` (à importer dans Settings > Rules > Rulesets) : pas de push direct ni de force-push, pas de suppression, et une PR ne fusionne que si :
+
+- toutes les conversations sont résolues ;
+- la CI est verte (`BiathlonKit (Linux)`, `App (iOS Simulator)`) ;
+- le statut `Codex approval` est vert. Il est publié par `.github/workflows/codex-gate.yml` quand le dernier verdict de Codex sur le dernier commit est sans remarque (👍 sur la description de la PR, ou commentaire « Didn't find any major issues » qui cite ce commit), et que chaque fil ouvert par Codex a reçu au moins une réponse.
+
 ## Structure
 
 - `Packages/BiathlonKit` : modèles et client de l'API biathlonresults.com, testés avec Swift Testing.

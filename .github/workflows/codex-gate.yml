@@ -1,0 +1,206 @@
+name: Codex gate
+
+# Publishes the "Codex approval" commit status on the pull request head.
+# It is green only when:
+# - Codex's latest verdict on the current head commit is "no findings":
+#   a 👍 on the pull request description, or a "Didn't find any major
+#   issues" comment naming that commit;
+# - every review thread opened by Codex has at least one reply.
+# Thread resolution itself is enforced by the main branch ruleset
+# (.github/rulesets/main.json), which also requires this status.
+#
+# Reactions do not trigger workflows, so the gate re-runs when Codex edits
+# its review summary comment and polls briefly for the 👍 that follows.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review, edited]
+  issue_comment:
+    types: [created, edited, deleted]
+  pull_request_review:
+    types: [submitted]
+  pull_request_review_comment:
+    types: [created, edited, deleted]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: codex-gate-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: Codex gate
+    if: github.event_name != 'issue_comment' || github.event.issue.pull_request
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const CODEX = 'chatgpt-codex-connector';
+            const CONTEXT = 'Codex approval';
+            const { owner, repo } = context.repo;
+            const number = context.payload.pull_request?.number ?? context.payload.issue.number;
+            const isCodex = (login) => (login ?? '').replace(/\[bot\]$/, '') === CODEX;
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            let headSha = context.payload.pull_request?.head.sha;
+            async function evaluate() {
+              const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
+              const sha = pr.head.sha;
+              headSha = sha;
+              if (pr.state !== 'open') return { sha, state: null };
+
+              // Every thread Codex opened must have at least one reply.
+              const threads = [];
+              let cursor = null;
+              do {
+                const page = await github.graphql(`
+                  query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+                    repository(owner: $owner, name: $repo) {
+                      pullRequest(number: $number) {
+                        reviewThreads(first: 100, after: $cursor) {
+                          pageInfo { hasNextPage endCursor }
+                          nodes { comments(first: 100) { nodes { author { login } } } }
+                        }
+                      }
+                    }
+                  }`, { owner, repo, number, cursor });
+                const { nodes, pageInfo } = page.repository.pullRequest.reviewThreads;
+                threads.push(...nodes);
+                cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
+              } while (cursor);
+              const unanswered = threads.filter((t) => {
+                const authors = t.comments.nodes.map((c) => c.author?.login);
+                return isCodex(authors[0]) && authors.every(isCodex);
+              }).length;
+              if (unanswered > 0) {
+                return { sha, state: 'failure', description: `${unanswered} Codex thread(s) without a reply` };
+              }
+
+              // Codex keeps a machine-readable state in its review summary
+              // comment. Its full commit SHA must match the head before any
+              // verdict counts, so an abbreviated "Reviewed commit" cannot
+              // vouch for a different commit.
+              const comments = await github.paginate(github.rest.issues.listComments,
+                { owner, repo, issue_number: number, per_page: 100 });
+              const summary = comments
+                .filter((c) => isCodex(c.user?.login) && c.body?.includes('codex-review-state:v1'))
+                .pop();
+              const match = summary?.body.match(/codex-review-state:v1 (\{.*?\}) -->/);
+              let review = null;
+              try { review = match ? JSON.parse(match[1]).code_review : null; } catch {}
+              const reactions = await github.paginate(github.rest.reactions.listForIssue,
+                { owner, repo, issue_number: number, per_page: 100 });
+              const codex = reactions.filter((r) => isCodex(r.user?.login));
+              if (codex.some((r) => r.content === 'eyes') || (review?.commit_sha === sha && review.status !== 'completed')) {
+                return { sha, state: 'pending', description: 'Codex review in progress', retry: true };
+              }
+              if (review?.commit_sha !== sha) {
+                return { sha, state: 'pending', description: `Codex has not reviewed ${sha.slice(0, 7)} yet (comment "@codex review")` };
+              }
+
+              // A clean review is a 👍 on the description or a "Didn't find any
+              // major issues" comment naming the head commit; a review with
+              // findings on the head commit is a negative signal. The latest
+              // signal wins.
+              const namesHead = (body) => {
+                const commit = body?.match(/\*\*Reviewed commit:\*\* `([0-9a-f]{7,40})`/)?.[1];
+                return commit !== undefined && sha.startsWith(commit);
+              };
+              const signals = comments
+                .filter((c) => isCodex(c.user?.login) && c.body?.includes("Didn't find any major issues") && namesHead(c.body))
+                .map((c) => ({ ok: true, at: c.updated_at }));
+              signals.push(...codex
+                .filter((r) => r.content === '+1')
+                .map((r) => ({ ok: true, at: r.created_at })));
+              const reviews = await github.paginate(github.rest.pulls.listReviews,
+                { owner, repo, pull_number: number, per_page: 100 });
+              signals.push(...reviews
+                .filter((r) => isCodex(r.user?.login) && r.commit_id === sha)
+                .map((r) => ({ ok: false, at: r.submitted_at })));
+
+              // A verdict given before the base branch last changed no longer
+              // covers the diff.
+              const timeline = await github.paginate(github.rest.issues.listEventsForTimeline,
+                { owner, repo, issue_number: number, per_page: 100 });
+              const rebased = Math.max(0, ...timeline
+                .filter((e) => e.event === 'base_ref_changed')
+                .map((e) => Date.parse(e.created_at)));
+              const latest = signals
+                .map((x) => ({ ...x, at: Date.parse(x.at) }))
+                .filter((x) => x.at > rebased)
+                .sort((x, y) => x.at - y.at)
+                .pop();
+
+              // A review requested after the latest verdict replaces it. Only
+              // the PR author and repository members can request one, since
+              // anyone can comment on a public repository. Timestamps have
+              // one-second precision, so a request in the same second wins.
+              const trusted = ['OWNER', 'MEMBER', 'COLLABORATOR'];
+              const requested = Math.max(0, ...comments
+                .filter((c) => !isCodex(c.user?.login))
+                .filter((c) => c.user?.login === pr.user?.login || trusted.includes(c.author_association))
+                .filter((c) => /@codex\s+(security\s+)?review\b/i.test(c.body ?? ''))
+                .map((c) => Date.parse(c.updated_at)));
+              if (requested > 0 && requested >= (latest?.at ?? 0)) {
+                return { sha, state: 'pending', description: 'Codex review requested', retry: true };
+              }
+
+              if (latest?.ok) {
+                return { sha, state: 'success', description: 'Codex reviewed this commit with no findings' };
+              }
+              if (latest) {
+                return { sha, state: 'failure', description: 'Codex found issues on this commit: fix them, then "@codex review"' };
+              }
+              if (rebased > 0 && signals.length > 0) {
+                return { sha, state: 'pending', description: 'Base branch changed: comment "@codex review"' };
+              }
+              return { sha, state: 'pending', description: 'Waiting for the Codex 👍', retry: true };
+            }
+
+            // GitHub keeps at most 1,000 statuses per commit and context, so
+            // unchanged results are not published again.
+            async function publish(result) {
+              core.info(`${result.state}: ${result.description}`);
+              const description = result.description.slice(0, 140);
+              const { data: statuses } = await github.rest.repos.listCommitStatusesForRef(
+                { owner, repo, ref: result.sha, per_page: 100 });
+              const current = statuses.find((x) => x.context === CONTEXT);
+              if (current?.state === result.state && current?.description === description) return;
+              await github.rest.repos.createCommitStatus({
+                owner, repo, sha: result.sha, context: CONTEXT, state: result.state, description,
+                target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+              });
+            }
+
+            // Fail closed: if anything below throws, the head goes red rather
+            // than keeping a previous success.
+            try {
+              let result = await evaluate();
+              if (!result.state) return core.info('Pull request is closed.');
+              // Publish right away so a stale success never outlives a new
+              // review; then poll for the 👍, which lands a few seconds after
+              // the summary comment is edited.
+              await publish(result);
+              for (let attempt = 0; result.retry && attempt < 8; attempt++) {
+                await sleep(15000);
+                result = await evaluate();
+                if (!result.state) return core.info('Pull request is closed.');
+                await publish(result);
+              }
+            } catch (error) {
+              if (headSha) {
+                await github.rest.repos.createCommitStatus({
+                  owner, repo, sha: headSha, context: CONTEXT, state: 'error',
+                  description: 'Codex gate failed: re-run the workflow',
+                  target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                });
+              }
+              throw error;
+            }
