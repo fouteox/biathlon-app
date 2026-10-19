@@ -79,9 +79,9 @@ public enum IBUError: Error, LocalizedError {
 
     public var errorDescription: String? {
         switch self {
-        case .invalidResponse: "Réponse du serveur invalide."
-        case .http(let code): "Le serveur a répondu \(code)."
-        case .decoding(let path, _): "Données inattendues (\(path))."
+        case .invalidResponse: "Invalid server response."
+        case .http(let code): "The server responded with \(code)."
+        case .decoding(let path, _): "Unexpected data (\(path))."
         }
     }
 }

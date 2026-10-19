@@ -5,18 +5,18 @@ struct StandingsView: View {
     enum Gender: String, CaseIterable, Identifiable {
         case men = "M", women = "W"
         var id: String { rawValue }
-        var label: String { self == .men ? "Hommes" : "Femmes" }
+        var label: LocalizedStringResource { self == .men ? "Men" : "Women" }
     }
 
     enum Discipline: String, CaseIterable, Identifiable {
         case total = "TS", sprint = "SP", pursuit = "PU", individual = "IN", massStart = "MS", nations = "NC"
         var id: String { rawValue }
-        var label: String {
+        var label: LocalizedStringResource {
             switch self {
-            case .total: "Général"
+            case .total: "Overall"
             case .sprint: "Sprint"
-            case .pursuit: "Poursuite"
-            case .individual: "Individuel"
+            case .pursuit: "Pursuit"
+            case .individual: "Individual"
             case .massStart: "Mass start"
             case .nations: "Nations"
             }
@@ -41,7 +41,7 @@ struct StandingsView: View {
                     }
                 } footer: {
                     if season != .current {
-                        Text("Saison \(season.displayName) : le classement \(SeasonID.current.displayName) apparaîtra après la première course.")
+                        Text("Season \(season.displayName): the \(SeasonID.current.displayName) standings will appear after the first race.")
                     } else if let asOf = standings.asOf {
                         Text(asOf)
                     }
@@ -52,7 +52,7 @@ struct StandingsView: View {
         // Filters live in system bars rather than a custom header, so the
         // list scrolls under the glass with the scroll edge effect.
         .safeAreaBar(edge: .top) {
-            Picker("Catégorie", selection: $gender) {
+            Picker("Category", selection: $gender) {
                 ForEach(Gender.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
@@ -60,12 +60,12 @@ struct StandingsView: View {
             .padding(.bottom, 8)
         }
         .toolbar {
-            Picker("Épreuve", selection: $discipline) {
+            Picker("Discipline", selection: $discipline) {
                 ForEach(Discipline.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.menu)
         }
-        .navigationTitle("Classements")
+        .navigationTitle("Standings")
         .ibuAttribution()
         .task(id: key) { await load() }
     }

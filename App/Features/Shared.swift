@@ -24,7 +24,7 @@ extension View {
     /// effect (Liquid Glass).
     func ibuAttribution() -> some View {
         safeAreaBar(edge: .bottom) {
-            Text("Données : IBU Datacenter · biathlonresults.com")
+            Text("Data: IBU Datacenter · biathlonresults.com")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .padding(.vertical, 4)
@@ -54,14 +54,24 @@ struct LoadableView<Value, Content: View>: View {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let error):
             ContentUnavailableView {
-                Label("Chargement impossible", systemImage: "wifi.exclamationmark")
+                Label("Unable to load", systemImage: "wifi.exclamationmark")
             } description: {
-                Text(error.localizedDescription)
+                Self.message(for: error)
             } actions: {
-                Button("Réessayer") { Task { await retry() } }
+                Button("Try again") { Task { await retry() } }
             }
         case .loaded(let value):
             content(value)
+        }
+    }
+
+    /// IBU errors get a localized message; system errors (URLError…) already have one.
+    private static func message(for error: any Error) -> Text {
+        switch error as? IBUError {
+        case .invalidResponse: Text("Invalid server response.")
+        case .http(let code): Text("The server responded with \(code).")
+        case .decoding(let path, _): Text("Unexpected data (\(path)).")
+        case nil: Text(error.localizedDescription)
         }
     }
 }
@@ -88,13 +98,13 @@ enum Nation {
 }
 
 extension Competition.State {
-    var label: String {
+    var label: LocalizedStringResource {
         switch self {
-        case .scheduled: "À venir"
-        case .live: "En direct"
-        case .delayed: "Retardée"
-        case .cancelled: "Annulée"
-        case .finished: "Terminée"
+        case .scheduled: "Upcoming"
+        case .live: "Live"
+        case .delayed: "Delayed"
+        case .cancelled: "Cancelled"
+        case .finished: "Finished"
         }
     }
 
