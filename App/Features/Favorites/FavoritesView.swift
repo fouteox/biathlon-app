@@ -44,7 +44,7 @@ struct FavoritesView: View {
         let label = Label {
             Text(favorite.name)
         } icon: {
-            Text(Nation.flag(favorite.nation ?? favorite.key) ?? "")
+            NationMark(code: favorite.nation ?? favorite.key)
         }
         switch favorite.kind {
         case .athlete:
@@ -79,7 +79,6 @@ struct FavoriteButton: View {
             context.toggleFavorite(kind, key: key, name: name, nation: nation)
         } label: {
             Image(systemName: matches.isEmpty ? "star" : "star.fill")
-                .foregroundStyle(.yellow)
         }
         .buttonStyle(.borderless)
         .sensoryFeedback(.selection, trigger: matches.isEmpty)

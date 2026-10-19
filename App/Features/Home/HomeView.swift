@@ -6,7 +6,7 @@ struct HomeView: View {
     @Environment(\.ibu) private var ibu
     @State private var loader = Loader<HomeFeed>()
     @Query private var favorites: [Favorite]
-    @State private var showsNotificationSettings = false
+    @State private var showsSettings = false
 
     var body: some View {
         LoadableView(state: loader.state, retry: load) { feed in
@@ -57,7 +57,7 @@ struct HomeView: View {
                     Section {
                         NavigationLink(value: Route.event(event)) {
                             Label(
-                                "\(Nation.flag(event.nation) ?? "") \(event.shortDescription)" as String,
+                                Nation.titled(event.shortDescription, nation: event.nation),
                                 systemImage: "mappin.and.ellipse")
                         }
                     } header: {
@@ -67,20 +67,19 @@ struct HomeView: View {
             }
             .refreshable { await load() }
         }
-        .navigationTitle("Biathlon")
+        .navigationTitle("Home")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    showsNotificationSettings = true
+                    showsSettings = true
                 } label: {
-                    Label("Notifications", systemImage: "bell")
+                    Label("Settings", systemImage: "gearshape")
                 }
             }
         }
-        .sheet(isPresented: $showsNotificationSettings) {
-            NavigationStack { NotificationSettingsView() }
+        .sheet(isPresented: $showsSettings) {
+            NavigationStack { SettingsView() }
         }
-        .ibuAttribution()
         .task { await load() }
         .refreshingWhileLive(loader.state.value?.live != nil, action: load)
     }
@@ -120,16 +119,23 @@ struct TopResults: View {
 struct ResultLine: View {
     let row: ResultRow
     var highlighted = false
+    @ScaledMetric(relativeTo: .headline) private var rankWidth = 36.0
 
     var body: some View {
         HStack(spacing: 12) {
-            Text(row.irm ?? row.rank ?? "–")
-                .font(.headline.monospacedDigit())
-                .frame(width: 36, alignment: .leading)
-            Text(Nation.flag(row.nation) ?? "")
+            RankText(rank: row.irm ?? row.rank).frame(width: rankWidth, alignment: .leading)
+            NationMark(code: row.nation)
             VStack(alignment: .leading, spacing: 2) {
-                Text(row.shortName ?? row.name)
-                    .fontWeight(highlighted ? .bold : .regular)
+                HStack(spacing: 4) {
+                    Text(row.shortName ?? row.name)
+                        .fontWeight(highlighted ? .bold : .regular)
+                    if highlighted {
+                        Image(systemName: "star.fill")
+                            .font(.caption)
+                            .foregroundStyle(.tint)
+                            .accessibilityLabel("Favorite")
+                    }
+                }
                 if let shootings = row.shootings {
                     Text(shootings)
                         .font(.caption.monospacedDigit())
@@ -138,8 +144,9 @@ struct ResultLine: View {
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
-                Text(row.totalTime ?? "")
-                    .font(.subheadline.monospacedDigit())
+                if let time = row.totalTime {
+                    Text(time).font(.subheadline.monospacedDigit())
+                }
                 if let behind = row.behind, behind != "0.0" {
                     Text(behind)
                         .font(.caption.monospacedDigit())
@@ -147,7 +154,17 @@ struct ResultLine: View {
                 }
             }
         }
-        .listRowBackground(highlighted ? Color.yellow.opacity(0.12) : nil)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// Rank or result status (DNF…), in the leading column of result rows.
+struct RankText: View {
+    let rank: String?
+
+    var body: some View {
+        if let rank {
+            Text(rank).font(.headline.monospacedDigit())
+        }
     }
 }

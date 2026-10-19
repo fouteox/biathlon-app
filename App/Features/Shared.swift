@@ -18,16 +18,17 @@ extension View {
             }
         }
     }
+}
 
-    /// Source credit, as offered in the email to the IBU. A bar with no
-    /// background: content scrolls beneath it with the system scroll edge
-    /// effect (Liquid Glass).
-    func ibuAttribution() -> some View {
-        safeAreaBar(edge: .bottom) {
-            Text("Data: IBU Datacenter · biathlonresults.com")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 4)
+/// A nation's flag, or its IOC code when no flag is known.
+struct NationMark: View {
+    let code: String?
+
+    var body: some View {
+        if let flag = Nation.flag(code) {
+            Text(flag)
+        } else if let code {
+            Text(code).font(.caption).foregroundStyle(.secondary)
         }
     }
 }

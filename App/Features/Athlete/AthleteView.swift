@@ -9,6 +9,7 @@ struct AthleteView: View {
     @State private var bio = Loader<AthleteBio>()
     /// Loaded on its own: the profile shows without waiting for it, and without it.
     @State private var history = Loader<[AthleteResult]>()
+    @ScaledMetric private var photoSize = 72.0
 
     var body: some View {
         LoadableView(state: bio.state, retry: load) { bio in
@@ -23,12 +24,14 @@ struct AthleteView: View {
                                 .resizable()
                                 .foregroundStyle(.secondary)
                         }
-                        .frame(width: 72, height: 72)
+                        .frame(width: photoSize, height: photoSize)
                         .clipShape(.circle)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(bio.fullName).font(.title3.bold())
-                            Text(verbatim: "\(Nation.flag(bio.nation) ?? "") \(bio.nation ?? "")")
+                            if let nation = bio.nation {
+                                Text(Nation.titled(nation, nation: nation))
+                            }
                             if let birthdate = bio.birthdate {
                                 Text(birthdate, format: Self.birthdateStyle)
                                     .font(.subheadline)
@@ -40,7 +43,7 @@ struct AthleteView: View {
                 if let nation = bio.nation {
                     Section {
                         HStack {
-                            Text("Follow team \(Nation.flag(nation) ?? "") \(nation)")
+                            Text("Follow team \(Nation.titled(nation, nation: nation))")
                             Spacer()
                             FavoriteButton(kind: .nation, key: nation, name: nation, nation: nation)
                         }
@@ -51,13 +54,15 @@ struct AthleteView: View {
                         ForEach(results.prefix(30)) { result in
                             HStack {
                                 VStack(alignment: .leading) {
-                                    Text(result.competition ?? "")
+                                    if let competition = result.competition {
+                                        Text(competition)
+                                    }
                                     Text([result.place, result.season].compactMap(\.self).joined(separator: " · "))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
                                 Spacer()
-                                Text(result.rank ?? "–").font(.headline.monospacedDigit())
+                                RankText(rank: result.rank)
                             }
                         }
                     }
@@ -70,7 +75,6 @@ struct AthleteView: View {
         .toolbar {
             FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.state.value?.nation)
         }
-        .ibuAttribution()
         .task { await load() }
     }
 

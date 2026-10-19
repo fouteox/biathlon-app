@@ -44,7 +44,6 @@ struct RaceView: View {
         }
         .navigationTitle(race.shortDescription)
         .navigationBarTitleDisplayMode(.inline)
-        .ibuAttribution()
         .task { await load() }
         .refreshingWhileLive(isLive, action: load)
     }

@@ -14,19 +14,15 @@ struct CalendarView: View {
             List(events) { event in
                 NavigationLink(value: Route.event(event)) {
                     HStack {
-                        Text(Nation.flag(event.nation) ?? "").font(.title2)
+                        NationMark(code: event.nation).font(.title2)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(event.shortDescription).font(.headline)
-                            Text(
-                                event.startDate.formatted(.dateTime.day().month()) + " – "
-                                    + event.endDate.formatted(.dateTime.day().month())
-                            )
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if event.isWorldChampionships {
-                            Text("World Championships").font(.caption.bold()).foregroundStyle(.orange)
+                            Text(event.dates, format: .interval.day().month())
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                            if event.isWorldChampionships {
+                                Text("World Championships").font(.caption.bold()).foregroundStyle(.tint)
+                            }
                         }
                     }
                 }
@@ -44,7 +40,6 @@ struct CalendarView: View {
                 ForEach(seasons, id: \.self) { Text($0.displayName).tag($0) }
             }
         }
-        .ibuAttribution()
         .task(id: season) {
             loader.reset()
             await load()
@@ -68,12 +63,18 @@ struct EventView: View {
             }
             .refreshable { await load() }
         }
-        .navigationTitle("\(Nation.flag(event.nation) ?? "") \(event.shortDescription)" as String)
-        .ibuAttribution()
+        .navigationTitle(Nation.titled(event.shortDescription, nation: event.nation))
         .task { await load() }
     }
 
     private func load() async {
         await loader.load { try await ibu.competitions(eventID: event.id).sorted { $0.startTime < $1.startTime } }
+    }
+}
+
+extension BiathlonEvent {
+    /// First to last day of the event.
+    fileprivate var dates: Range<Date> {
+        startDate..<max(startDate, endDate)
     }
 }
