@@ -117,6 +117,7 @@ export async function syncLiveActivities(
   budget = new SubrequestBudget(),
 ): Promise<void> {
   const tokens = new ProviderTokens(env, now, budget);
+  await deleteOrphans(env, tokens);
   const { results: rows } = await env.DB.prepare(
     "SELECT race_id AS raceId, environment, channel_id AS channelId, state, ended_at AS endedAt, end_sent_at AS endSentAt FROM live_channels",
   ).all<ChannelRow>();
@@ -147,8 +148,8 @@ export async function syncLiveActivities(
         // No longer watched: the activity ends with the latest state there is.
         await end(env, tokens, channel, state ?? stored, now);
       } else if (race.status === "finished" || race.status === "cancelled") {
-        // Results that can't be read don't hold the end back.
-        await end(env, tokens, channel, state ?? { ...stored, phase: race.status }, now);
+        // The results can lag behind the calendar's phase, or be unreadable.
+        await end(env, tokens, channel, { ...(state ?? stored), phase: race.status }, now);
       } else if (state && JSON.stringify(state) !== channel.state) {
         await publish(env, tokens, channel, state, now);
       }
@@ -204,8 +205,10 @@ async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapsho
       .bind(race.id, environment, outcome.channelId, JSON.stringify(calendarState(race)), now)
       .run();
     if (meta.changes === 0) {
-      // An overlapping run recorded its channel first: this one would never be deleted.
-      await deleteChannelAndRow(env, tokens, { raceId: race.id, environment, channelId: outcome.channelId });
+      // An overlapping run recorded its channel first: this one is deleted by a later run.
+      await env.DB.prepare("INSERT INTO orphaned_channels (environment, channel_id) VALUES (?1, ?2)")
+        .bind(environment, outcome.channelId)
+        .run();
     }
   }
 }
@@ -260,22 +263,33 @@ async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, 
 }
 
 /** Deletes a channel at APNs, then its row; `false` when it is still there, for the next run to retry. */
-async function deleteChannelAndRow(
-  env: Env,
-  tokens: ProviderTokens,
-  channel: Pick<ChannelRow, "raceId" | "environment" | "channelId">,
-): Promise<boolean> {
-  const deletion = await tokens.send(channel.environment, (token) =>
-    deleteChannel(channel.environment, env.APNS_TOPIC, channel.channelId, token),
-  );
-  if (deletion.kind !== "sent" && deletion.kind !== "unregistered") {
-    if (deletion.kind !== "deferred") console.error("APNs channel deletion failed", channel.raceId, channel.environment, deletion);
-    return false;
-  }
+async function deleteChannelAndRow(env: Env, tokens: ProviderTokens, channel: ChannelRow): Promise<boolean> {
+  if (!(await deleteAtAPNs(env, tokens, channel.environment, channel.channelId))) return false;
   await env.DB.prepare("DELETE FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3")
     .bind(channel.raceId, channel.environment, channel.channelId)
     .run();
   return true;
+}
+
+/** Deletes the channels left by overlapping runs, those the budget covers. */
+async function deleteOrphans(env: Env, tokens: ProviderTokens) {
+  const { results } = await env.DB.prepare(
+    "SELECT environment, channel_id AS channelId FROM orphaned_channels",
+  ).all<{ environment: APNsEnvironment; channelId: string }>();
+  for (const { environment, channelId } of results) {
+    if (!(await deleteAtAPNs(env, tokens, environment, channelId))) continue;
+    await env.DB.prepare("DELETE FROM orphaned_channels WHERE environment = ?1 AND channel_id = ?2")
+      .bind(environment, channelId)
+      .run();
+  }
+}
+
+/** Deletes a channel at APNs; `true` once APNs no longer has it. */
+async function deleteAtAPNs(env: Env, tokens: ProviderTokens, environment: APNsEnvironment, channelId: string) {
+  const deletion = await tokens.send(environment, (token) => deleteChannel(environment, env.APNS_TOPIC, channelId, token));
+  if (deletion.kind === "sent" || deletion.kind === "unregistered") return true;
+  if (deletion.kind !== "deferred") console.error("APNs channel deletion failed", environment, channelId, deletion);
+  return false;
 }
 
 /** Broadcasts an ActivityKit event; "unregistered" when APNs no longer knows the channel. */

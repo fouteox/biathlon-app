@@ -108,6 +108,11 @@ const channels = (env: Env) =>
     .all<{ environment: string; channelId: string; state: string }>()
     .then(({ results }) => results);
 
+const orphans = (env: Env) =>
+  env.DB.prepare("SELECT channel_id AS channelId FROM orphaned_channels ORDER BY channel_id")
+    .all<{ channelId: string }>()
+    .then(({ results }) => results.map(({ channelId }) => channelId));
+
 const broadcasts = (sent: Sent[]) => sent.filter((request) => request.url.includes("/4/broadcasts/"));
 
 describe("Live Activity channels", () => {
@@ -227,6 +232,20 @@ describe("Live Activity channels", () => {
     ]);
   });
 
+  it("ends a finished race with the calendar's phase when its results still say it is live", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW);
+
+    expect(broadcasts(sent).map((request) => (request.body as { aps: { "content-state": unknown } }).aps["content-state"])).toEqual([
+      { ...(live.state as object), phase: "finished" },
+      { ...(live.state as object), phase: "finished" },
+    ]);
+  });
+
   it("replaces the ended channels of a race that can be followed again", async () => {
     const env = await makeEnv();
     stubNetwork();
@@ -243,7 +262,7 @@ describe("Live Activity channels", () => {
     expect(rows.every(({ state }) => JSON.parse(state).phase === "scheduled")).toBe(true);
   });
 
-  it("deletes the channel it opened when an overlapping run opened one first", async () => {
+  it("deletes the channels it opened when an overlapping run opened them first, until APNs confirms", async () => {
     const env = await makeEnv();
     const sent = stubNetwork();
     const fetchStub = globalThis.fetch;
@@ -259,13 +278,20 @@ describe("Live Activity channels", () => {
       }
       return fetchStub(input, init);
     });
-
     await syncLiveActivities(env, [race()], NOW);
+    expect(sent.filter((request) => request.method === "DELETE")).toEqual([]);
 
-    expect(sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"])).toEqual([
+    stubNetwork({ failingHost: "api-manage-broadcast" });
+    await syncLiveActivities(env, [race()], NOW + 60_000);
+    expect(await orphans(env)).toEqual(["channel-1", "channel-2"]);
+
+    const retried = stubNetwork();
+    await syncLiveActivities(env, [race()], NOW + 120_000);
+    expect(retried.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"])).toEqual([
       "channel-1",
       "channel-2",
     ]);
+    expect(await orphans(env)).toEqual([]);
     expect((await channels(env)).map(({ channelId }) => channelId)).toEqual(["other", "other"]);
   });
 
