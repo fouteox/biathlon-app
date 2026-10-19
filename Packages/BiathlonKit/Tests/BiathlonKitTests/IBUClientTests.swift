@@ -16,6 +16,17 @@ struct IBUClientTests {
         #expect(try await client.events(season: SeasonID(rawValue: "2627")).isEmpty)
     }
 
+    /// The app builds its base URL as the app does: the server URL plus `ibu/`.
+    @Test(arguments: ["https://example.workers.dev", "https://example.workers.dev/"])
+    func usesTheServerCacheWithTheSamePaths(server: String) async throws {
+        let baseURL = URL(string: server)!.appending(path: "ibu/")
+        let client = IBUClient(baseURL: baseURL) { url in
+            #expect(url.absoluteString == "https://example.workers.dev/ibu/Events?Level=1&SeasonId=2627")
+            return (Data("[]".utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        #expect(try await client.events(season: SeasonID(rawValue: "2627")).isEmpty)
+    }
+
     @Test func httpErrorCarriesTheStatus() async {
         let client = stubClient(["Results?RaceId=R1": "{}"], status: 503)
         await #expect(throws: IBUError.self) {

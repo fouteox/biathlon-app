@@ -11,13 +11,7 @@ import os
 final class PushRegistration {
     private var deviceToken: String?
 
-    /// Base URL of the Cloudflare Worker, from the `BiathlonServerURL` Info.plist key.
-    private let serverURL: URL? = {
-        guard let raw = Bundle.main.object(forInfoDictionaryKey: "BiathlonServerURL") as? String, !raw.isEmpty else {
-            return nil
-        }
-        return URL(string: raw)
-    }()
+    private let serverURL = Bundle.main.serverURL
 
     /// APNs environment matching the `aps-environment` entitlement Xcode signs the build with.
     private var environment: String {
