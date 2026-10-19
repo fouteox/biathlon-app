@@ -65,7 +65,8 @@ export async function saveDevice(db: D1Database, device: DeviceRegistration, key
            environment = excluded.environment, categories = excluded.categories,
            cancellation = excluded.cancellation, rescheduling = excluded.rescheduling,
            locale = excluded.locale, time_zone = excluded.time_zone, updated_at = excluded.updated_at,
-           app_attest_key_id = excluded.app_attest_key_id`,
+           app_attest_key_id = excluded.app_attest_key_id
+         WHERE devices.app_attest_key_id = excluded.app_attest_key_id`,
       )
       .bind(
         device.token,
@@ -79,6 +80,21 @@ export async function saveDevice(db: D1Database, device: DeviceRegistration, key
         keyId,
       ),
   ]);
+}
+
+/**
+ * Whether `keyId` may change the registration of `token`: a token belongs to the
+ * key that registered it. Apple: the token changes when the app is reinstalled,
+ * the device is restored or migrated, the same events that end an App Attest key,
+ * so a new key never needs a token an older key holds (Apple engineer, March 2026:
+ * https://developer.apple.com/forums/thread/818187).
+ */
+export async function ownsDevice(db: D1Database, token: string, keyId: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT app_attest_key_id AS keyId FROM devices WHERE token = ?1")
+    .bind(token)
+    .first<{ keyId: string | null }>();
+  return row === null || row.keyId === keyId;
 }
 
 export async function deleteDevice(db: D1Database, token: string): Promise<void> {

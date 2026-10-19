@@ -1,5 +1,5 @@
 import { probe } from "./apns";
-import { deleteDevice, isDeviceToken, parseRegistration, saveDevice } from "./devices";
+import { deleteDevice, isDeviceToken, ownsDevice, parseRegistration, saveDevice } from "./devices";
 import { IBU_BASE_URL } from "./ibu";
 import { isPurpose, issueChallenge } from "./challenges";
 import { authorize, pruneKeys, registerKey } from "./keys";
@@ -20,6 +20,7 @@ export default {
       if (!isDeviceToken(token)) return json({ error: "invalid device token" }, 400);
       const auth = await authorize(env, request, body, Date.now());
       if ("error" in auth) return json({ error: auth.error }, auth.status);
+      if (!(await ownsDevice(env.DB, token, auth.keyId))) return json({ error: "token registered by another key" }, 403);
       if (registration) await saveDevice(env.DB, registration, auth.keyId, Date.now());
       else await deleteDevice(env.DB, token);
       return new Response(null, { status: 204 });

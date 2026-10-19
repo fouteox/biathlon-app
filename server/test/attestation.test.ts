@@ -126,8 +126,7 @@ describe("device registration endpoint", () => {
   const token = "ab".repeat(32);
   const registration = { environment: "sandbox", categories: ["SW"], cancellation: true, rescheduling: true, locale: "fr-FR", timeZone: "Europe/Paris" };
 
-  async function setUp() {
-    const env = { DB: makeD1(), APP_ATTEST_APP_ID: appId, APP_ATTEST_SECRET: "test secret" } as unknown as Env;
+  async function setUp(env = { DB: makeD1(), APP_ATTEST_APP_ID: appId, APP_ATTEST_SECRET: "test secret" } as unknown as Env) {
     const device = await makeDevice();
     await env.DB.prepare(
       "INSERT INTO app_attest_keys (key_id, public_key, environment, counter, receipt, created_at) VALUES (?1, ?2, 'development', 0, '', 0)",
@@ -195,6 +194,16 @@ describe("device registration endpoint", () => {
     await call(await signed("DELETE", token));
     await pruneKeys(env.DB, later);
     expect(await keys()).toBe(0);
+  });
+
+  it("lets only the key that registered a token change it", async () => {
+    const owner = await setUp();
+    const other = await setUp(owner.env);
+    await owner.call(await owner.signed("PUT", token, registration));
+    const put = await other.call(await other.signed("PUT", token, registration));
+    expect(put.status).toBe(403);
+    expect((await other.call(await other.signed("DELETE", token))).status).toBe(403);
+    expect(await owner.tokens()).toEqual([token]);
   });
 
   it("keeps one token per key", async () => {

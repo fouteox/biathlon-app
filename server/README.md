@@ -21,7 +21,7 @@ Cloudflare Worker that:
 
 Device registrations must come from the app on a genuine Apple device ([App Attest](https://developer.apple.com/documentation/devicecheck/validating-apps-that-connect-to-your-server)). At its first sync, the app generates a key, attests it with the SHA-256 of a challenge as `clientDataHash`, and posts the attestation to `/v1/app-attest/keys`. The server checks it against Apple's App Attestation Root CA and the `APP_ATTEST_APP_ID` secret (App ID prefix, a period, the bundle ID), then stores the public key. Challenges are stateless, signed with the `APP_ATTEST_SECRET` secret: replays are stopped by the one attestation per key and the assertion counter. Keys no device has used for 30 days are deleted once a day.
 
-Each `PUT` and `DELETE` on `/v1/devices/:token` then carries three headers: `X-App-Attest-Key-Id`, `X-App-Attest-Challenge` (a fresh challenge) and `X-App-Attest-Assertion`, an assertion whose `clientData` is the UTF-8 bytes of `"<challenge>\n<METHOD> <path>\n"` followed by the raw request body. A `401` with `{"error":"unknown key"}` tells the app to attest a new key. Each key holds one device token.
+Each `PUT` and `DELETE` on `/v1/devices/:token` then carries three headers: `X-App-Attest-Key-Id`, `X-App-Attest-Challenge` (a fresh challenge) and `X-App-Attest-Assertion`, an assertion whose `clientData` is the UTF-8 bytes of `"<challenge>\n<METHOD> <path>\n"` followed by the raw request body. A `401` with `{"error":"unknown key"}` tells the app to attest a new key. Each key holds one device token, and only that key can change or delete it (`403` otherwise): the token changes on reinstall, restore and migration, like the key.
 
 ## Deploy
 
