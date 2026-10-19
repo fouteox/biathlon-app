@@ -10,7 +10,7 @@ Cloudflare Worker that:
 
 | Method | Path | Body |
 |---|---|---|
-| `POST` | `/v1/app-attest/challenges` | Returns `{"challenge":"…"}`, valid once for 5 minutes. |
+| `POST` | `/v1/app-attest/challenges?purpose=attest\|assert` | Returns `{"challenge":"…"}`, valid for a day (attest) or 5 minutes (assert). |
 | `POST` | `/v1/app-attest/keys` | `{ "keyId": "<base64>", "attestation": "<base64>", "challenge": "…" }` |
 | `PUT` | `/v1/devices/:token` | `{ "environment": "sandbox" \| "production", "categories": ["SM","SW","MX"], "cancellation": true, "rescheduling": true, "locale": "fr-FR", "timeZone": "Europe/Paris" }` |
 | `DELETE` | `/v1/devices/:token` | |
@@ -19,7 +19,7 @@ Cloudflare Worker that:
 
 ### App Attest
 
-Device registrations must come from the app on a genuine Apple device ([App Attest](https://developer.apple.com/documentation/devicecheck/validating-apps-that-connect-to-your-server)). At its first sync, the app generates a key, attests it with the SHA-256 of a challenge as `clientDataHash`, and posts the attestation to `/v1/app-attest/keys`. The server checks it against Apple's App Attestation Root CA and the App ID `APNS_TEAM_ID.APNS_TOPIC`, then stores the public key.
+Device registrations must come from the app on a genuine Apple device ([App Attest](https://developer.apple.com/documentation/devicecheck/validating-apps-that-connect-to-your-server)). At its first sync, the app generates a key, attests it with the SHA-256 of a challenge as `clientDataHash`, and posts the attestation to `/v1/app-attest/keys`. The server checks it against Apple's App Attestation Root CA and the `APP_ATTEST_APP_ID` secret (App ID prefix, a period, the bundle ID), then stores the public key. Challenges are stateless, signed with the `APP_ATTEST_SECRET` secret: replays are stopped by the one attestation per key and the assertion counter. Keys no device has used for 30 days are deleted once a day.
 
 Each `PUT` and `DELETE` on `/v1/devices/:token` then carries three headers: `X-App-Attest-Key-Id`, `X-App-Attest-Challenge` (a fresh challenge) and `X-App-Attest-Assertion`, an assertion whose `clientData` is the UTF-8 bytes of `"<challenge>\n<METHOD> <path>\n"` followed by the raw request body. A `401` with `{"error":"unknown key"}` tells the app to attest a new key. Each key holds one device token.
 
@@ -33,7 +33,9 @@ Each `PUT` and `DELETE` on `/v1/devices/:token` then carries three headers: `X-A
    npx wrangler login
    npx wrangler d1 create biathlon          # paste the printed database_id into wrangler.jsonc
    npx wrangler d1 migrations apply biathlon --remote
-   npx wrangler secret put APNS_TEAM_ID   # also the App ID prefix App Attest checks
+   npx wrangler secret put APNS_TEAM_ID
+   npx wrangler secret put APP_ATTEST_APP_ID   # <App ID prefix>.com.fouteox.biathlon, from Identifiers
+   openssl rand -base64 32 | npx wrangler secret put APP_ATTEST_SECRET
    npx wrangler secret put APNS_SANDBOX_KEY_ID
    npx wrangler secret put APNS_SANDBOX_KEY < AuthKey_SANDBOXKEYID.p8
    npx wrangler secret put APNS_PRODUCTION_KEY_ID

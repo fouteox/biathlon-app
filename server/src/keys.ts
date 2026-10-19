@@ -1,13 +1,12 @@
 import { AttestationError, fromBase64, sha256, toBase64, verifyAssertion, verifyAttestation } from "./attestation";
+import { checkChallenge } from "./challenges";
 
 /**
  * App Attest storage and request checks. The app attests one key per install
  * (`POST /v1/app-attest/keys`), then signs each device registration with it.
- * Every attestation and assertion embeds a one-time challenge from
- * `POST /v1/app-attest/challenges`, as Apple asks.
+ * Every attestation and assertion embeds a challenge from
+ * `POST /v1/app-attest/challenges?purpose=attest|assert` (challenges.ts).
  */
-
-const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 
 /** Request headers that carry an assertion. */
 export const HEADERS = {
@@ -16,32 +15,22 @@ export const HEADERS = {
   challenge: "X-App-Attest-Challenge",
 } as const;
 
-/** App ID the attested keys belong to: App ID prefix (the team ID), a period, the bundle ID. */
-export function appId(env: Env): string {
-  return `${env.APNS_TEAM_ID}.${env.APNS_TOPIC}`;
-}
+/** Keys no device uses are deleted after this long; their app attests a new key if it comes back. */
+const UNUSED_KEY_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
-/** 32 random bytes, base64url, stored until used or expired. */
-export async function issueChallenge(db: D1Database, now: number): Promise<string> {
-  const challenge = toBase64(crypto.getRandomValues(new Uint8Array(32)))
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/, "");
-  await db.prepare("INSERT INTO challenges (value, expires_at) VALUES (?1, ?2)").bind(challenge, now + CHALLENGE_TTL_MS).run();
-  return challenge;
-}
-
-/** Deletes the challenge and tells whether it was still valid: each challenge works once. */
-async function consumeChallenge(db: D1Database, challenge: string, now: number): Promise<boolean> {
-  const row = await db
-    .prepare("DELETE FROM challenges WHERE value = ?1 RETURNING expires_at AS expiresAt")
-    .bind(challenge)
-    .first<{ expiresAt: number }>();
-  return row !== null && row.expiresAt > now;
-}
-
-export async function pruneChallenges(db: D1Database, now: number): Promise<void> {
-  await db.prepare("DELETE FROM challenges WHERE expires_at <= ?1").bind(now).run();
+/**
+ * Deletes keys that no device row references and that signed nothing for 30
+ * days: reinstalls, device migrations and restores leave such keys behind.
+ */
+export async function pruneKeys(db: D1Database, now: number): Promise<void> {
+  await db
+    .prepare(
+      `DELETE FROM app_attest_keys
+       WHERE COALESCE(used_at, created_at) < ?1
+         AND key_id NOT IN (SELECT app_attest_key_id FROM devices WHERE app_attest_key_id IS NOT NULL)`,
+    )
+    .bind(now - UNUSED_KEY_LIFETIME_MS)
+    .run();
 }
 
 export type Failure = { status: 400 | 401; error: string };
@@ -56,17 +45,19 @@ export async function registerKey(env: Env, body: unknown, now: number): Promise
   const keyBytes = decodeBase64(keyId);
   const attestationBytes = decodeBase64(attestation);
   if (keyBytes?.length !== 32 || !attestationBytes) return { status: 400, error: "invalid base64" };
-  if (!(await consumeChallenge(env.DB, challenge, now))) return { status: 401, error: "invalid challenge" };
+  if (!(await checkChallenge(env.APP_ATTEST_SECRET, challenge, "attest", now))) {
+    return { status: 401, error: "invalid challenge" };
+  }
 
   try {
     const key = await verifyAttestation({
       attestation: attestationBytes,
       keyId: keyBytes,
       clientDataHash: await sha256(new TextEncoder().encode(challenge)),
-      appId: appId(env),
+      appId: env.APP_ATTEST_APP_ID,
       now,
     });
-    // Apple: make sure the key isn't already associated, so an attestation can't be replayed.
+    // Apple: make sure the key isn't already associated. This also stops replayed attestations.
     const inserted = await env.DB.prepare(
       `INSERT INTO app_attest_keys (key_id, public_key, environment, counter, receipt, validation_category, bundle_version, created_at)
        VALUES (?1, ?2, ?3, 0, ?4, ?5, ?6, ?7) ON CONFLICT (key_id) DO NOTHING`,
@@ -116,12 +107,15 @@ export async function authorize(
   const assertion = decodeBase64(request.headers.get(HEADERS.assertion) ?? "");
   const challenge = request.headers.get(HEADERS.challenge);
   if (!keyId || !assertion || !challenge) return { status: 401, error: "missing assertion" };
+  // Checked first: it needs no D1 query.
+  if (!(await checkChallenge(env.APP_ATTEST_SECRET, challenge, "assert", now))) {
+    return { status: 401, error: "invalid challenge" };
+  }
 
   const key = await env.DB.prepare("SELECT public_key AS publicKey, counter FROM app_attest_keys WHERE key_id = ?1")
     .bind(keyId)
     .first<{ publicKey: string; counter: number }>();
   if (!key) return { status: 401, error: "unknown key" };
-  if (!(await consumeChallenge(env.DB, challenge, now))) return { status: 401, error: "invalid challenge" };
 
   let counter: number;
   try {
@@ -129,14 +123,15 @@ export async function authorize(
       assertion,
       clientData: clientData(challenge, request.method, new URL(request.url).pathname, body),
       publicKey: fromBase64(key.publicKey),
-      appId: appId(env),
+      appId: env.APP_ATTEST_APP_ID,
       previousCounter: key.counter,
     });
   } catch (error) {
     if (error instanceof AttestationError) return { status: 401, error: `assertion rejected: ${error.message}` };
     throw error;
   }
-  // Conditional update: of two requests racing with the same key, only the newer counter wins.
+  // The counter rejects replayed assertions. Conditional update: of two requests racing
+  // with the same key, only the newer counter wins.
   const updated = await env.DB.prepare("UPDATE app_attest_keys SET counter = ?1, used_at = ?2 WHERE key_id = ?3 AND counter < ?1")
     .bind(counter, now, keyId)
     .run();

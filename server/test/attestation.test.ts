@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { fromBase64, rawSignature, sha256, toBase64, verifyAssertion, verifyAttestation } from "../src/attestation";
 import { decode } from "../src/cbor";
 import worker from "../src/index";
-import { clientData, HEADERS } from "../src/keys";
+import { checkChallenge, issueChallenge } from "../src/challenges";
+import { clientData, HEADERS, pruneKeys } from "../src/keys";
 import { makeD1 } from "./d1";
 import sample from "./fixtures/apple-attestation-sample.json";
 
@@ -112,7 +113,7 @@ describe("device registration endpoint", () => {
   const registration = { environment: "sandbox", categories: ["SW"], cancellation: true, rescheduling: true, locale: "fr-FR", timeZone: "Europe/Paris" };
 
   async function setUp() {
-    const env = { DB: makeD1(), APNS_TEAM_ID: "TEAM123456", APNS_TOPIC: "com.fouteox.biathlon" } as unknown as Env;
+    const env = { DB: makeD1(), APP_ATTEST_APP_ID: appId, APP_ATTEST_SECRET: "test secret" } as unknown as Env;
     const device = await makeDevice();
     await env.DB.prepare(
       "INSERT INTO app_attest_keys (key_id, public_key, environment, counter, receipt, created_at) VALUES (?1, ?2, 'development', 0, '', 0)",
@@ -121,7 +122,7 @@ describe("device registration endpoint", () => {
       .run();
     const call = (request: Request) => worker.fetch!(request as never, env, {} as ExecutionContext);
     const challenge = async () => {
-      const response = await call(new Request("https://server.test/v1/app-attest/challenges", { method: "POST" }));
+      const response = await call(new Request("https://server.test/v1/app-attest/challenges?purpose=assert", { method: "POST" }));
       return ((await response.json()) as { challenge: string }).challenge;
     };
     /** Signs the request the way the app does (PushRegistration.swift). */
@@ -154,7 +155,7 @@ describe("device registration endpoint", () => {
     expect((await call(request.clone())).status).toBe(204);
     const replay = await call(request);
     expect(replay.status).toBe(401);
-    expect(await replay.json()).toEqual({ error: "invalid challenge" });
+    expect(await replay.json()).toEqual({ error: "assertion rejected: counter did not increase" });
 
     const tampered = await signed("PUT", token, registration, (body) => body.replace("SW", "SM"));
     expect((await call(tampered)).status).toBe(401);
@@ -170,11 +171,49 @@ describe("device registration endpoint", () => {
     expect(await response.json()).toEqual({ error: "unknown key" });
   });
 
+  it("deletes keys no device has used for 30 days", async () => {
+    const { env, call, signed } = await setUp();
+    const keys = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;
+    await call(await signed("PUT", token, registration));
+    const later = Date.now() + 31 * 24 * 60 * 60 * 1000;
+    await pruneKeys(env.DB, later);
+    expect(await keys()).toBe(1);
+    await call(await signed("DELETE", token));
+    await pruneKeys(env.DB, later);
+    expect(await keys()).toBe(0);
+  });
+
   it("keeps one token per key", async () => {
     const { call, signed, tokens } = await setUp();
     await call(await signed("PUT", token, registration));
     await call(await signed("PUT", "cd".repeat(32), registration));
     expect(await tokens()).toEqual(["cd".repeat(32)]);
+  });
+});
+
+describe("challenges", () => {
+  const now = Date.parse("2026-11-26T12:00:00Z");
+
+  it("accepts a fresh challenge for its purpose only", async () => {
+    const challenge = await issueChallenge("secret", "assert", now);
+    expect(await checkChallenge("secret", challenge, "assert", now + 60_000)).toBe(true);
+    expect(await checkChallenge("secret", challenge, "attest", now)).toBe(false);
+    expect(await checkChallenge("other", challenge, "assert", now)).toBe(false);
+  });
+
+  it("expires assert challenges after 5 minutes and attest ones after a day", async () => {
+    expect(await checkChallenge("secret", await issueChallenge("secret", "assert", now), "assert", now + 6 * 60_000)).toBe(false);
+    const attest = await issueChallenge("secret", "attest", now);
+    expect(await checkChallenge("secret", attest, "attest", now + 23 * 3_600_000)).toBe(true);
+    expect(await checkChallenge("secret", attest, "attest", now + 25 * 3_600_000)).toBe(false);
+  });
+
+  it("rejects forged and malformed challenges", async () => {
+    const challenge = await issueChallenge("secret", "assert", now);
+    const forged = challenge.replace(`assert.${now}`, `assert.${now + 1}`);
+    expect(await checkChallenge("secret", forged, "assert", now)).toBe(false);
+    expect(await checkChallenge("secret", "nonsense", "assert", now)).toBe(false);
+    expect(await checkChallenge("secret", "a.b.c.!!", "assert", now)).toBe(false);
   });
 });
 

@@ -15,12 +15,6 @@ CREATE TABLE app_attest_keys (
   used_at INTEGER
 );
 
--- One-time challenges, deleted when used and pruned by the cron when expired.
-CREATE TABLE challenges (
-  value TEXT PRIMARY KEY,
-  expires_at INTEGER NOT NULL
-);
-
 -- Registrations made before App Attest carry no proof: drop them. Each device
 -- registers again, with an attested key, at the next launch of the app.
 DELETE FROM outbox;

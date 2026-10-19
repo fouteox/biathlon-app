@@ -1,7 +1,8 @@
 import { probe } from "./apns";
 import { deleteDevice, isDeviceToken, parseRegistration, saveDevice } from "./devices";
 import { IBU_BASE_URL } from "./ibu";
-import { authorize, issueChallenge, pruneChallenges, registerKey } from "./keys";
+import { isPurpose, issueChallenge } from "./challenges";
+import { authorize, pruneKeys, registerKey } from "./keys";
 import { runCron } from "./watcher";
 
 export default {
@@ -25,7 +26,9 @@ export default {
     }
 
     if (url.pathname === "/v1/app-attest/challenges" && request.method === "POST") {
-      return json({ challenge: await issueChallenge(env.DB, Date.now()) }, 201);
+      const purpose = url.searchParams.get("purpose");
+      if (!isPurpose(purpose)) return json({ error: "purpose must be attest or assert" }, 400);
+      return json({ challenge: await issueChallenge(env.APP_ATTEST_SECRET, purpose, Date.now()) }, 201);
     }
 
     if (url.pathname === "/v1/app-attest/keys" && request.method === "POST") {
@@ -48,7 +51,9 @@ export default {
     try {
       await runCron(env, controller.scheduledTime);
     } finally {
-      await pruneChallenges(env.DB, controller.scheduledTime);
+      // Once a day is enough, and keeps the scan of the keys table off every run.
+      const time = new Date(controller.scheduledTime);
+      if (time.getUTCHours() === 3 && time.getUTCMinutes() === 0) await pruneKeys(env.DB, controller.scheduledTime);
     }
   },
 } satisfies ExportedHandler<Env>;

@@ -23,8 +23,10 @@ final class AppAttest {
     private enum DefaultsKey {
         /// Key the server accepted.
         static let keyID = "appAttest.keyID"
-        /// Generated key whose attestation failed with `serverUnavailable`: Apple asks to retry it.
+        /// Key and challenge of an attestation that failed with `serverUnavailable`:
+        /// Apple asks to retry with the same key and the same `clientDataHash`.
         static let pendingKeyID = "appAttest.pendingKeyID"
+        static let pendingChallenge = "appAttest.pendingChallenge"
     }
 
     init(serverURL: URL, defaults: UserDefaults = .standard) {
@@ -60,25 +62,31 @@ final class AppAttest {
     private func attestedKey() async throws -> String {
         if let keyID = defaults.string(forKey: DefaultsKey.keyID) { return keyID }
         let keyID: String
-        if let pending = defaults.string(forKey: DefaultsKey.pendingKeyID) {
-            keyID = pending
+        let challenge: String
+        if let pendingKey = defaults.string(forKey: DefaultsKey.pendingKeyID),
+            let pendingChallenge = defaults.string(forKey: DefaultsKey.pendingChallenge)
+        {
+            (keyID, challenge) = (pendingKey, pendingChallenge)
         } else {
             keyID = try await service.generateKey()
+            challenge = try await fetchChallenge(purpose: "attest")
         }
-        let challenge = try await fetchChallenge()
         let attestation: Data
         do {
             attestation = try await service.attestKey(
                 keyID, clientDataHash: Data(SHA256.hash(data: Data(challenge.utf8))))
         } catch let error as DCError where error.code == .serverUnavailable {
+            // The server accepts an attest challenge for a day; past that, it rejects the
+            // registration below and the next sync starts over with a new key.
             defaults.set(keyID, forKey: DefaultsKey.pendingKeyID)
+            defaults.set(challenge, forKey: DefaultsKey.pendingChallenge)
             throw error
         } catch {
             // Apple: for any other error, discard the key and create a new one next time.
-            defaults.removeObject(forKey: DefaultsKey.pendingKeyID)
+            clearPending()
             throw error
         }
-        defaults.removeObject(forKey: DefaultsKey.pendingKeyID)
+        clearPending()
 
         var request = URLRequest(url: serverURL.appending(path: "v1/app-attest/keys"))
         request.httpMethod = "POST"
@@ -92,11 +100,16 @@ final class AppAttest {
         return keyID
     }
 
+    private func clearPending() {
+        defaults.removeObject(forKey: DefaultsKey.pendingKeyID)
+        defaults.removeObject(forKey: DefaultsKey.pendingChallenge)
+    }
+
     /// Adds the assertion headers. The signed bytes are the challenge, the method and
     /// path, then the body, exactly as `clientData` in server/src/keys.ts builds them.
     private func signed(_ request: URLRequest, keyID: String) async throws -> URLRequest {
         guard let url = request.url, let method = request.httpMethod else { throw URLError(.badURL) }
-        let challenge = try await fetchChallenge()
+        let challenge = try await fetchChallenge(purpose: "assert")
         let clientData =
             Data("\(challenge)\n\(method) \(url.path(percentEncoded: true))\n".utf8) + (request.httpBody ?? Data())
         let assertion = try await service.generateAssertion(keyID, clientDataHash: Data(SHA256.hash(data: clientData)))
@@ -107,8 +120,11 @@ final class AppAttest {
         return signed
     }
 
-    private func fetchChallenge() async throws -> String {
-        var request = URLRequest(url: serverURL.appending(path: "v1/app-attest/challenges"))
+    private func fetchChallenge(purpose: String) async throws -> String {
+        var request = URLRequest(
+            url: serverURL.appending(path: "v1/app-attest/challenges").appending(queryItems: [
+                URLQueryItem(name: "purpose", value: purpose)
+            ]))
         request.httpMethod = "POST"
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
