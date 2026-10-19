@@ -9,13 +9,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     let push = PushRegistration()
     let client = IBUClient()
 
+    private var preferenceChanges: Task<Void, Never>?
+    private var pendingChange: Task<Void, Never>?
+    private var reminderRefresh: Task<Void, Never>?
+
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         push.register()
-        push.observe(settings, client: client)
+        observePreferences()
         return true
     }
 
@@ -39,14 +43,41 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let isAlert = notification.request.content.userInfo["startTime"] != nil
         Task { @MainActor in
             completionHandler([.banner, .sound, .list])
-            if isAlert { await self.refreshReminders() }
+            if isAlert { self.refreshReminders() }
         }
     }
 
     // Tapping an alert needs no handling: the app becomes active, which refreshes the reminders.
 
-    /// A start time change alert means the local reminder may now be wrong.
-    func refreshReminders() async {
-        await ReminderScheduler.refresh(settings.preferences, client: client)
+    /// Applies every change of the preferences, wherever it is made, after a short pause
+    /// that coalesces quick successive changes. Syncs run one after another with the
+    /// latest preferences, so an older one can't overwrite a newer one.
+    private func observePreferences() {
+        preferenceChanges = Task {
+            for await _ in settings.changes {
+                let previous = pendingChange
+                previous?.cancel()
+                pendingChange = Task {
+                    do {
+                        try await Task.sleep(for: .milliseconds(500))
+                    } catch {
+                        return
+                    }
+                    await previous?.value
+                    await push.update(settings.preferences)
+                    refreshReminders()
+                }
+            }
+        }
+    }
+
+    /// Rebuilds the local reminders. Refreshes run one after another, each with the
+    /// preferences current when it starts, so an older one can't overwrite a newer one.
+    func refreshReminders() {
+        let previous = reminderRefresh
+        reminderRefresh = Task {
+            await previous?.value
+            await ReminderScheduler.refresh(settings.preferences, client: client)
+        }
     }
 }

@@ -3,8 +3,8 @@ import Foundation
 import UIKit
 import os
 
-/// Keeps the notification server and the local reminders in sync with this
-/// device's APNs token and the user's preferences.
+/// Keeps the notification server in sync with this device's APNs token and
+/// the user's preferences.
 ///
 /// Apple advises against caching device tokens, so the token only lives in
 /// memory and is requested again at every launch.
@@ -28,9 +28,6 @@ final class PushRegistration {
         #endif
     }
 
-    private var observation: Task<Void, Never>?
-    private var pendingSync: Task<Void, Never>?
-
     /// Registering doesn't prompt the user. It runs at every launch so the
     /// server also learns when alerts were turned off.
     func register() {
@@ -38,28 +35,10 @@ final class PushRegistration {
         UIApplication.shared.registerForRemoteNotifications()
     }
 
-    /// Applies every later change of the preferences, wherever it is made.
-    func observe(_ settings: NotificationSettings, client: IBUClient) {
-        observation = Task {
-            for await preferences in settings.changes {
-                scheduleSync(preferences, client: client)
-            }
-        }
-    }
-
-    /// Applies changed preferences after a short pause, coalescing quick successive changes.
-    private func scheduleSync(_ preferences: NotificationPreferences, client: IBUClient) {
-        pendingSync?.cancel()
-        pendingSync = Task {
-            do {
-                try await Task.sleep(for: .milliseconds(500))
-            } catch {
-                return
-            }
-            if deviceToken == nil { register() }
-            await sync(preferences)
-            await ReminderScheduler.refresh(preferences, client: client)
-        }
+    /// Sends changed preferences, registering first if alerts were just turned on.
+    func update(_ preferences: NotificationPreferences) async {
+        if deviceToken == nil { register() }
+        await sync(preferences)
     }
 
     func didReceive(token: Data, preferences: NotificationPreferences) async {
@@ -98,7 +77,8 @@ final class PushRegistration {
                 Logger.notifications.error("Server answered \(http.statusCode) to \(method, privacy: .public)")
             }
         } catch {
-            Logger.notifications.error("Server sync failed: \(String(describing: error), privacy: .public)")
+            // Private: the request URL in the error carries the device token.
+            Logger.notifications.error("Server sync failed: \(String(describing: error), privacy: .private)")
         }
     }
 

@@ -16,7 +16,7 @@ struct BiathlonApp: App {
         .modelContainer(for: Favorite.self)
         .onChange(of: scenePhase) { _, phase in
             // Start times can move: rebuild the local reminders whenever the app comes back.
-            if phase == .active { Task { await appDelegate.refreshReminders() } }
+            if phase == .active { appDelegate.refreshReminders() }
         }
     }
 }

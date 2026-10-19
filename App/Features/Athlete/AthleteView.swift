@@ -1,24 +1,18 @@
 import BiathlonKit
 import SwiftUI
-import os
 
 struct AthleteView: View {
     let athleteID: String
     let name: String
 
     @Environment(\.ibu) private var ibu
-    @State private var loader = Loader<Profile>()
-
-    private struct Profile {
-        let bio: AthleteBio
-        /// Empty when the history can't be loaded: the profile still shows.
-        let results: [AthleteResult]
-    }
+    @State private var bio = Loader<AthleteBio>()
+    /// Loaded on its own: the profile shows without waiting for it, and without it.
+    @State private var history = Loader<[AthleteResult]>()
 
     var body: some View {
-        LoadableView(state: loader.state, retry: load) { profile in
-            let bio = profile.bio
-            let results = profile.results
+        LoadableView(state: bio.state, retry: load) { bio in
+            let results = history.state.value ?? []
             List {
                 Section {
                     HStack(spacing: 16) {
@@ -74,7 +68,7 @@ struct AthleteView: View {
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: loader.state.value?.bio.nation)
+            FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.state.value?.nation)
         }
         .ibuAttribution()
         .task { await load() }
@@ -88,15 +82,8 @@ struct AthleteView: View {
     }()
 
     private func load() async {
-        await loader.load {
-            async let results = ibu.athleteResults(id: athleteID)
-            let bio = try await ibu.athlete(id: athleteID)
-            do {
-                return Profile(bio: bio, results: try await results)
-            } catch {
-                Logger.data.error("Athlete history failed: \(String(describing: error), privacy: .public)")
-                return Profile(bio: bio, results: [])
-            }
-        }
+        async let bioLoad: Void = bio.load { try await ibu.athlete(id: athleteID) }
+        async let historyLoad: Void = history.load { try await ibu.athleteResults(id: athleteID) }
+        _ = await (bioLoad, historyLoad)
     }
 }
