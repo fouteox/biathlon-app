@@ -48,7 +48,11 @@ private struct RaceActivityView: View {
                 PhaseText(phase: context.state.phase)
             }
             if activityFamily == .small {
-                if let leader = context.state.leaders.first { LeaderLine(leader: leader) }
+                if let leader = context.state.leaders.first {
+                    LeaderLine(leader: leader)
+                } else if context.state.phase.canBeFollowedLive {
+                    StartTime(date: context.state.startTime).font(.subheadline).foregroundStyle(.secondary)
+                }
             } else {
                 RaceProgress(state: context.state)
             }
@@ -68,7 +72,7 @@ private struct RaceProgress: View {
             }
         } else if state.phase.canBeFollowedLive {
             HStack {
-                Text("Start \(state.startTime, format: .dateTime.hour().minute())")
+                StartTime(date: state.startTime)
                 Spacer()
                 // Counts down to the start, then up from it.
                 Text(state.startTime, style: .timer).monospacedDigit().multilineTextAlignment(.trailing)
@@ -77,6 +81,14 @@ private struct RaceProgress: View {
             .foregroundStyle(.secondary)
         }
         // A cancelled race, or one over without results: the phase in the header says it all.
+    }
+}
+
+private struct StartTime: View {
+    let date: Date
+
+    var body: some View {
+        Text("Start \(date, format: .dateTime.hour().minute())")
     }
 }
 

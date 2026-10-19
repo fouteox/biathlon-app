@@ -246,10 +246,13 @@ async function forget(env: Env, channel: ChannelRow) {
     .run();
 }
 
-/** The channel the app subscribes a race's Live Activity to, for its APNs environment. */
+/**
+ * The channel the app subscribes a race's Live Activity to, for its APNs environment;
+ * none once the end is sent, which a new subscriber would miss.
+ */
 export async function channelFor(db: D1Database, raceId: string, environment: APNsEnvironment): Promise<string | undefined> {
   const row = await db
-    .prepare("SELECT channel_id AS channelId FROM live_channels WHERE race_id = ?1 AND environment = ?2")
+    .prepare("SELECT channel_id AS channelId FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND ended_at IS NULL")
     .bind(raceId, environment)
     .first<{ channelId: string }>();
   return row?.channelId;

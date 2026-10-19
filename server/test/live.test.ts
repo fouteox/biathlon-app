@@ -247,6 +247,16 @@ describe("GET /v1/races/:id/channels/:environment", () => {
     expect(await response.json()).toEqual({ channelId: "channel-2" });
   });
 
+  it("answers 404 once the race's activity has ended", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork({ results: relay.results });
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW);
+
+    expect((await get(env, `/v1/races/${RACE_ID}/channels/sandbox`)).status).toBe(404);
+  });
+
   it("answers 404 for a race without a channel and 400 for an unknown environment", async () => {
     const env = await makeEnv();
     expect((await get(env, `/v1/races/${RACE_ID}/channels/production`)).status).toBe(404);
