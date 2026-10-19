@@ -121,7 +121,6 @@ export async function verifyAttestation(input: {
     if (!equal(authData.credentialId!, input.keyId)) throw new AttestationError("credential mismatch");
 
     // 10. The build is one of this app's. 11. The build is still supported.
-    // Devices that send no extensions are accepted.
     checkValidationCategory(authData, input.validationCategories);
     checkBundleVersion(authData, input.minBundleVersion);
     return {
@@ -222,7 +221,9 @@ function parseAuthenticatorData(data: Uint8Array, attested: boolean): Authentica
 }
 
 function checkValidationCategory(authData: AuthenticatorData, allowed = APP_VALIDATION_CATEGORIES): void {
-  if (authData.validationCategory !== undefined && !allowed.includes(authData.validationCategory)) {
+  // Apple asks to verify it, so an object without it can't be trusted.
+  if (authData.validationCategory === undefined) throw new AttestationError("missing validation category");
+  if (!allowed.includes(authData.validationCategory)) {
     throw new AttestationError(`validation category ${authData.validationCategory} not allowed`);
   }
 }
@@ -233,7 +234,8 @@ function checkValidationCategory(authData: AuthenticatorData, allowed = APP_VALI
  * period-separated integers, compared numerically.
  */
 function checkBundleVersion(authData: AuthenticatorData, minimum: string | undefined): void {
-  if (minimum === undefined || authData.bundleVersion === undefined) return;
+  if (authData.bundleVersion === undefined) throw new AttestationError("missing bundle version");
+  if (minimum === undefined) return;
   const version = parseBundleVersion(authData.bundleVersion);
   const floor = parseBundleVersion(minimum);
   if (!version || !floor) throw new AttestationError(`invalid bundle version ${authData.bundleVersion}`);

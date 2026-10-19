@@ -95,11 +95,13 @@ async function makeDevice() {
   const keyId = toBase64(await sha256(publicKey));
   const rpIdHash = await sha256(new TextEncoder().encode(appId));
   let counter = 0;
-  const assert = async (data: Uint8Array, options: { counter?: number; rpIdHash?: Uint8Array } = {}) => {
+  const assert = async (data: Uint8Array, options: { counter?: number; rpIdHash?: Uint8Array; extensions?: Uint8Array } = {}) => {
     counter = options.counter ?? counter + 1;
-    const authenticatorData = new Uint8Array(37);
+    const extensions = options.extensions ?? buildExtensions(3, "1");
+    const authenticatorData = new Uint8Array(37 + extensions.length);
     authenticatorData.set(options.rpIdHash ?? rpIdHash);
     new DataView(authenticatorData.buffer).setUint32(33, counter);
+    authenticatorData.set(extensions, 37);
     const nonce = await sha256(new Uint8Array([...authenticatorData, ...(await sha256(data))]));
     const raw = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, pair.privateKey, nonce));
     return cborMap({ signature: derSignature(raw), authenticatorData });
@@ -107,7 +109,46 @@ async function makeDevice() {
   return { publicKey, keyId, assert };
 }
 
+/** Apple's extensions map: the validation category (little-endian UInt32) and the bundle version. */
+function buildExtensions(category: number, version: string): Uint8Array {
+  const text = (value: string) => {
+    const bytes = new TextEncoder().encode(value);
+    return [bytes.length < 24 ? 0x60 | bytes.length : 0x78, ...(bytes.length < 24 ? [] : [bytes.length]), ...bytes];
+  };
+  return Uint8Array.from([
+    0xa2,
+    ...text("apple_validation_category_01"),
+    0x44,
+    category,
+    0,
+    0,
+    0,
+    ...text("apple_bundle_version_01"),
+    ...text(version),
+  ]);
+}
+
 describe("assertion", () => {
+  it("rejects assertions without the build extensions", async () => {
+    const device = await makeDevice();
+    const data = new TextEncoder().encode("request");
+    const input = { clientData: data, publicKey: device.publicKey, appId, previousCounter: 0 };
+    await expect(verifyAssertion({ ...input, assertion: await device.assert(data, { extensions: new Uint8Array() }) })).rejects.toThrow(
+      "missing validation category",
+    );
+    await expect(
+      verifyAssertion({ ...input, assertion: await device.assert(data, { extensions: buildExtensions(3, "1").subarray(0, 39) }) }),
+    ).rejects.toThrow();
+  });
+
+  it("checks the bundle version of assertions", async () => {
+    const device = await makeDevice();
+    const data = new TextEncoder().encode("request");
+    const input = { clientData: data, publicKey: device.publicKey, appId, previousCounter: 0, minBundleVersion: "2" };
+    await expect(verifyAssertion({ ...input, assertion: await device.assert(data) })).rejects.toThrow("no longer supported");
+    await expect(verifyAssertion({ ...input, assertion: await device.assert(data, { extensions: buildExtensions(4, "2") }) })).resolves.toBe(2);
+  });
+
   it("accepts a signed request and returns its counter", async () => {
     const device = await makeDevice();
     const data = new TextEncoder().encode("request");
