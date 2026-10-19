@@ -495,15 +495,72 @@ describe("Live Activity channels", () => {
     expect((await channels(env)).length).toBe(1);
   });
 
-  it("forgets a channel APNs no longer knows, to open a new one", async () => {
+  it("replaces a channel APNs no longer knows at the next run", async () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
-
     stubNetwork({ broadcastReason: "ChannelNotRegistered" });
     await syncLiveActivities(env, [race({ IsLive: true })], NOW);
 
-    expect(await channels(env)).toEqual([]);
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
+
+    const creations = sent.filter((request) => request.method === "POST" && request.url.includes("api-manage-broadcast"));
+    expect(creations.length).toBe(2);
+    const { results } = await env.DB.prepare("SELECT deleted_at AS deletedAt FROM live_channels").all();
+    expect(results).toEqual([{ deletedAt: null }, { deletedAt: null }]);
+  });
+
+  it("spends the budget on the open channels before sending ends again", async () => {
+    const env = await makeEnv();
+    const ended = JSON.stringify(relayFinal);
+    for (const environment of ["production", "sandbox"]) {
+      await env.DB.prepare(
+        "INSERT INTO live_channels (race_id, environment, channel_id, state, created_at, ended_at, end_sent_at) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?5)",
+      )
+        .bind(RACE_ID, environment, `ended-${environment}`, ended, NOW - 20 * 60_000)
+        .run();
+    }
+    const followed = race({ RaceId: `${RACE_ID}B`, IsLive: true });
+    await env.DB.prepare(
+      "INSERT INTO races (id, category, name, start_time, status, updated_at) VALUES (?1, 'SM', 'x', 'x', 'live', 0)",
+    )
+      .bind(followed.id)
+      .run();
+    stubNetwork();
+    await syncLiveActivities(env, [followed], NOW, new SubrequestBudget(2));
+
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" }), followed], NOW, new SubrequestBudget(3));
+
+    expect(broadcasts(sent).map((request) => request.url)).toEqual([
+      "https://api.push.apple.com/4/broadcasts/apps/com.fouteox.biathlon",
+      "https://api.sandbox.push.apple.com/4/broadcasts/apps/com.fouteox.biathlon",
+    ]);
+    expect(broadcasts(sent).map((request) => request.headers["apns-channel-id"])).toEqual(["channel-1", "channel-2"]);
+  });
+
+  it("takes turns among the races under way when the budget can't cover them all", async () => {
+    const env = await makeEnv();
+    const races = ["A", "B"].map((suffix) => race({ RaceId: RACE_ID + suffix, IsLive: true }));
+    for (const { id } of races) {
+      await env.DB.prepare(
+        "INSERT INTO races (id, category, name, start_time, status, updated_at) VALUES (?1, 'SM', 'x', 'x', 'live', 0)",
+      )
+        .bind(id)
+        .run();
+    }
+    stubNetwork();
+    await syncLiveActivities(env, races, NOW);
+
+    const lookups: string[] = [];
+    for (const run of [1, 2]) {
+      const sent = stubNetwork();
+      await syncLiveActivities(env, races, NOW + run * 60_000, new SubrequestBudget(1));
+      lookups.push(...sent.filter((request) => request.url.includes("biathlonresults.com")).map((request) => request.url));
+    }
+
+    expect(lookups.map((url) => new URL(url).searchParams.get("RaceId"))).toEqual(races.map(({ id }) => id));
   });
 
   it("opens a few channels per run, to stay within the subrequest limit", async () => {
@@ -606,6 +663,32 @@ describe("GET /v1/races/:id/channels/:environment", () => {
     const later = stubNetwork({ results: relay.results });
     await syncLiveActivities(env, finished, NOW + 60 * 60_000);
     expect(later.filter((request) => !request.url.includes("biathlonresults.com"))).toEqual([]);
+    const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
+    expect(response.status).toBe(410);
+    expect(await response.json()).toEqual({ state: relayFinal });
+  });
+
+  it("answers 404 for a channel APNs no longer knows, until it is replaced", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork({ broadcastReason: "ChannelNotRegistered" });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    expect((await get(env, `/v1/races/${RACE_ID}/channels/sandbox`)).status).toBe(404);
+  });
+
+  it("answers 410 with the final state when a race ends before its dropped channel is replaced", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork({ broadcastReason: "ChannelNotRegistered" });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    const sent = stubNetwork({ results: relay.results });
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 60_000);
+
+    expect(sent.filter((request) => !request.url.includes("biathlonresults.com"))).toEqual([]);
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(410);
     expect(await response.json()).toEqual({ state: relayFinal });

@@ -30,8 +30,6 @@ final class LiveActivities {
 
     @ObservationIgnored private let serverURL = Bundle.main.serverURL
     @ObservationIgnored private var observers: [Task<Void, Never>] = []
-    /// Races whose channel is looked up again shortly, at most once at a time.
-    @ObservationIgnored private var pendingLookups: Set<String> = []
 
     var isAvailable: Bool { serverURL != nil && areEnabled }
 
@@ -72,11 +70,15 @@ final class LiveActivities {
         refresh()
     }
 
-    /// Brings every followed race's activities in line with their channels, when the app
-    /// comes back: a broadcast can update an activity but can't move its scheduled start
-    /// or subscribe it to a new channel.
-    func reconcile() async {
-        for raceID in startedRaceIDs { await reconcile(raceID: raceID) }
+    /// Brings every followed race's activities in line with their channels while the app is
+    /// in the foreground, until cancelled: a broadcast can update an activity but can't move
+    /// its scheduled start or subscribe it to the channel the server opens in place of one
+    /// APNs dropped, and a lookup the network or the server failed is tried again.
+    func reconcileWhileActive() async {
+        while !Task.isCancelled {
+            for raceID in startedRaceIDs { await reconcile(raceID: raceID) }
+            try? await Task.sleep(for: Self.channelLookupInterval)
+        }
     }
 
     /// A new activity subscribes after the channel lookup: whatever the server sent in
@@ -90,21 +92,11 @@ final class LiveActivities {
         } catch let Failure.ended(finalState) {
             // The end was sent while the device was offline, which the channel doesn't keep.
             await Self.end(raceID: raceID, finalState: finalState)
+        } catch Failure.noChannel {
+            // A dropped channel the server hasn't replaced yet: looked up again at the next pass.
         } catch {
-            // The server opens a channel in place of one APNs dropped at one of its next
-            // runs, a few per run, and the network or the server can fail for a while:
-            // looked up again while the race's activity is shown.
-            if error as? Failure != .noChannel {
-                Logger.notifications.error(
-                    "Reconciling the Live Activity failed: \(String(describing: error), privacy: .public)")
-            }
-            guard pendingLookups.insert(raceID).inserted else { return }
-            Task { [weak self] in
-                try? await Task.sleep(for: Self.channelLookupInterval)
-                guard let self else { return }
-                pendingLookups.remove(raceID)
-                if startedRaceIDs.contains(raceID) { await reconcile(raceID: raceID) }
-            }
+            Logger.notifications.error(
+                "Reconciling the Live Activity failed: \(String(describing: error), privacy: .public)")
         }
     }
 

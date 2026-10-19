@@ -13,14 +13,16 @@ struct BiathlonApp: App {
                 .environment(appDelegate.settings)
                 .environment(appDelegate.liveActivities)
                 .environment(\.ibu, appDelegate.client)
+                .task(id: scenePhase) {
+                    guard scenePhase == .active else { return }
+                    await appDelegate.liveActivities.reconcileWhileActive()
+                }
         }
         .modelContainer(for: Favorite.self)
         .onChange(of: scenePhase) { _, phase in
-            // Start times can move: rebuild the local reminders and Live Activities whenever
-            // the app comes back.
+            // Start times can move: rebuild the local reminders whenever the app comes back.
             guard phase == .active else { return }
             appDelegate.refreshReminders()
-            Task { await appDelegate.liveActivities.reconcile() }
         }
     }
 }

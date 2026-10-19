@@ -11,8 +11,12 @@ CREATE TABLE live_channels (
   -- When the end event was first sent, then last sent; NULL while the race is followed.
   ended_at INTEGER,
   end_sent_at INTEGER,
-  -- When the channel was deleted at APNs: the row stays, for the app to learn the activity is over.
+  -- When the channel was deleted at APNs, or found unknown there: the row stays, for the
+  -- app to learn the activity is over, or for a new channel to replace it while the race is followed.
   deleted_at INTEGER,
+  -- When a run last looked up the race's results for it: the least recent go first, so a
+  -- short subrequest budget takes turns among the races under way.
+  attempted_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (race_id, environment)
 );
 
