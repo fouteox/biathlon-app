@@ -6,6 +6,7 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
     public let shortDescription: String
     public let startTime: Date
     public let statusID: Int
+    public let statusText: String?
     public let scheduleStatus: String?
     public let isLive: Bool
     public let categoryID: String?
@@ -16,6 +17,7 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
         case shortDescription = "ShortDescription"
         case startTime = "StartTime"
         case statusID = "StatusId"
+        case statusText = "StatusText"
         case scheduleStatus = "ScheduleStatus"
         case isLive = "IsLive"
         case categoryID = "catId"
@@ -28,28 +30,29 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
         shortDescription = try c.decode(String.self, forKey: .shortDescription)
         startTime = try c.decode(Date.self, forKey: .startTime)
         statusID = try c.decodeLooseInt(forKey: .statusID) ?? 0
+        statusText = try c.decodeIfPresent(String.self, forKey: .statusText)
         scheduleStatus = try c.decodeIfPresent(String.self, forKey: .scheduleStatus)
         isLive = try c.decodeIfPresent(Bool.self, forKey: .isLive) ?? false
         categoryID = try c.decodeIfPresent(String.self, forKey: .categoryID)
         legCount = try c.decodeLooseInt(forKey: .legCount)
     }
 
+    /// Same rules as the server (`server/src/ibu.ts`), checked against the
+    /// shared `race-status.json` fixture. Observed values: StatusId 1
+    /// "Scheduled", 6 "Cancelled", 11 "Final".
     public var state: State {
         if isLive { return .live }
-        switch scheduleStatus?.uppercased() {
-        case "FINISHED": return .finished
-        case "CANCELLED", "CANCELED": return .cancelled
-        case "POSTPONED", "DELAYED": return .delayed
-        default: break
-        }
-        // Observed values: 1 = Scheduled, 11 = Final. The others will be
-        // mapped during the first races of the season.
-        return statusID == 11 ? .finished : .scheduled
+        let text = "\(scheduleStatus ?? "") \(statusText ?? "")".uppercased()
+        if text.contains("CANCEL") || statusID == 6 { return .cancelled }
+        if text.contains("FINISHED") || statusID == 11 { return .finished }
+        return .scheduled
     }
 
-    public enum State: Sendable, Hashable {
-        case scheduled, live, delayed, cancelled, finished
+    public enum State: String, Sendable, Hashable {
+        case scheduled, live, cancelled, finished
     }
+
+    public var category: RaceCategory? { categoryID.flatMap(RaceCategory.init(rawValue:)) }
 
     public var isRelay: Bool { (legCount ?? 0) > 1 }
 }

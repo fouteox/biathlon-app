@@ -1,0 +1,27 @@
+[
+  {
+    "name": "scheduled",
+    "status": "scheduled",
+    "race": {"RaceId": "BT2627SWRLCP01SMIN", "catId": "SM", "ShortDescription": "Men's 20km Individual", "StartTime": "2026-11-26T15:15:00Z", "StatusId": 1, "StatusText": "Scheduled", "ScheduleStatus": "SCHEDULED"}
+  },
+  {
+    "name": "finished",
+    "status": "finished",
+    "race": {"RaceId": "BT2526SWRLCP01SMRL", "catId": "SM", "ShortDescription": "Men's 4x7.5km Relay", "StartTime": "2025-11-29T15:55:00Z", "StatusId": 11, "StatusText": "Final", "ScheduleStatus": "FINISHED"}
+  },
+  {
+    "name": "cancelled (real race BT2223SWRLCP09SWPU)",
+    "status": "cancelled",
+    "race": {"RaceId": "BT2223SWRLCP09SWPU", "catId": "SW", "ShortDescription": "Women's 10km Pursuit", "StartTime": "2023-03-18T14:10:00Z", "StatusId": 6, "StatusText": "Cancelled", "ScheduleStatus": "CANCELLED"}
+  },
+  {
+    "name": "cancelled in the status text only",
+    "status": "cancelled",
+    "race": {"RaceId": "BT2627SWRLCP01SWSP", "catId": "SW", "ShortDescription": "Women's 7.5km Sprint", "StartTime": "2026-11-28T12:30:00Z", "StatusId": 1, "StatusText": "Cancelled", "ScheduleStatus": "SCHEDULED"}
+  },
+  {
+    "name": "cancelled status id only",
+    "status": "cancelled",
+    "race": {"RaceId": "BT2627SWRLCP01SMSP", "catId": "SM", "ShortDescription": "Men's 10km Sprint", "StartTime": "2026-11-28T15:30:00Z", "StatusId": 6}
+  }
+]

@@ -1,3 +1,4 @@
+import BiathlonKit
 import Foundation
 import SwiftData
 
@@ -36,5 +37,13 @@ extension ModelContext {
         } else {
             insert(Favorite(kind: kind, key: key, name: name, nation: nation))
         }
+    }
+}
+
+extension FavoriteSet {
+    init(_ favorites: [Favorite]) {
+        self.init(
+            athleteIDs: Set(favorites.filter { $0.kind == .athlete }.map(\.key)),
+            nations: Set(favorites.filter { $0.kind == .nation }.map(\.key)))
     }
 }

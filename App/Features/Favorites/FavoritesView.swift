@@ -1,3 +1,4 @@
+import BiathlonKit
 import SwiftData
 import SwiftUI
 
@@ -43,7 +44,7 @@ struct FavoritesView: View {
         let label = Label {
             Text(favorite.name)
         } icon: {
-            Text(Nation.flag(favorite.nation ?? favorite.key))
+            Text(Nation.flag(favorite.nation ?? favorite.key) ?? "")
         }
         switch favorite.kind {
         case .athlete:

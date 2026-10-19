@@ -2,43 +2,16 @@ import BiathlonKit
 import SwiftUI
 
 struct StandingsView: View {
-    enum Gender: String, CaseIterable, Identifiable {
-        case men = "M"
-        case women = "W"
-        var id: String { rawValue }
-        var label: LocalizedStringResource { self == .men ? "Men" : "Women" }
-    }
-
-    enum Discipline: String, CaseIterable, Identifiable {
-        case total = "TS"
-        case sprint = "SP"
-        case pursuit = "PU"
-        case individual = "IN"
-        case massStart = "MS"
-        case nations = "NC"
-        var id: String { rawValue }
-        var label: LocalizedStringResource {
-            switch self {
-            case .total: "Overall"
-            case .sprint: "Sprint"
-            case .pursuit: "Pursuit"
-            case .individual: "Individual"
-            case .massStart: "Mass start"
-            case .nations: "Nations"
-            }
-        }
-    }
+    /// Standings exist for men and women only.
+    private static let categories: [RaceCategory] = [.men, .women]
 
     @Environment(\.ibu) private var ibu
-    @State private var gender = Gender.men
-    @State private var discipline = Discipline.total
+    @State private var category = RaceCategory.men
+    @State private var discipline = StandingsDiscipline.total
     @State private var state: Loadable<SeasonStandings> = .loading
-
-    private var key: String { gender.rawValue + discipline.rawValue }
 
     var body: some View {
         LoadableView(state: state, retry: load) { loaded in
-            let season = loaded.season
             let standings = loaded.standings
             List {
                 Section {
@@ -46,9 +19,9 @@ struct StandingsView: View {
                         StandingRow(row: row)
                     }
                 } footer: {
-                    if season != .current {
+                    if loaded.isFallback {
                         Text(
-                            "Season \(season.displayName): the \(SeasonID.current.displayName) standings will appear after the first race."
+                            "Season \(loaded.season.displayName): the \(loaded.requestedSeason.displayName) standings will appear after the first race."
                         )
                     } else if let asOf = standings.asOf {
                         Text(asOf)
@@ -60,8 +33,8 @@ struct StandingsView: View {
         // Filters live in system bars rather than a custom header, so the
         // list scrolls under the glass with the scroll edge effect.
         .safeAreaBar(edge: .top) {
-            Picker("Category", selection: $gender) {
-                ForEach(Gender.allCases) { Text($0.label).tag($0) }
+            Picker("Category", selection: $category) {
+                ForEach(Self.categories) { Text($0.title).tag($0) }
             }
             .pickerStyle(.segmented)
             .padding(.horizontal)
@@ -69,40 +42,36 @@ struct StandingsView: View {
         }
         .toolbar {
             Picker("Discipline", selection: $discipline) {
-                ForEach(Discipline.allCases) { Text($0.label).tag($0) }
+                ForEach(StandingsDiscipline.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.menu)
         }
         .navigationTitle("Standings")
         .ibuAttribution()
-        .task(id: key) { await load() }
+        .task(id: [category.rawValue, discipline.rawValue]) { await load() }
     }
 
-    /// Before the first race the season's standings are empty, so the
-    /// previous season's are shown instead.
     private func load() async {
         state = .loading
         do {
-            let current = SeasonID.current
-            let standings = try await ibu.cupStandings(cupID: Cup.worldCupID(current, "S" + key))
-            if standings.rows.isEmpty {
-                let previous = current.previous
-                state = .loaded(
-                    SeasonStandings(
-                        season: previous,
-                        standings: try await ibu.cupStandings(cupID: Cup.worldCupID(previous, "S" + key))))
-            } else {
-                state = .loaded(SeasonStandings(season: current, standings: standings))
-            }
+            state = .loaded(try await ibu.worldCupStandings(category: category, discipline: discipline, now: .now))
         } catch {
             state = .failed(error)
         }
     }
 }
 
-private struct SeasonStandings {
-    let season: SeasonID
-    let standings: CupStandings
+extension StandingsDiscipline {
+    var label: LocalizedStringResource {
+        switch self {
+        case .total: "Overall"
+        case .sprint: "Sprint"
+        case .pursuit: "Pursuit"
+        case .individual: "Individual"
+        case .massStart: "Mass start"
+        case .nations: "Nations"
+        }
+    }
 }
 
 private struct StandingRow: View {
@@ -113,7 +82,7 @@ private struct StandingRow: View {
             Text(row.rank ?? "–")
                 .font(.headline.monospacedDigit())
                 .frame(width: 36, alignment: .leading)
-            Text(Nation.flag(row.isNation ? row.nation ?? row.name : row.nation))
+            Text(Nation.flag(row.isNation ? row.nation ?? row.name : row.nation) ?? "")
             Text(row.shortName ?? row.name)
             if row.bibColors.contains("yellow") {
                 Image(systemName: "tshirt.fill").foregroundStyle(.yellow)

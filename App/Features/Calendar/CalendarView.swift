@@ -3,20 +3,18 @@ import SwiftUI
 
 struct CalendarView: View {
     @Environment(\.ibu) private var ibu
-    @State private var season = SeasonID.current
+    @State private var season = SeasonID.containing(.now)
     @State private var state: Loadable<[BiathlonEvent]> = .loading
 
     /// Current season and the four before it.
-    private var seasons: [SeasonID] {
-        sequence(first: SeasonID.current) { $0.previous }.prefix(5).map(\.self)
-    }
+    private let seasons = SeasonID.recent(5, now: .now)
 
     var body: some View {
         LoadableView(state: state, retry: load) { events in
             List(events) { event in
                 NavigationLink(value: Route.event(event)) {
                     HStack {
-                        Text(Nation.flag(event.nation)).font(.title2)
+                        Text(Nation.flag(event.nation) ?? "").font(.title2)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(event.shortDescription).font(.headline)
                             Text(
@@ -70,7 +68,7 @@ struct EventView: View {
                 NavigationLink(value: Route.race(race)) { RaceRow(race: race) }
             }
         }
-        .navigationTitle("\(Nation.flag(event.nation)) \(event.shortDescription)" as String)
+        .navigationTitle("\(Nation.flag(event.nation) ?? "") \(event.shortDescription)" as String)
         .ibuAttribution()
         .task { await load() }
     }

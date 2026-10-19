@@ -2,11 +2,24 @@ import Foundation
 
 /// World Cup standings identifiers.
 public enum Cup {
-    /// World Cup standings ID for a season, for example
-    /// `worldCupID(.current, "SMTS")` → `BT2627SWRLCP__SMTS`.
-    public static func worldCupID(_ season: SeasonID, _ discipline: String) -> String {
-        "BT\(season.rawValue)SWRLCP__\(discipline)"
+    /// World Cup standings ID, for example `BT2627SWRLCP__SMTS` for the
+    /// men's overall standings of 2026-27.
+    public static func worldCupID(_ season: SeasonID, category: RaceCategory, discipline: StandingsDiscipline) -> String
+    {
+        "BT\(season.rawValue)SWRLCP__\(category.rawValue)\(discipline.rawValue)"
     }
+}
+
+/// The standings tables of a World Cup season (last part of the cup ID).
+public enum StandingsDiscipline: String, CaseIterable, Identifiable, Sendable {
+    case total = "TS"
+    case sprint = "SP"
+    case pursuit = "PU"
+    case individual = "IN"
+    case massStart = "MS"
+    case nations = "NC"
+
+    public var id: String { rawValue }
 }
 
 /// Response of `CupResults?CupId=`.
