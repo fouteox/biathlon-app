@@ -77,13 +77,9 @@ struct NotificationSettingsView: View {
         .onChange(of: settings.anyEnabled) { _, enabled in
             if enabled { Task { await requestAuthorization() } }
         }
-        .task(id: Preferences(settings)) {
-            // Coalesces quick successive changes into one refresh.
-            try? await Task.sleep(for: .milliseconds(500))
-            guard !Task.isCancelled else { return }
-            if settings.wantsPush, push.deviceToken == nil { push.register() }
-            await push.sync(settings)
-            await ReminderScheduler.refresh(settings: settings, client: ibu)
+        .onChange(of: Preferences(settings)) {
+            // Owned by PushRegistration, so dismissing the sheet doesn't cancel it.
+            push.scheduleSync(settings, client: ibu)
         }
     }
 

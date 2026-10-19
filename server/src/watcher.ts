@@ -10,13 +10,21 @@ const EVENTS_TTL_MS = 6 * 60 * 60 * 1000;
 const OUTBOX_MAX_AGE_MS = 30 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
-/** One cron run: detect race changes, queue alerts, then send a batch of them. */
+/** One cron run: detect race changes and queue alerts, then send a batch of them. */
 export async function runCron(env: Env, now: number): Promise<void> {
-  const changes = await pollRaces(env, now);
-  for (const change of changes) await enqueue(env.DB, change, now);
-  await drainOutbox(env, now);
+  try {
+    await pollRaces(env, now);
+  } finally {
+    // Alerts queued by earlier runs still go out while the IBU API is down.
+    await drainOutbox(env, now);
+  }
 }
 
+/**
+ * Compares the IBU schedule with the stored baseline. The new baseline and
+ * the alerts it triggers are written in one D1 batch, which is a transaction,
+ * so a failed run cannot record a change without queuing its alerts.
+ */
 export async function pollRaces(env: Env, now: number): Promise<RaceChange[]> {
   const events = activeEvents(await worldCupEvents(env.DB, now), now);
   if (events.length === 0) return [];
@@ -40,7 +48,10 @@ export async function pollRaces(env: Env, now: number): Promise<RaceChange[]> {
   for (const race of current) {
     const before = previous.get(race.id);
     const change = detectChange(before, race);
-    if (change) changes.push(change);
+    if (change) {
+      changes.push(change);
+      writes.push(enqueue(env.DB, change, now));
+    }
     if (hasChanged(before, race)) {
       writes.push(
         env.DB.prepare(
@@ -56,16 +67,15 @@ export async function pollRaces(env: Env, now: number): Promise<RaceChange[]> {
 }
 
 /** Queues one alert per device subscribed to the race's category and to this kind of change. */
-export async function enqueue(db: D1Database, change: RaceChange, now: number): Promise<void> {
+function enqueue(db: D1Database, change: RaceChange, now: number): D1PreparedStatement {
   const preference = change.kind === "cancelled" ? "cancellation" : "rescheduling";
-  await db
+  return db
     .prepare(
       `INSERT INTO outbox (token, environment, kind, race_id, race_name, start_time, locale, time_zone, created_at)
        SELECT token, environment, ?1, ?2, ?3, ?4, locale, time_zone, ?5 FROM devices
        WHERE ${preference} = 1 AND (',' || categories || ',') LIKE ('%,' || ?6 || ',%')`,
     )
-    .bind(change.kind, change.race.id, change.race.name, change.race.startTime, now, change.race.category)
-    .run();
+    .bind(change.kind, change.race.id, change.race.name, change.race.startTime, now, change.race.category);
 }
 
 interface OutboxRow {
@@ -79,6 +89,7 @@ interface OutboxRow {
   locale: string;
   time_zone: string;
   attempts: number;
+  created_at: number;
 }
 
 export async function drainOutbox(env: Env, now: number): Promise<void> {
@@ -94,13 +105,14 @@ export async function drainOutbox(env: Env, now: number): Promise<void> {
   const unregistered: string[] = [];
   if (rows.length > 0) {
     let token = await providerToken(env, now);
+    let refreshed = false;
     for (const row of rows) {
       const request = {
         deviceToken: row.token,
         environment: row.environment,
         topic: env.APNS_TOPIC,
         collapseId: `${row.kind}-${row.race_id}`,
-        expiration: Math.floor((now + OUTBOX_MAX_AGE_MS) / 1000),
+        expiration: Math.floor((row.created_at + OUTBOX_MAX_AGE_MS) / 1000),
         payload: buildPayload({
           kind: row.kind,
           raceId: row.race_id,
@@ -111,7 +123,9 @@ export async function drainOutbox(env: Env, now: number): Promise<void> {
         }),
       };
       let outcome = await sendPush(request, token);
-      if (outcome.kind === "expiredProviderToken") {
+      // Sign a new token at most once per run: APNs rejects updates more frequent than every 20 minutes.
+      if (outcome.kind === "expiredProviderToken" && !refreshed) {
+        refreshed = true;
         token = await providerToken(env, now, true);
         outcome = await sendPush(request, token);
       }

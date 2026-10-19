@@ -125,6 +125,7 @@ describe("APNs", () => {
     expect(classify(410, "Unregistered").kind).toBe("unregistered");
     expect(classify(400, "BadDeviceToken").kind).toBe("unregistered");
     expect(classify(403, "ExpiredProviderToken").kind).toBe("expiredProviderToken");
+    expect(classify(403, "InvalidProviderToken").kind).toBe("expiredProviderToken");
     expect(classify(429, "TooManyRequests").kind).toBe("retry");
     expect(classify(400, "BadTopic").kind).toBe("failed");
   });

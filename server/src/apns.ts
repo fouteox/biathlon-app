@@ -57,7 +57,7 @@ export type PushOutcome =
   | { kind: "sent" }
   /** The token is no longer valid for the topic: forget the device. */
   | { kind: "unregistered" }
-  /** The provider token was rejected: sign a new one. */
+  /** The provider token was rejected: sign a new one and retry once. */
   | { kind: "expiredProviderToken" }
   | { kind: "retry"; reason: string }
   | { kind: "failed"; reason: string };
@@ -91,7 +91,10 @@ export function classify(status: number, reason: string): PushOutcome {
   if (status === 400 && (reason === "BadDeviceToken" || reason === "DeviceTokenNotForTopic")) {
     return { kind: "unregistered" };
   }
-  if (status === 403 && reason === "ExpiredProviderToken") return { kind: "expiredProviderToken" };
+  // InvalidProviderToken also covers a cached token signed with a key that was since rotated.
+  if (status === 403 && (reason === "ExpiredProviderToken" || reason === "InvalidProviderToken")) {
+    return { kind: "expiredProviderToken" };
+  }
   if (status === 429 || status >= 500) return { kind: "retry", reason: `${status} ${reason}` };
   return { kind: "failed", reason: `${status} ${reason}` };
 }

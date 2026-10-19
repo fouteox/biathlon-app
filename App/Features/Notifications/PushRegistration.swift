@@ -1,3 +1,4 @@
+import BiathlonKit
 import Foundation
 import UIKit
 
@@ -28,8 +29,25 @@ final class PushRegistration {
         #endif
     }
 
+    @ObservationIgnored private var pendingSync: Task<Void, Never>?
+
+    /// Registering doesn't prompt the user. It runs at every launch so the
+    /// server also learns when alerts were turned off.
     func register() {
+        guard serverURL != nil else { return }
         UIApplication.shared.registerForRemoteNotifications()
+    }
+
+    /// Applies changed preferences after a short pause, coalescing quick successive changes.
+    func scheduleSync(_ settings: NotificationSettings, client: IBUClient) {
+        pendingSync?.cancel()
+        pendingSync = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            if deviceToken == nil { register() }
+            await sync(settings)
+            await ReminderScheduler.refresh(settings: settings, client: client)
+        }
     }
 
     func didReceive(token: Data, settings: NotificationSettings) async {
