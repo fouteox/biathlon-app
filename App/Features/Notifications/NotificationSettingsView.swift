@@ -1,3 +1,4 @@
+import BiathlonKit
 import SwiftUI
 import UserNotifications
 
