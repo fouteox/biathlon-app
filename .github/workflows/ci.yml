@@ -21,7 +21,7 @@ jobs:
     container: swift:6.4
     steps:
       - uses: actions/checkout@v4
-      - run: swift format lint --strict --recursive App Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
+      - run: swift format lint --strict --recursive App Shared Widgets Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
 
   server:
     name: Server (Cloudflare Worker)
@@ -66,6 +66,12 @@ jobs:
           done
       - name: Check privacy manifest
         run: test -f build/Build/Products/Debug-iphonesimulator/Biathlon.app/PrivacyInfo.xcprivacy
+      # The Live Activities run in the widget extension, embedded in the app.
+      - name: Check widget extension
+        run: |
+          app=build/Build/Products/Debug-iphonesimulator/Biathlon.app
+          test "$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$app/PlugIns/BiathlonWidgets.appex/Info.plist")" = com.apple.widgetkit-extension
+          test "$(plutil -extract NSSupportsLiveActivities raw "$app/Info.plist")" = true
       # xcconfig files read // as a comment: check the server URL survived.
       - name: Check Info.plist
         run: |

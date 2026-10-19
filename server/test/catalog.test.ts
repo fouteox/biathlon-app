@@ -5,7 +5,7 @@ import { LOC_KEYS } from "../src/payload";
 // APNs resolves loc-keys from the app's Localizable table, so every key the
 // server sends must exist there in every app language.
 describe("app String Catalog", () => {
-  const catalog = JSON.parse(readFileSync(new URL("../../App/Resources/Localizable.xcstrings", import.meta.url), "utf8"));
+  const catalog = JSON.parse(readFileSync(new URL("../../Shared/Localizable.xcstrings", import.meta.url), "utf8"));
 
   for (const key of Object.values(LOC_KEYS).flatMap((pair) => Object.values(pair))) {
     it(`translates ${key}`, () => {

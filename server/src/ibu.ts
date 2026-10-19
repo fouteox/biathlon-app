@@ -16,6 +16,7 @@ export interface IBUCompetition {
   StatusId?: number | string | null;
   StatusText?: string | null;
   ScheduleStatus?: string | null;
+  IsLive?: boolean | null;
 }
 
 /** The fields of a race the watcher compares from one poll to the next. */
@@ -27,7 +28,7 @@ export interface RaceSnapshot {
   status: RaceStatus;
 }
 
-export type RaceStatus = "scheduled" | "cancelled" | "finished" | "other";
+export type RaceStatus = "scheduled" | "live" | "cancelled" | "finished";
 
 export async function fetchIBU<T>(path: string, query: Record<string, string>): Promise<T> {
   const url = new URL(path, IBU_BASE_URL);
@@ -68,7 +69,7 @@ export function snapshot(race: IBUCompetition): RaceSnapshot {
     category: race.catId ?? "",
     name: race.ShortDescription,
     startTime: new Date(parseIBUDate(race.StartTime)).toISOString(),
-    status: status(race),
+    status: raceStatus(race),
   };
 }
 
@@ -77,10 +78,10 @@ export function snapshot(race: IBUCompetition): RaceSnapshot {
  * CANCELLED and 11 / "Final" / FINISHED. Same rules as the app
  * (`Competition.state`), checked against the shared `race-status.json` fixture.
  */
-function status(race: IBUCompetition): RaceStatus {
+export function raceStatus(race: Omit<IBUCompetition, "RaceId" | "ShortDescription">): RaceStatus {
+  if (race.IsLive) return "live";
   const text = `${race.ScheduleStatus ?? ""} ${race.StatusText ?? ""}`.toUpperCase();
   if (text.includes("CANCEL") || Number(race.StatusId) === 6) return "cancelled";
   if (text.includes("FINISHED") || Number(race.StatusId) === 11) return "finished";
-  if (text.includes("SCHEDULED") || Number(race.StatusId) === 1) return "scheduled";
-  return "other";
+  return "scheduled";
 }

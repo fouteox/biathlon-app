@@ -11,6 +11,7 @@ struct BiathlonApp: App {
         WindowGroup {
             RootView()
                 .environment(appDelegate.settings)
+                .environment(appDelegate.liveActivities)
                 .environment(\.ibu, appDelegate.client)
         }
         .modelContainer(for: Favorite.self)

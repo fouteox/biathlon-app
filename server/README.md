@@ -4,6 +4,7 @@ Cloudflare Worker that:
 
 - polls biathlonresults.com every minute (Cron Trigger) during World Cup events and detects cancelled races and start time changes;
 - sends the matching alerts through APNs to registered devices (texts are localized on the device, see `src/payload.ts`);
+- runs one Live Activity per race (`src/live.ts`): it opens an APNs broadcast channel per race and environment for the upcoming races, publishes each new state (start time, phase, first three) on it while the race runs, then ends the activity and deletes the channel;
 - exposes a read-only cache of the IBU API under `/ibu/`, which the app reads instead of biathlonresults.com. The Cache API also works on `*.workers.dev` (`cf-cache-status: HIT`, measured on 2026-10-19).
 
 ## API
@@ -14,7 +15,8 @@ Cloudflare Worker that:
 | `POST` | `/v1/app-attest/keys` | `{ "keyId": "<base64>", "attestation": "<base64>", "challenge": "…" }` |
 | `PUT` | `/v1/devices/:token` | `{ "environment": "sandbox" \| "production", "categories": ["SM","SW","MX"], "cancellation": true, "rescheduling": true, "locale": "fr-FR", "timeZone": "Europe/Paris" }` |
 | `DELETE` | `/v1/devices/:token` | |
-| `GET` | `/v1/health` | Returns `{"apns":{"http2":true}}` when the Worker reaches APNs over HTTP/2. |
+| `GET` | `/v1/races/:raceId/channels/:environment` | Returns `{"channelId":"…"}`, the broadcast channel the app subscribes the race's Live Activity to (`404` when the race has none). |
+| `GET` | `/v1/health` | Returns `{"apns":{"pushes":{"http2":true},"channels":{"http2":true}}}` when the Worker reaches APNs over HTTP/2, for pushes and for channel management. |
 | `GET` | `/ibu/<endpoint>?…` | Same paths and query strings as the IBU API. |
 
 ### App Attest
@@ -26,6 +28,7 @@ Each `PUT` and `DELETE` on `/v1/devices/:token` then carries three headers: `X-A
 ## Deploy
 
 1. In the Apple Developer account (Certificates, Identifiers & Profiles > Keys), create two team-scoped APNs keys, one for Sandbox and one for Production, as Apple recommends one key per environment. Note each Key ID and the Team ID (Membership details).
+   In Identifiers, open `com.fouteox.biathlon` and check **Broadcast Capability** under Push Notifications: Live Activity channels need it, and Xcode can't enable it.
 2. From this folder:
 
    ```sh
@@ -46,7 +49,9 @@ Each `PUT` and `DELETE` on `/v1/devices/:token` then carries three headers: `X-A
 
 ## Limits (Workers Free plan)
 
-Each APNs request is a subrequest, and the Free plan allows 50 per invocation, D1 queries included. `MAX_PUSHES_PER_RUN` (30 by default) caps the pushes sent per minute; the rest wait in the `outbox` table for the next runs, and alerts older than 30 minutes are dropped. On the Paid plan, raise it.
+Each request to APNs or to the IBU API is a subrequest, and the Free plan allows 50 per invocation (D1 queries count separately, up to 1,000). `MAX_PUSHES_PER_RUN` (30 by default) caps the alerts sent per minute; the rest wait in the `outbox` table for the next runs, and alerts older than 30 minutes are dropped. On the Paid plan, raise it.
+
+Live Activities take the rest: at most 4 channel creations per run, then for each race running or just over, one IBU request and one broadcast per environment. A broadcast reaches every subscriber at once, so their number doesn't count.
 
 ## Develop
 

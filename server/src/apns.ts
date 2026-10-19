@@ -1,12 +1,30 @@
 // APNs provider API, token-based authentication.
 // https://developer.apple.com/documentation/usernotifications/establishing-a-token-based-connection-to-apns
 // https://developer.apple.com/documentation/usernotifications/sending-notification-requests-to-apns
+// https://developer.apple.com/documentation/usernotifications/sending-channel-management-requests-to-apns
+// https://developer.apple.com/documentation/usernotifications/sending-broadcast-push-notification-requests-to-apns
 
 export type APNsEnvironment = "sandbox" | "production";
 
+export const ENVIRONMENTS: readonly APNsEnvironment[] = ["production", "sandbox"];
+
+export function isEnvironment(value: unknown): value is APNsEnvironment {
+  return ENVIRONMENTS.includes(value as APNsEnvironment);
+}
+
+/** Device pushes and broadcasts. */
 const HOSTS: Record<APNsEnvironment, string> = {
   sandbox: "https://api.sandbox.push.apple.com",
   production: "https://api.push.apple.com",
+};
+
+/**
+ * Broadcast channel management, on its own ports. Workers honor custom ports in
+ * `fetch` since the `allow_custom_ports` compatibility date (2024-09-02).
+ */
+const CHANNEL_HOSTS: Record<APNsEnvironment, string> = {
+  sandbox: "https://api-manage-broadcast.sandbox.push.apple.com:2195",
+  production: "https://api-manage-broadcast.push.apple.com:2196",
 };
 
 /**
@@ -55,7 +73,7 @@ export interface PushRequest {
 
 export type PushOutcome =
   | { kind: "sent" }
-  /** The token is no longer valid for the topic: forget the device. */
+  /** The device token or the channel is no longer valid: forget it. */
   | { kind: "unregistered" }
   /** The provider token was rejected: sign a new one and retry once. */
   | { kind: "expiredProviderToken" }
@@ -64,33 +82,103 @@ export type PushOutcome =
 
 export async function sendPush(request: PushRequest, providerToken: string): Promise<PushOutcome> {
   const headers: Record<string, string> = {
-    authorization: `bearer ${providerToken}`,
     "apns-push-type": "alert",
     "apns-topic": request.topic,
     "apns-priority": "10",
     "apns-expiration": String(request.expiration),
   };
   if (request.collapseId) headers["apns-collapse-id"] = request.collapseId;
+  const { outcome } = await apnsRequest(
+    `${HOSTS[request.environment]}/3/device/${request.deviceToken}`,
+    "POST",
+    headers,
+    providerToken,
+    request.payload,
+  );
+  return outcome;
+}
+
+export interface BroadcastRequest {
+  environment: APNsEnvironment;
+  /** The app's bundle ID. */
+  bundleId: string;
+  channelId: string;
+  payload: unknown;
+}
+
+/**
+ * Publishes a Live Activity update to every device subscribed to the channel.
+ * Priority 10: each broadcast carries a change people follow the race for. Channels
+ * store no messages, which only accept an expiration of 0.
+ */
+export async function broadcast(request: BroadcastRequest, providerToken: string): Promise<PushOutcome> {
+  const headers = {
+    "apns-push-type": "liveactivity",
+    "apns-channel-id": request.channelId,
+    "apns-priority": "10",
+    "apns-expiration": "0",
+  };
+  const url = `${HOSTS[request.environment]}/4/broadcasts/apps/${request.bundleId}`;
+  return (await apnsRequest(url, "POST", headers, providerToken, request.payload)).outcome;
+}
+
+export type ChannelOutcome = { kind: "created"; channelId: string } | Exclude<PushOutcome, { kind: "sent" }>;
+
+/**
+ * Creates a Live Activity channel that stores no messages: Apple's choice for
+ * frequently updated sports scores, with a higher publishing budget.
+ */
+export async function createChannel(
+  environment: APNsEnvironment,
+  bundleId: string,
+  providerToken: string,
+): Promise<ChannelOutcome> {
+  const url = `${CHANNEL_HOSTS[environment]}/1/apps/${bundleId}/channels`;
+  const body = { "message-storage-policy": 0, "push-type": "LiveActivity" };
+  const { outcome, response } = await apnsRequest(url, "POST", {}, providerToken, body);
+  if (outcome.kind !== "sent") return outcome;
+  const channelId = response?.headers.get("apns-channel-id");
+  return channelId ? { kind: "created", channelId } : { kind: "failed", reason: "no apns-channel-id header" };
+}
+
+/** Deletes a channel. "unregistered" means it was already gone. */
+export async function deleteChannel(
+  environment: APNsEnvironment,
+  bundleId: string,
+  channelId: string,
+  providerToken: string,
+): Promise<PushOutcome> {
+  const url = `${CHANNEL_HOSTS[environment]}/1/apps/${bundleId}/channels`;
+  return (await apnsRequest(url, "DELETE", { "apns-channel-id": channelId }, providerToken)).outcome;
+}
+
+/** Sends one authenticated request; any 2xx status is a success. */
+async function apnsRequest(
+  url: string,
+  method: "POST" | "DELETE",
+  headers: Record<string, string>,
+  providerToken: string,
+  payload?: unknown,
+): Promise<{ outcome: PushOutcome; response?: Response }> {
   let response: Response;
   try {
-    response = await fetch(`${HOSTS[request.environment]}/3/device/${request.deviceToken}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(request.payload),
+    response = await fetch(url, {
+      method,
+      headers: { ...headers, authorization: `bearer ${providerToken}` },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
     });
   } catch (error) {
-    return { kind: "retry", reason: String(error) };
+    return { outcome: { kind: "retry", reason: String(error) } };
   }
-  if (response.status === 200) return { kind: "sent" };
-  const reason = await errorReason(response);
-  return classify(response.status, reason);
+  if (response.ok) return { outcome: { kind: "sent" }, response };
+  return { outcome: classify(response.status, await errorReason(response)), response };
 }
+
+const UNREGISTERED_REASONS = new Set(["BadDeviceToken", "DeviceTokenNotForTopic", "ChannelNotRegistered", "BadChannelId"]);
 
 export function classify(status: number, reason: string): PushOutcome {
   if (status === 410) return { kind: "unregistered" };
-  if (status === 400 && (reason === "BadDeviceToken" || reason === "DeviceTokenNotForTopic")) {
-    return { kind: "unregistered" };
-  }
+  if (status === 400 && UNREGISTERED_REASONS.has(reason)) return { kind: "unregistered" };
   // InvalidProviderToken also covers a cached token signed with a key that was since rotated.
   if (status === 403 && (reason === "ExpiredProviderToken" || reason === "InvalidProviderToken")) {
     return { kind: "expiredProviderToken" };
@@ -100,17 +188,23 @@ export function classify(status: number, reason: string): PushOutcome {
 }
 
 /**
- * Checks that this runtime reaches APNs over HTTP/2. Without a provider
- * token, APNs answers 403 with a JSON `MissingProviderToken` reason, and it
- * only does so over HTTP/2.
+ * Checks that this runtime reaches APNs over HTTP/2, for device pushes and for
+ * channel management (on port 2195 or 2196). Without a provider token, APNs answers
+ * 403 with a JSON `MissingProviderToken` reason, and it only does so over HTTP/2.
  */
-export async function probe(environment: APNsEnvironment, topic: string): Promise<{ http2: boolean; detail: string }> {
+export async function probe(environment: APNsEnvironment, topic: string) {
+  return {
+    pushes: await probeURL(`${HOSTS[environment]}/3/device/00`, "POST", {
+      "apns-topic": topic,
+      "apns-push-type": "alert",
+    }),
+    channels: await probeURL(`${CHANNEL_HOSTS[environment]}/1/apps/${topic}/all-channels`, "GET", {}),
+  };
+}
+
+async function probeURL(url: string, method: string, headers: Record<string, string>) {
   try {
-    const response = await fetch(`${HOSTS[environment]}/3/device/00`, {
-      method: "POST",
-      headers: { "apns-topic": topic, "apns-push-type": "alert" },
-      body: "{}",
-    });
+    const response = await fetch(url, { method, headers, body: method === "POST" ? "{}" : undefined });
     const reason = await errorReason(response);
     return { http2: reason === "MissingProviderToken", detail: `${response.status} ${reason}` };
   } catch (error) {

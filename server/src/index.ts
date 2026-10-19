@@ -1,8 +1,9 @@
-import { probe } from "./apns";
+import { isEnvironment, probe } from "./apns";
 import { deleteOwnedDevice, isDeviceToken, ownsDevice, parseRegistration, saveDevice } from "./devices";
 import { IBU_BASE_URL } from "./ibu";
 import { isPurpose, issueChallenge } from "./challenges";
 import { authorize, pruneKeys, registerKey } from "./keys";
+import { channelFor } from "./live";
 import { runCron } from "./watcher";
 
 export default {
@@ -35,6 +36,14 @@ export default {
     if (url.pathname === "/v1/app-attest/keys" && request.method === "POST") {
       const failure = await registerKey(env, await request.json().catch(() => undefined), Date.now());
       return failure ? json({ error: failure.error }, failure.status) : new Response(null, { status: 204 });
+    }
+
+    const channel = url.pathname.match(/^\/v1\/races\/([^/]+)\/channels\/([^/]+)$/);
+    if (channel && request.method === "GET") {
+      const [, raceId = "", environment = ""] = channel.map(decodeURIComponent);
+      if (!isEnvironment(environment)) return json({ error: "invalid environment" }, 400);
+      const channelId = await channelFor(env.DB, raceId, environment);
+      return channelId ? json({ channelId }) : json({ error: "no channel for this race" }, 404);
     }
 
     if (url.pathname === "/v1/health" && request.method === "GET") {
