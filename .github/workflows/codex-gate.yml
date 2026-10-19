@@ -138,11 +138,17 @@ jobs:
                 .sort((x, y) => x.at - y.at)
                 .pop();
 
-              // A review requested after the latest verdict replaces it.
+              // A review requested after the latest verdict replaces it. Only
+              // the PR author and repository members can request one, since
+              // anyone can comment on a public repository. Timestamps have
+              // one-second precision, so a request in the same second wins.
+              const trusted = ['OWNER', 'MEMBER', 'COLLABORATOR'];
               const requested = Math.max(0, ...comments
-                .filter((c) => !isCodex(c.user?.login) && /@codex\s+(security\s+)?review\b/i.test(c.body ?? ''))
+                .filter((c) => !isCodex(c.user?.login))
+                .filter((c) => c.user?.login === pr.user?.login || trusted.includes(c.author_association))
+                .filter((c) => /@codex\s+(security\s+)?review\b/i.test(c.body ?? ''))
                 .map((c) => Date.parse(c.updated_at)));
-              if (requested > (latest?.at ?? 0)) {
+              if (requested > 0 && requested >= (latest?.at ?? 0)) {
                 return { sha, state: 'pending', description: 'Codex review requested', retry: true };
               }
 
