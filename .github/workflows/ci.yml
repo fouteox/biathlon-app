@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  kit-linux:
+    name: BiathlonKit (Linux)
+    runs-on: ubuntu-24.04
+    container: swift:6.4
+    steps:
+      - uses: actions/checkout@v4
+      - run: swift test
+        working-directory: Packages/BiathlonKit
+
+  app-ios:
+    name: App (iOS Simulator)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -version && swift --version
+      - run: brew install xcodegen
+      - run: xcodegen
+      - name: Build
+        run: |
+          xcodebuild build \
+            -project Biathlon.xcodeproj \
+            -scheme Biathlon \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO

@@ -1,0 +1,48 @@
+# Projet Xcode généré par XcodeGen : `brew install xcodegen && xcodegen`
+name: Biathlon
+options:
+  bundleIdPrefix: com.fouteox
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: "" # à renseigner avec l'identifiant d'équipe Apple Developer
+packages:
+  BiathlonKit:
+    path: Packages/BiathlonKit
+targets:
+  Biathlon:
+    type: application
+    platform: iOS
+    sources:
+      - App
+    dependencies:
+      - package: BiathlonKit
+    info:
+      path: App/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Biathlon Live
+        CFBundleDevelopmentRegion: fr
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.fouteox.biathlon
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+schemes:
+  Biathlon:
+    build:
+      targets:
+        Biathlon: all
+    test:
+      targets:
+        - package: BiathlonKit/BiathlonKitTests
