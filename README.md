@@ -18,6 +18,12 @@ Tests du client API (sans Xcode) :
 cd Packages/BiathlonKit && swift test
 ```
 
+## Environnement Claude Code cloud
+
+Le conteneur cloud est sous Linux : il compile et teste `BiathlonKit`, mais pas l'app SwiftUI, qui demande macOS et Xcode. L'app est compilée par la CI GitHub Actions sur un runner macOS.
+
+Pour avoir Swift dans le conteneur, coller `scripts/cloud-setup.sh` dans le « Setup script » de l'environnement cloud et autoriser le domaine `download.swift.org`.
+
 ## Structure
 
 - `Packages/BiathlonKit` : modèles et client de l'API biathlonresults.com, testés avec Swift Testing.
