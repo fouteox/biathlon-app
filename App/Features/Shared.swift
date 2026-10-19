@@ -76,33 +76,11 @@ struct LoadableView<Value, Content: View>: View {
     }
 }
 
-enum Nation {
-    /// IOC codes to ISO codes, for flags.
-    private static let iso: [String: String] = [
-        "AUT": "AT", "BEL": "BE", "BUL": "BG", "CAN": "CA", "CHN": "CN", "CZE": "CZ",
-        "EST": "EE", "FIN": "FI", "FRA": "FR", "GER": "DE", "GBR": "GB", "ITA": "IT",
-        "JPN": "JP", "KAZ": "KZ", "KOR": "KR", "LAT": "LV", "LTU": "LT", "MDA": "MD",
-        "NOR": "NO", "POL": "PL", "ROU": "RO", "SLO": "SI", "SUI": "CH", "SVK": "SK",
-        "SWE": "SE", "UKR": "UA", "USA": "US", "AUS": "AU", "CRO": "HR", "SRB": "RS",
-        "ARG": "AR", "BRA": "BR", "DEN": "DK", "ESP": "ES", "GRE": "GR", "HUN": "HU",
-        "ISL": "IS", "MGL": "MN", "NED": "NL", "IRL": "IE",
-    ]
-
-    static func flag(_ code: String?) -> String {
-        guard let code, let iso = iso[code.uppercased()] else { return "🏳️" }
-        return iso.unicodeScalars
-            .compactMap { UnicodeScalar(127_397 + $0.value) }
-            .map(String.init)
-            .joined()
-    }
-}
-
 extension Competition.State {
     var label: LocalizedStringResource {
         switch self {
         case .scheduled: "Upcoming"
         case .live: "Live"
-        case .delayed: "Delayed"
         case .cancelled: "Cancelled"
         case .finished: "Finished"
         }
@@ -111,7 +89,6 @@ extension Competition.State {
     var tint: Color {
         switch self {
         case .live: .red
-        case .delayed: .orange
         case .cancelled: .gray
         case .finished: .secondary
         case .scheduled: .blue

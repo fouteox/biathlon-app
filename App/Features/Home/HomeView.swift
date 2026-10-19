@@ -17,7 +17,7 @@ struct HomeView: View {
                             LiveHeader(race: live)
                         }
                         if let results = snapshot.liveResults {
-                            TopResults(rows: results.standings, limit: 5, favorites: favorites)
+                            TopResults(rows: results.standings, limit: 5, favorites: favoriteSet)
                         }
                     } header: {
                         Label("Live", systemImage: "dot.radiowaves.left.and.right")
@@ -39,14 +39,14 @@ struct HomeView: View {
                 }
 
                 if let results = snapshot.latestResults, let race = snapshot.latestFinished {
-                    let mine = favoriteRows(in: results)
+                    let mine = results.standings.filter(favoriteSet.contains)
                     if !mine.isEmpty {
                         Section("My favorites · \(race.shortDescription)") {
-                            TopResults(rows: mine, limit: mine.count, favorites: favorites)
+                            TopResults(rows: mine, limit: mine.count, favorites: favoriteSet)
                         }
                     }
                     Section {
-                        TopResults(rows: results.standings, limit: 3, favorites: favorites)
+                        TopResults(rows: results.standings, limit: 3, favorites: favoriteSet)
                         NavigationLink("All results", value: Route.race(race))
                     } header: {
                         Text("Latest result · \(race.shortDescription)")
@@ -57,7 +57,7 @@ struct HomeView: View {
                     Section {
                         NavigationLink(value: Route.event(event)) {
                             Label(
-                                "\(Nation.flag(event.nation)) \(event.shortDescription)" as String,
+                                "\(Nation.flag(event.nation) ?? "") \(event.shortDescription)" as String,
                                 systemImage: "mappin.and.ellipse")
                         }
                     } header: {
@@ -96,15 +96,7 @@ struct HomeView: View {
         await model.load(using: ibu)
     }
 
-    private func favoriteRows(in results: RaceResults) -> [ResultRow] {
-        let athletes = Set(favorites.filter { $0.kind == .athlete }.map(\.key))
-        let nations = Set(favorites.filter { $0.kind == .nation }.map(\.key))
-        return results.standings.filter { row in
-            if let id = row.athleteID, athletes.contains(id) { return true }
-            if let nat = row.nation, nations.contains(nat) { return true }
-            return false
-        }
-    }
+    private var favoriteSet: FavoriteSet { FavoriteSet(favorites) }
 }
 
 private struct LiveHeader: View {
@@ -123,20 +115,11 @@ private struct LiveHeader: View {
 struct TopResults: View {
     let rows: [ResultRow]
     let limit: Int
-    let favorites: [Favorite]
+    let favorites: FavoriteSet
 
     var body: some View {
         ForEach(rows.prefix(limit)) { row in
-            ResultLine(row: row, highlighted: isFavorite(row))
-        }
-    }
-
-    private func isFavorite(_ row: ResultRow) -> Bool {
-        favorites.contains { favorite in
-            switch favorite.kind {
-            case .athlete: favorite.key == row.athleteID
-            case .nation: favorite.key == row.nation
-            }
+            ResultLine(row: row, highlighted: favorites.contains(row))
         }
     }
 }
@@ -150,7 +133,7 @@ struct ResultLine: View {
             Text(row.irm ?? row.rank ?? "–")
                 .font(.headline.monospacedDigit())
                 .frame(width: 36, alignment: .leading)
-            Text(Nation.flag(row.nation))
+            Text(Nation.flag(row.nation) ?? "")
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.shortName ?? row.name)
                     .fontWeight(highlighted ? .bold : .regular)

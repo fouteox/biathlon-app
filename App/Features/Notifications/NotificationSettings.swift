@@ -1,14 +1,8 @@
+import BiathlonKit
 import Foundation
 import Observation
 
-/// IBU race categories (`catId`) the user can subscribe to.
-enum RaceCategory: String, CaseIterable, Codable, Identifiable {
-    case men = "SM"
-    case women = "SW"
-    case mixed = "MX"
-
-    var id: String { rawValue }
-
+extension RaceCategory {
     var title: String {
         switch self {
         case .men: String(localized: "Men")

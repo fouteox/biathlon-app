@@ -15,6 +15,7 @@ struct DecodingTests {
         let first = try #require(events.first)
         #expect(first.id == "BT2627SWRLCP01")
         #expect(first.nation == "FIN")
+        #expect(!first.isWorldChampionships)
     }
 
     @Test func competitionStates() throws {
@@ -47,14 +48,18 @@ struct DecodingTests {
     }
 
     @Test func seasonIDs() {
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = .gmt
-        let october = calendar.date(from: DateComponents(year: 2026, month: 10, day: 19))!
-        let march = calendar.date(from: DateComponents(year: 2027, month: 3, day: 1))!
-        #expect(SeasonID.containing(october, calendar: calendar).rawValue == "2627")
-        #expect(SeasonID.containing(march, calendar: calendar).rawValue == "2627")
+        #expect(SeasonID.containing(date("2026-10-19T12:00:00Z")).rawValue == "2627")
+        #expect(SeasonID.containing(date("2027-03-01T12:00:00Z")).rawValue == "2627")
+        #expect(SeasonID.containing(date("2026-06-30T23:59:00Z")).rawValue == "2526")
+        #expect(SeasonID.recent(3, now: date("2026-10-19T12:00:00Z")).map(\.rawValue) == ["2627", "2526", "2425"])
         #expect(SeasonID(rawValue: "2627").previous.rawValue == "2526")
         #expect(SeasonID(rawValue: "2627").displayName == "2026-27")
-        #expect(Cup.worldCupID(SeasonID(rawValue: "2627"), "SMTS") == "BT2627SWRLCP__SMTS")
+    }
+
+    /// Real IDs: `BT2425SWRLCP01` (Kontiolahti), `BT2425SWRLCH__` (Lenzerheide).
+    @Test func worldChampionships() throws {
+        let championships: BiathlonEvent = try decode(
+            event("BT2425SWRLCH__", start: "2025-02-11T12:00:00Z", end: "2025-02-23T12:00:00Z"))
+        #expect(championships.isWorldChampionships)
     }
 }

@@ -6,8 +6,10 @@ public struct SeasonID: RawRepresentable, Hashable, Sendable, Codable, CustomStr
 
     public init(rawValue: String) { self.rawValue = rawValue }
 
-    /// The season rolls over on July 1.
-    public static func containing(_ date: Date, calendar: Calendar = .init(identifier: .gregorian)) -> SeasonID {
+    /// The season rolls over on July 1, in UTC like the server.
+    public static func containing(_ date: Date) -> SeasonID {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
         let year = calendar.component(.year, from: date)
         let month = calendar.component(.month, from: date)
         let start = month >= 7 ? year : year - 1
@@ -20,7 +22,10 @@ public struct SeasonID: RawRepresentable, Hashable, Sendable, Codable, CustomStr
         rawValue = String(format: "%02d%02d", a, b)
     }
 
-    public static var current: SeasonID { containing(.now) }
+    /// The season containing `now` and the `count - 1` before it, newest first.
+    public static func recent(_ count: Int, now: Date) -> [SeasonID] {
+        Array(sequence(first: containing(now)) { $0.previous }.prefix(count))
+    }
 
     public var previous: SeasonID {
         let start = 2000 + (Int(rawValue.prefix(2)) ?? 0)

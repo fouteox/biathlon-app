@@ -67,7 +67,7 @@ struct RaceView: View {
     }
 
     private func isFavorite(_ row: ResultRow) -> Bool {
-        favorites.contains { $0.key == row.athleteID || ($0.kind == .nation && $0.key == row.nation) }
+        FavoriteSet(favorites).contains(row)
     }
 
     private func load() async {

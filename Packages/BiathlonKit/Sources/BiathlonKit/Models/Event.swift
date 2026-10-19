@@ -25,6 +25,7 @@ public struct BiathlonEvent: Decodable, Identifiable, Hashable, Sendable {
         nation = try c.decodeIfPresent(String.self, forKey: .nation)
     }
 
-    /// World Championships have an ID containing `CH__`.
-    public var isWorldChampionships: Bool { id.contains("CH") }
+    /// World Championships IDs end in `SWRLCH__` (`BT2425SWRLCH__`), World Cup
+    /// stages in `SWRLCP` and a number.
+    public var isWorldChampionships: Bool { id.hasSuffix("SWRLCH__") }
 }

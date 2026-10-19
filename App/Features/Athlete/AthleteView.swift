@@ -26,7 +26,7 @@ struct AthleteView: View {
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(bio.fullName).font(.title3.bold())
-                            Text(verbatim: "\(Nation.flag(bio.nation)) \(bio.nation ?? "")")
+                            Text(verbatim: "\(Nation.flag(bio.nation) ?? "") \(bio.nation ?? "")")
                             if let birthdate = bio.birthdate {
                                 Text(birthdate, format: Self.birthdateStyle)
                                     .font(.subheadline)
@@ -38,7 +38,7 @@ struct AthleteView: View {
                 if let nation = bio.nation {
                     Section {
                         HStack {
-                            Text("Follow team \(Nation.flag(nation)) \(nation)")
+                            Text("Follow team \(Nation.flag(nation) ?? "") \(nation)")
                             Spacer()
                             FavoriteButton(kind: .nation, key: nation, name: nation, nation: nation)
                         }

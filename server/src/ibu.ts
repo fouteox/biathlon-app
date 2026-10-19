@@ -73,13 +73,13 @@ export function snapshot(race: IBUCompetition): RaceSnapshot {
 }
 
 /**
- * The API has no explicit "cancelled" flag. Observed values so far are
- * StatusId 1 / "Scheduled" / SCHEDULED and StatusId 11 / "Final" / FINISHED;
- * any status text mentioning "cancel" is treated as a cancellation.
+ * Observed values: StatusId 1 / "Scheduled" / SCHEDULED, 6 / "Cancelled" /
+ * CANCELLED and 11 / "Final" / FINISHED. Same rules as the app
+ * (`Competition.state`), checked against the shared `race-status.json` fixture.
  */
 function status(race: IBUCompetition): RaceStatus {
   const text = `${race.ScheduleStatus ?? ""} ${race.StatusText ?? ""}`.toUpperCase();
-  if (text.includes("CANCEL")) return "cancelled";
+  if (text.includes("CANCEL") || Number(race.StatusId) === 6) return "cancelled";
   if (text.includes("FINISHED") || Number(race.StatusId) === 11) return "finished";
   if (text.includes("SCHEDULED") || Number(race.StatusId) === 1) return "scheduled";
   return "other";

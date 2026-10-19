@@ -111,16 +111,6 @@
         }
       }
     },
-    "Delayed": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Retardée"
-          }
-        }
-      }
-    },
     "Discipline": {
       "localizations": {
         "fr": {
