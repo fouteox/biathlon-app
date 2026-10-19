@@ -62,7 +62,11 @@ private struct RaceProgress: View {
     let state: RaceLiveState
 
     var body: some View {
-        if state.leaders.isEmpty {
+        if !state.leaders.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(state.leaders, id: \.self) { leader in LeaderLine(leader: leader) }
+            }
+        } else if state.phase.canBeFollowedLive {
             HStack {
                 Text("Start \(state.startTime, format: .dateTime.hour().minute())")
                 Spacer()
@@ -71,11 +75,8 @@ private struct RaceProgress: View {
             }
             .font(.subheadline)
             .foregroundStyle(.secondary)
-        } else {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(state.leaders, id: \.self) { leader in LeaderLine(leader: leader) }
-            }
         }
+        // A cancelled race, or one over without results: the phase in the header says it all.
     }
 }
 
@@ -111,16 +112,19 @@ private struct LiveSymbol: View {
     }
 }
 
-/// The leader's flag, or the start time before anyone leads: narrow enough for the
-/// Dynamic Island's limited width in landscape.
+/// The leader's flag, the start time before anyone leads, or the phase of a race
+/// that ended without results: narrow enough for the Dynamic Island's limited width
+/// in landscape.
 private struct LeaderMark: View {
     let state: RaceLiveState
 
     var body: some View {
         if let leader = state.leaders.first {
             Text(Nation.flag(leader.nation) ?? leader.rank)
-        } else {
+        } else if state.phase.canBeFollowedLive {
             Text(state.startTime, format: .dateTime.hour().minute()).monospacedDigit()
+        } else {
+            LiveSymbol(phase: state.phase)
         }
     }
 }

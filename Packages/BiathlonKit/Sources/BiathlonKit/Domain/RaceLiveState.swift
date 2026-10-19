@@ -21,12 +21,28 @@ public struct RaceLiveState: Codable, Hashable, Sendable {
         /// The leader's time, then each follower's gap to them.
         public var result: String?
     }
+}
+
+extension RaceLiveState {
+    /// Activities show from this long before the start: ActivityKit ends a standard
+    /// Live Activity after eight hours, so one started days ahead would end before the race.
+    public static let activityLead: TimeInterval = 30 * 60
+
+    /// When to start the activity of a race starting at `raceStart`; `nil` for now.
+    public static func activityStart(raceStart: Date, now: Date) -> Date? {
+        let start = raceStart - activityLead
+        return start > now ? start : nil
+    }
+
+    /// A race nobody has results for yet, from the calendar alone (`calendarState` on the server).
+    public init(race: Competition) {
+        self.init(phase: race.state, startTime: race.startTime, leaders: [])
+    }
 
     /// `nil` when the response carries no `Competition` block.
     public init?(_ results: RaceResults) {
         guard let competition = results.competition else { return nil }
-        phase = competition.state
-        startTime = competition.startTime
+        self.init(race: competition)
         let ranked = results.standings
             .filter { $0.irm == nil }
             .compactMap { row in row.rank.map { (row: row, rank: $0) } }

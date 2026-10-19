@@ -79,7 +79,10 @@ struct RaceView: View {
         FavoriteSet(favorites).contains(row)
     }
 
-    private var liveState: RaceLiveState? { loader.state.value.flatMap(RaceLiveState.init) }
+    /// From the results, or from the calendar when they don't describe the race yet.
+    private var liveState: RaceLiveState? {
+        loader.state.value.map { RaceLiveState($0) ?? RaceLiveState(race: race) }
+    }
 
     private func following(_ state: RaceLiveState) -> Binding<Bool> {
         Binding {

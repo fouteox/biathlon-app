@@ -16,8 +16,11 @@ final class LiveActivities {
         case server(status: Int)
     }
 
-    /// Races with an activity on the Lock Screen.
-    private(set) var followedRaceIDs: Set<String> = []
+    /// Races with an activity on the Lock Screen or scheduled to show there, and races
+    /// whose activity is being requested: a second tap meanwhile starts no duplicate.
+    var followedRaceIDs: Set<String> { startedRaceIDs.union(requestedRaceIDs) }
+    private var startedRaceIDs: Set<String> = []
+    private var requestedRaceIDs: Set<String> = []
     /// Whether the user allows Live Activities for the app (Settings).
     private(set) var areEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
 
@@ -48,14 +51,27 @@ final class LiveActivities {
         for observer in observers { observer.cancel() }
     }
 
-    /// Starts the race's activity on its broadcast channel.
+    /// Starts the race's activity on its broadcast channel, or schedules it to start
+    /// shortly before a later race (`RaceLiveState.activityStart`).
     func follow(_ attributes: RaceActivityAttributes, state: RaceLiveState) async throws {
         guard !followedRaceIDs.contains(attributes.raceID) else { return }
+        requestedRaceIDs.insert(attributes.raceID)
+        defer {
+            requestedRaceIDs.remove(attributes.raceID)
+            refresh()
+        }
         let channelID = try await channel(raceID: attributes.raceID)
-        _ = try Activity.request(
-            attributes: attributes, content: ActivityContent(state: state, staleDate: nil),
-            pushType: .channel(channelID))
-        refresh()
+        let content = ActivityContent(state: state, staleDate: nil)
+        if let start = RaceLiveState.activityStart(raceStart: state.startTime, now: .now) {
+            let minutes = Int(RaceLiveState.activityLead / 60)
+            _ = try Activity.request(
+                attributes: attributes, content: content, pushType: .channel(channelID), style: .standard,
+                alertConfiguration: AlertConfiguration(
+                    title: "Live Activity", body: "Starts in \(minutes) minutes", sound: .default),
+                start: start)
+        } else {
+            _ = try Activity.request(attributes: attributes, content: content, pushType: .channel(channelID))
+        }
     }
 
     /// Removes the race's activity from the Lock Screen at once.
@@ -90,9 +106,9 @@ final class LiveActivities {
     }
 
     private func refresh() {
-        followedRaceIDs = Set(
+        startedRaceIDs = Set(
             Activity<RaceActivityAttributes>.activities
-                .filter { $0.activityState == .active || $0.activityState == .stale }
+                .filter { [.pending, .active, .stale].contains($0.activityState) }
                 .map(\.attributes.raceID))
     }
 

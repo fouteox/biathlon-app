@@ -40,6 +40,20 @@ struct RaceLiveStateTests {
         #expect(try JSONDecoder().decode(RaceLiveState.self, from: data) == state)
     }
 
+    @Test func aRaceWithoutResultsStartsFromTheCalendar() throws {
+        let race: Competition = try decode(BiathlonKitTests.race("R1", start: "2026-11-26T15:15:00Z"))
+        #expect(RaceLiveState(race: race) == RaceLiveState(phase: .scheduled, startTime: race.startTime, leaders: []))
+    }
+
+    @Test func activitiesOfLaterRacesWaitUntilShortlyBeforeTheStart() {
+        let start = date("2026-11-26T15:15:00Z")
+        #expect(
+            RaceLiveState.activityStart(raceStart: start, now: date("2026-11-24T09:00:00Z"))
+                == date("2026-11-26T14:45:00Z"))
+        #expect(RaceLiveState.activityStart(raceStart: start, now: date("2026-11-26T15:00:00Z")) == nil)
+        #expect(RaceLiveState.activityStart(raceStart: start, now: date("2026-11-26T15:30:00Z")) == nil)
+    }
+
     @Test func onlyLiveAndUpcomingRacesCanBeFollowed() {
         #expect(Competition.State.allCases.filter(\.canBeFollowedLive) == [.scheduled, .live])
     }
