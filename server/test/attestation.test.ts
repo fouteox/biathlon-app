@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { fromBase64, rawSignature, sha256, toBase64, verifyAssertion, verifyAttestation } from "../src/attestation";
 import { decode } from "../src/cbor";
+import { DERError, parseCertificate, readNode } from "../src/der";
 import worker from "../src/index";
 import { checkChallenge, issueChallenge } from "../src/challenges";
 import { clientData, HEADERS, pruneKeys } from "../src/keys";
@@ -58,6 +59,18 @@ describe("attestation", () => {
     // Last byte of authData: part of the validation category, covered by the nonce.
     tampered[tampered.length - 1] = tampered[tampered.length - 1]! ^ 1;
     await expect(verifyAttestation({ ...sampleInput, attestation: tampered })).rejects.toThrow("nonce mismatch");
+  });
+
+  it("rejects a certificate with an empty signature algorithm", () => {
+    const x5c = (decode(sampleInput.attestation) as Map<string, Map<string, Uint8Array[]>>).get("attStmt")!.get("x5c")!;
+    const leaf = x5c[0]!;
+    const outer = readNode(leaf);
+    const tbs = readNode(outer.contents);
+    const algorithm = readNode(outer.contents, tbs.bytes.length);
+    const signature = outer.contents.subarray(tbs.bytes.length + algorithm.bytes.length);
+    const contents = new Uint8Array([...tbs.bytes, 0x30, 0x00, ...signature]);
+    const forged = new Uint8Array([0x30, 0x82, contents.length >> 8, contents.length & 0xff, ...contents]);
+    expect(() => parseCertificate(forged)).toThrow(DERError);
   });
 
   it("rejects garbage", async () => {

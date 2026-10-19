@@ -134,8 +134,7 @@ export function parseCertificate(data: Uint8Array): Certificate {
   const extensions = new Map<string, Uint8Array>();
   const extensionsNode = fields.slice(start + 6).find((field) => field.tag === 0xa3);
   if (extensionsNode) {
-    const [list] = children(extensionsNode);
-    for (const extension of children(expectTag(list!, TAG.sequence))) {
+    for (const extension of children(expectTag(firstChild(extensionsNode), TAG.sequence))) {
       const parts = children(extension);
       const value = parts[parts.length - 1];
       if (!parts[0] || !value) throw new DERError("invalid extension");
@@ -145,7 +144,7 @@ export function parseCertificate(data: Uint8Array): Certificate {
 
   return {
     tbs: tbsNode.bytes,
-    signatureAlgorithm: decodeOID(children(algorithm)[0]!),
+    signatureAlgorithm: decodeOID(firstChild(algorithm)),
     signature: bitStringBytes(signatureNode),
     issuer: issuer.bytes,
     subject: subject.bytes,
@@ -164,6 +163,12 @@ export function isCertificateAuthority(certificate: Certificate): boolean {
   if (!value) return false;
   const [flag] = children(readSingle(value, TAG.sequence));
   return flag?.tag === 0x01 && flag.contents[0] === 0xff;
+}
+
+export function firstChild(node: DERNode): DERNode {
+  const [child] = children(node);
+  if (!child) throw new DERError("empty element");
+  return child;
 }
 
 function bitStringBytes(node: DERNode): Uint8Array {

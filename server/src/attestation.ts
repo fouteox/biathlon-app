@@ -1,5 +1,5 @@
 import { CBORError, decode, decodeItem, type CBORValue } from "./cbor";
-import { children, DERError, isCertificateAuthority, parseCertificate, readSingle, TAG, type Certificate } from "./der";
+import { children, DERError, firstChild, isCertificateAuthority, parseCertificate, readSingle, TAG, type Certificate } from "./der";
 
 /**
  * Apple App Attest verification, following "Validating apps that connect to
@@ -101,8 +101,7 @@ export async function verifyAttestation(input: {
     const nonce = await sha256(concat(authDataBytes, input.clientDataHash));
     const extension = leaf.extensions.get(NONCE_OID);
     if (!extension) throw new AttestationError("missing nonce extension");
-    const [wrapper] = children(readSingle(extension, TAG.sequence));
-    const [octets] = children(wrapper!);
+    const octets = firstChild(firstChild(readSingle(extension, TAG.sequence)));
     if (octets?.tag !== TAG.octetString || !equal(octets.contents, nonce)) throw new AttestationError("nonce mismatch");
 
     // 5. The key identifier is the SHA-256 of the certificate's public key.
@@ -268,13 +267,17 @@ export function rawSignature(der: Uint8Array, size: number): Uint8Array {
   return result;
 }
 
-/** Turns decoding errors into verification failures. */
+/**
+ * Turns every failure into a verification failure: the input is untrusted, and
+ * WebCrypto also throws on malformed keys or signatures.
+ */
 async function guarded<T>(body: () => Promise<T>): Promise<T> {
   try {
     return await body();
   } catch (error) {
+    if (error instanceof AttestationError) throw error;
     if (error instanceof DERError || error instanceof CBORError) throw new AttestationError(error.message);
-    throw error;
+    throw new AttestationError(`malformed input: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

@@ -17,6 +17,8 @@ final class AppAttest {
     private let serverURL: URL
     private let service = DCAppAttestService.shared
     private let defaults: UserDefaults
+    /// The attestation in progress: concurrent syncs share it instead of each attesting a key.
+    private var attesting: Task<String, any Error>?
 
     /// Keys don't survive reinstalls, device migration or restores, which may bring
     /// these values back: an `invalidKey` error then starts over with a new key.
@@ -70,6 +72,14 @@ final class AppAttest {
 
     private func attestedKey() async throws -> String {
         if let keyID = defaults.string(forKey: DefaultsKey.keyID) { return keyID }
+        if let attesting { return try await attesting.value }
+        let task = Task { try await attestNewKey() }
+        attesting = task
+        defer { attesting = nil }
+        return try await task.value
+    }
+
+    private func attestNewKey() async throws -> String {
         var pending: Pending
         if let saved = loadPending() {
             pending = saved
