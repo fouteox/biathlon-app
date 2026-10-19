@@ -1,6 +1,6 @@
 import Foundation
 
-/// Réponse de `Results?RaceId=` : liste de départ avant la course, résultats ensuite.
+/// Response of `Results?RaceId=`: start list before the race, results after.
 public struct RaceResults: Decodable, Sendable {
     public let raceID: String
     public let isStartList: Bool
@@ -25,7 +25,7 @@ public struct RaceResults: Decodable, Sendable {
         rows = try c.decodeIfPresent([ResultRow].self, forKey: .rows) ?? []
     }
 
-    /// Pour un relais, seules les lignes équipe ; sinon toutes les lignes.
+    /// For a relay, team rows only; otherwise every row.
     public var standings: [ResultRow] {
         let teams = rows.filter(\.isTeam)
         return teams.isEmpty ? rows : teams
@@ -93,8 +93,8 @@ public struct ResultRow: Decodable, Identifiable, Hashable, Sendable {
         irm = try c.decodeIfPresent(String.self, forKey: .irm)
     }
 
-    /// Nombre de fautes, déduit de `ShootingTotal` (`0+2` → 2 balles de pioche
-    /// pour un relais ; `2` pour une course individuelle).
+    /// Number of misses, derived from `ShootingTotal` (`0+2` → 2 spare rounds
+    /// for a relay; `2` for an individual race).
     public var misses: Int? {
         guard let shootingTotal else { return nil }
         let parts = shootingTotal.split(separator: "+").compactMap { Int($0) }

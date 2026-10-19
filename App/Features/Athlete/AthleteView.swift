@@ -71,7 +71,7 @@ struct AthleteView: View {
         .task { await load() }
     }
 
-    /// Les dates de naissance arrivent à minuit UTC : on les formate en UTC.
+    /// Birthdates arrive at midnight UTC, so they are formatted in UTC.
     private static let birthdateStyle: Date.FormatStyle = {
         var style = Date.FormatStyle.dateTime.day().month(.wide).year()
         style.timeZone = .gmt

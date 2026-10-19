@@ -1,14 +1,14 @@
 import Foundation
 
-/// Fiche athlète, issue de `CISBios?IBUId=`. On ne décode que ce que l'app affiche.
+/// Athlete profile, from `CISBios?IBUId=`. Only what the app shows is decoded.
 public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
     public let id: String
     public let fullName: String
     public let familyName: String?
     public let givenName: String?
     public let nation: String?
-    /// Date sans heure renvoyée à minuit UTC : l'afficher en UTC
-    /// (`Date.FormatStyle` avec `timeZone = .gmt`) pour ne pas décaler le jour.
+    /// Date without a time, returned at midnight UTC: display it in UTC
+    /// (`Date.FormatStyle` with `timeZone = .gmt`) so the day doesn't shift.
     public let birthdate: Date?
     public let photoURL: URL?
     public let flagURL: URL?
@@ -38,7 +38,7 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
     }
 }
 
-/// Une ligne de `AllResults?IBUId=` : l'historique d'un athlète.
+/// One row of `AllResults?IBUId=`: an athlete's history.
 public struct AthleteResult: Decodable, Identifiable, Hashable, Sendable {
     public var id: String { raceID ?? "\(season ?? "")-\(competition ?? "")-\(place ?? "")" }
 

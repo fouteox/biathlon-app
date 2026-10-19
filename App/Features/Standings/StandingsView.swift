@@ -49,8 +49,8 @@ struct StandingsView: View {
             }
             .refreshable { await load() }
         }
-        // Filtres dans les barres du système plutôt qu'un en-tête maison :
-        // la liste défile sous le verre avec l'effet de bord.
+        // Filters live in system bars rather than a custom header, so the
+        // list scrolls under the glass with the scroll edge effect.
         .safeAreaBar(edge: .top) {
             Picker("Catégorie", selection: $gender) {
                 ForEach(Gender.allCases) { Text($0.label).tag($0) }
@@ -70,8 +70,8 @@ struct StandingsView: View {
         .task(id: key) { await load() }
     }
 
-    /// Avant la première course, le classement de la saison est vide : on
-    /// affiche celui de la saison précédente.
+    /// Before the first race the season's standings are empty, so the
+    /// previous season's are shown instead.
     private func load() async {
         state = .loading
         do {

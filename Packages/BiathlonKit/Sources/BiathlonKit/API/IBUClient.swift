@@ -3,10 +3,10 @@ import Foundation
 import FoundationNetworking
 #endif
 
-/// Client de l'API de biathlonresults.com.
+/// Client for the biathlonresults.com API.
 ///
-/// `baseURL` pointera vers notre serveur Cloudflare (qui sert de cache) dès
-/// qu'il existera ; il expose les mêmes chemins que l'API IBU.
+/// `baseURL` will point to our Cloudflare server (acting as a cache) once it
+/// exists; it exposes the same paths as the IBU API.
 public struct IBUClient: Sendable {
     public static let ibuBaseURL = URL(string: "https://biathlonresults.com/modules/sportapi/api/")!
 
@@ -18,7 +18,7 @@ public struct IBUClient: Sendable {
         self.session = session
     }
 
-    // MARK: Calendrier
+    // MARK: Calendar
 
     public func events(season: SeasonID, level: CompetitionLevel = .worldCup) async throws -> [BiathlonEvent] {
         try await get("Events", ["SeasonId": season.rawValue, "Level": String(level.rawValue)])
@@ -28,13 +28,13 @@ public struct IBUClient: Sendable {
         try await get("Competitions", ["EventId": eventID])
     }
 
-    // MARK: Résultats
+    // MARK: Results
 
     public func results(raceID: String) async throws -> RaceResults {
         try await get("Results", ["RaceId": raceID])
     }
 
-    // MARK: Classements
+    // MARK: Standings
 
     public func cups(season: SeasonID) async throws -> [Cup] {
         try await get("Cups", ["SeasonId": season.rawValue])
@@ -44,7 +44,7 @@ public struct IBUClient: Sendable {
         try await get("CupResults", ["CupId": cupID])
     }
 
-    // MARK: Athlètes
+    // MARK: Athletes
 
     public func athlete(id: String) async throws -> AthleteBio {
         try await get("CISBios", ["IBUId": id])

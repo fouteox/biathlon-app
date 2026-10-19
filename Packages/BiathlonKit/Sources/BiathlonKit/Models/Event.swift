@@ -1,6 +1,6 @@
 import Foundation
 
-/// Une étape (Kontiolahti, Hochfilzen…), issue de `Events`.
+/// An event (Kontiolahti, Hochfilzen…), from `Events`.
 public struct BiathlonEvent: Decodable, Identifiable, Hashable, Sendable {
     public let id: String
     public let seasonID: SeasonID
@@ -43,6 +43,6 @@ public struct BiathlonEvent: Decodable, Identifiable, Hashable, Sendable {
         isCurrent = try c.decodeIfPresent(Bool.self, forKey: .isCurrent) ?? false
     }
 
-    /// Les championnats du monde ont un identifiant en `CH__`.
+    /// World Championships have an ID containing `CH__`.
     public var isWorldChampionships: Bool { id.contains("CH") }
 }

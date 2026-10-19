@@ -67,7 +67,7 @@ struct HomeView: View {
         .navigationTitle("Biathlon")
         .ibuAttribution()
         .task { await reload() }
-        // Rafraîchissement automatique tant qu'une course est en direct.
+        // Auto-refresh while a race is live.
         .task(id: model.isLive) {
             guard model.isLive else { return }
             while !Task.isCancelled {

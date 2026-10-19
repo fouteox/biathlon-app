@@ -1,7 +1,7 @@
 import BiathlonKit
 import SwiftUI
 
-/// Destinations de navigation communes à tous les onglets.
+/// Navigation destinations shared by every tab.
 enum Route: Hashable {
     case event(BiathlonEvent)
     case race(Competition)
@@ -19,8 +19,9 @@ extension View {
         }
     }
 
-    /// Mention de la source, demandée dans l'e-mail à l'IBU. Barre sans fond :
-    /// le contenu défile dessous avec l'effet de bord du système (Liquid Glass).
+    /// Source credit, as offered in the email to the IBU. A bar with no
+    /// background: content scrolls beneath it with the system scroll edge
+    /// effect (Liquid Glass).
     func ibuAttribution() -> some View {
         safeAreaBar(edge: .bottom) {
             Text("Données : IBU Datacenter · biathlonresults.com")
@@ -31,7 +32,7 @@ extension View {
     }
 }
 
-/// État de chargement générique pour les écrans.
+/// Generic loading state for screens.
 enum Loadable<Value> {
     case loading
     case loaded(Value)
@@ -66,7 +67,7 @@ struct LoadableView<Value, Content: View>: View {
 }
 
 enum Nation {
-    /// Codes CIO vers codes ISO pour les drapeaux.
+    /// IOC codes to ISO codes, for flags.
     private static let iso: [String: String] = [
         "AUT": "AT", "BEL": "BE", "BUL": "BG", "CAN": "CA", "CHN": "CN", "CZE": "CZ",
         "EST": "EE", "FIN": "FI", "FRA": "FR", "GER": "DE", "GBR": "GB", "ITA": "IT",

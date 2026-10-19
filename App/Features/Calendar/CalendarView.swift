@@ -6,7 +6,7 @@ struct CalendarView: View {
     @State private var season = SeasonID.current
     @State private var state: Loadable<[BiathlonEvent]> = .loading
 
-    /// Saison en cours et les quatre précédentes.
+    /// Current season and the four before it.
     private var seasons: [SeasonID] {
         sequence(first: SeasonID.current) { $0.previous }.prefix(5).map(\.self)
     }

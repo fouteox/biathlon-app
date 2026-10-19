@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import BiathlonKit
 
-/// Les fixtures reprennent la forme des réponses réelles relevées le 19/10/2026.
+/// Fixtures mirror the shape of real responses captured on 2026-10-19.
 struct DecodingTests {
     func fixture<T: Decodable>(_ name: String, as type: T.Type = T.self) throws -> T {
         let url = try #require(Bundle.module.url(forResource: name, withExtension: "json", subdirectory: "Fixtures"))

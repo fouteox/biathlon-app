@@ -53,7 +53,7 @@ struct FavoritesView: View {
     }
 }
 
-/// Étoile réutilisable dans les fiches et les listes.
+/// Reusable star for detail screens and lists.
 struct FavoriteButton: View {
     let kind: Favorite.Kind
     let key: String

@@ -1,7 +1,7 @@
 import Foundation
 import SwiftData
 
-/// Un favori : un athlète (clé = IBUId) ou une nation (clé = code CIO).
+/// A favorite: an athlete (key = IBUId) or a nation (key = IOC code).
 @Model
 final class Favorite {
     #Unique<Favorite>([\.kindRaw, \.key])

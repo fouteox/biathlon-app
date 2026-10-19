@@ -1,6 +1,6 @@
 import Foundation
 
-/// Une course, issue de `Competitions?EventId=` ou du bloc `Competition` de `Results`.
+/// A race, from `Competitions?EventId=` or the `Competition` block of `Results`.
 public struct Competition: Decodable, Identifiable, Hashable, Sendable {
     public let id: String
     public let shortDescription: String
@@ -66,8 +66,8 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
         case "POSTPONED", "DELAYED": return .delayed
         default: break
         }
-        // Valeurs observées : 1 = Scheduled, 11 = Final. Les autres seront
-        // cartographiées pendant les premières courses de la saison.
+        // Observed values: 1 = Scheduled, 11 = Final. The others will be
+        // mapped during the first races of the season.
         return statusID == 11 ? .finished : .scheduled
     }
 
