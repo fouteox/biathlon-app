@@ -25,22 +25,21 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // Registration is retried at the next launch.
     }
 
+    /// UIKit expects the completion handler on the main thread. The async variants of the
+    /// delegate methods complete on a background executor, which crashed the app.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
-        willPresent notification: UNNotification
-    ) async -> UNNotificationPresentationOptions {
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping @Sendable (UNNotificationPresentationOptions) -> Void
+    ) {
         let isAlert = notification.request.content.userInfo["startTime"] != nil
-        if isAlert { await refreshReminders() }
-        return [.banner, .sound, .list]
+        Task { @MainActor in
+            completionHandler([.banner, .sound, .list])
+            if isAlert { await self.refreshReminders() }
+        }
     }
 
-    nonisolated func userNotificationCenter(
-        _ center: UNUserNotificationCenter,
-        didReceive response: UNNotificationResponse
-    ) async {
-        let isAlert = response.notification.request.content.userInfo["startTime"] != nil
-        if isAlert { await refreshReminders() }
-    }
+    // Tapping an alert needs no handling: the app becomes active, which refreshes the reminders.
 
     /// A start time change alert means the local reminder may now be wrong.
     func refreshReminders() async {
