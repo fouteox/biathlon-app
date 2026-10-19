@@ -152,9 +152,11 @@ export async function syncLiveActivities(
     const known = await currentState(raceId, race, budget);
     for (const channel of channels) {
       const state: LiveState = { ...(JSON.parse(channel.state) as LiveState), ...known };
-      // The results can lag behind the calendar's end, or be ahead of it.
-      if (race && isTerminal(race.status)) state.phase = race.status;
-      if (!race || isTerminal(state.phase)) {
+      // The calendar decides the phase, which the results can lag behind or be ahead of:
+      // an ended channel then always means the calendar ended the race, or stopped
+      // listing it, so a race it lists as followable again gets new channels.
+      if (race) state.phase = race.status;
+      if (!race || isTerminal(race.status)) {
         // Over, or no longer watched: the activity ends with the latest state there is.
         await end(env, tokens, channel, state, now);
       } else if (JSON.stringify(state) !== channel.state) {

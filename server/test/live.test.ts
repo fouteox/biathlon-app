@@ -271,18 +271,24 @@ describe("Live Activity channels", () => {
     ]);
   });
 
-  it("ends the activity once the results are final, before the calendar says so", async () => {
+  it("follows the calendar's phase, ending the activity only once the calendar says the race is over", async () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
+    const ahead = { ...(relay.state as object), phase: "live" };
 
     const sent = stubNetwork({ results: relay.results });
     await syncLiveActivities(env, [race({ IsLive: true })], NOW);
-
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
     expect(broadcasts(sent).map((request) => request.body)).toEqual([
-      { aps: { timestamp: NOW / 1000, event: "end", "content-state": relay.state } },
-      { aps: { timestamp: NOW / 1000, event: "end", "content-state": relay.state } },
+      { aps: { timestamp: NOW / 1000, event: "update", "content-state": ahead } },
+      { aps: { timestamp: NOW / 1000, event: "update", "content-state": ahead } },
     ]);
+    expect(sent.filter((request) => request.method !== "GET" && !request.url.includes("/4/broadcasts/"))).toEqual([]);
+
+    const ended = stubNetwork({ results: relay.results });
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 120_000);
+    expect(broadcasts(ended).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
   });
 
   it("leaves alone the new channel an overlapping run opened while the old one was being deleted", async () => {
