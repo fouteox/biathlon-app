@@ -5,12 +5,10 @@ App iOS gratuite de suivi de la Coupe du monde de biathlon : course en direct, c
 ## Lancer le projet
 
 ```sh
-brew install xcodegen
-xcodegen          # génère Biathlon.xcodeproj à partir de project.yml
 open Biathlon.xcodeproj
 ```
 
-Renseigner `DEVELOPMENT_TEAM` dans `project.yml` avant de lancer sur un appareil.
+Le projet Xcode est versionné et utilise des dossiers synchronisés : tout fichier ajouté sous `App/` fait partie de l'app sans modifier `project.pbxproj`. Les réglages de compilation sont dans `Configs/Project.xcconfig` (communs) et `Configs/Biathlon.xcconfig` (cible de l'app), avec `Configs/Info.plist` et `Configs/Biathlon.entitlements`. Modifier ces fichiers plutôt que les réglages dans l'éditeur de projet d'Xcode.
 
 Tests du client API (sans Xcode) :
 
@@ -26,7 +24,7 @@ swift format --in-place --recursive App Packages/BiathlonKit/Package.swift Packa
 
 ## Xcode Cloud
 
-`ci_scripts/ci_post_clone.sh` installe XcodeGen et génère `Biathlon.xcodeproj` après le clone, puisque le projet Xcode n'est pas versionné. Xcode Cloud numérote lui-même les builds à partir de 1 : n'envoyer les builds TestFlight que par Xcode Cloud, sinon les numéros se chevauchent.
+Xcode Cloud compile `Biathlon.xcodeproj` tel quel, sans script. Il numérote lui-même les builds à partir de 1 : n'envoyer les builds TestFlight que par Xcode Cloud, sinon les numéros se chevauchent.
 
 ## Environnement Claude Code cloud
 

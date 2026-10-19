@@ -1,0 +1,13 @@
+// Settings of the Biathlon app target.
+
+PRODUCT_BUNDLE_IDENTIFIER = com.fouteox.biathlon
+TARGETED_DEVICE_FAMILY = 1
+CODE_SIGN_STYLE = Automatic
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+
+INFOPLIST_FILE = Configs/Info.plist
+CODE_SIGN_ENTITLEMENTS = Configs/Biathlon.entitlements
+
+// Cloudflare Worker base URL (see server/README.md); push alerts stay off while empty.
+// The double slash is escaped: xcconfig files treat // as the start of a comment.
+BIATHLON_SERVER_URL = https:/$()/biathlon-server.fouteox.workers.dev
