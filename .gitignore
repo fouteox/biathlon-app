@@ -3,3 +3,7 @@ DerivedData/
 .build/
 .swiftpm/
 .DS_Store
+
+# Left over from XcodeGen, which generated them: the project uses Configs/ now.
+App/Resources/Info.plist
+App/Resources/Biathlon.entitlements
