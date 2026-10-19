@@ -10,8 +10,7 @@
     {
       "binding": "DB",
       "database_name": "biathlon",
-      // Replace with the id printed by `npx wrangler d1 create biathlon`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "173d1fd8-cacb-4b93-a4de-5fb5ec22a016",
       "migrations_dir": "migrations"
     }
   ],
