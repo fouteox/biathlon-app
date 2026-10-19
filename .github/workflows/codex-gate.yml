@@ -49,9 +49,11 @@ jobs:
             const isCodex = (login) => (login ?? '').replace(/\[bot\]$/, '') === CODEX;
             const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+            let headSha = context.payload.pull_request?.head.sha;
             async function evaluate() {
               const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number: number });
               const sha = pr.head.sha;
+              headSha = sha;
               if (pr.state !== 'open') return { sha, state: null };
 
               // Every thread Codex opened must have at least one reply.
@@ -171,15 +173,28 @@ jobs:
               });
             }
 
-            let result = await evaluate();
-            if (!result.state) return core.info('Pull request is closed.');
-            // Publish right away so a stale success never outlives a new
-            // review; then poll for the 👍, which lands a few seconds after
-            // the summary comment is edited.
-            await publish(result);
-            for (let attempt = 0; result.retry && attempt < 8; attempt++) {
-              await sleep(15000);
-              result = await evaluate();
+            // Fail closed: if anything below throws, the head goes red rather
+            // than keeping a previous success.
+            try {
+              let result = await evaluate();
               if (!result.state) return core.info('Pull request is closed.');
+              // Publish right away so a stale success never outlives a new
+              // review; then poll for the 👍, which lands a few seconds after
+              // the summary comment is edited.
               await publish(result);
+              for (let attempt = 0; result.retry && attempt < 8; attempt++) {
+                await sleep(15000);
+                result = await evaluate();
+                if (!result.state) return core.info('Pull request is closed.');
+                await publish(result);
+              }
+            } catch (error) {
+              if (headSha) {
+                await github.rest.repos.createCommitStatus({
+                  owner, repo, sha: headSha, context: CONTEXT, state: 'error',
+                  description: 'Codex gate failed: re-run the workflow',
+                  target_url: `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`,
+                });
+              }
+              throw error;
             }
