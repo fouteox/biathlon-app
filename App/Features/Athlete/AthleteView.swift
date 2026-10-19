@@ -28,7 +28,7 @@ struct AthleteView: View {
                             Text(bio.fullName).font(.title3.bold())
                             Text("\(Nation.flag(bio.nation)) \(bio.nation ?? "")")
                             if let birthdate = bio.birthdate {
-                                Text(birthdate, format: .dateTime.day().month(.wide).year())
+                                Text(birthdate, format: Self.birthdateStyle)
                                     .font(.subheadline)
                                     .foregroundStyle(.secondary)
                             }
@@ -70,6 +70,13 @@ struct AthleteView: View {
         .ibuAttribution()
         .task { await load() }
     }
+
+    /// Les dates de naissance arrivent à minuit UTC : on les formate en UTC.
+    private static let birthdateStyle: Date.FormatStyle = {
+        var style = Date.FormatStyle.dateTime.day().month(.wide).year()
+        style.timeZone = .gmt
+        return style
+    }()
 
     private func load() async {
         do {

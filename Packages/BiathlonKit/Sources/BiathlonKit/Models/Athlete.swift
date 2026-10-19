@@ -7,6 +7,8 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
     public let familyName: String?
     public let givenName: String?
     public let nation: String?
+    /// Date sans heure renvoyée à minuit UTC : l'afficher en UTC
+    /// (`Date.FormatStyle` avec `timeZone = .gmt`) pour ne pas décaler le jour.
     public let birthdate: Date?
     public let photoURL: URL?
     public let flagURL: URL?

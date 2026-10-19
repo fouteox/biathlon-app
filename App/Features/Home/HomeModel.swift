@@ -7,7 +7,10 @@ import Observation
 @Observable
 final class HomeModel {
     struct Snapshot {
-        var event: BiathlonEvent?
+        /// L'étape la plus récente déjà commencée et la suivante : une course
+        /// peut se terminer après la `EndDate` de son étape, et entre deux
+        /// étapes il faut à la fois le dernier résultat et la prochaine course.
+        var events: [BiathlonEvent] = []
         var races: [Competition] = []
         var liveResults: RaceResults?
         var latestResults: RaceResults?
@@ -19,6 +22,11 @@ final class HomeModel {
         }
         var latestFinished: Competition? {
             races.filter { $0.state == .finished }.max { $0.startTime < $1.startTime }
+        }
+        /// Étape de la course mise en avant (`RaceId` commence par l'`EventId`).
+        var event: BiathlonEvent? {
+            guard let race = live ?? next ?? latestFinished else { return events.last }
+            return events.first { race.id.hasPrefix($0.id) } ?? events.last
         }
     }
 
@@ -41,19 +49,21 @@ final class HomeModel {
 
     private func fetch(_ client: IBUClient, now: Date) async throws -> Snapshot {
         var snapshot = Snapshot()
-        var events = try await client.events(season: .containing(now))
-        if events.isEmpty {
-            events = try await client.events(season: SeasonID.containing(now).previous)
+        let season = SeasonID.containing(now)
+        let sorted = try await client.events(season: season).sorted { $0.startDate < $1.startDate }
+        let upcoming = sorted.first { $0.startDate > now }
+        var started = sorted.last { $0.startDate <= now }
+        // Avant la première étape : dernier résultat de la saison précédente.
+        if started == nil {
+            started = try await client.events(season: season.previous).max { $0.startDate < $1.startDate }
         }
-        // Étape en cours, sinon la prochaine, sinon la dernière de la saison.
-        let event = events.first { $0.startDate <= now && now <= $0.endDate }
-            ?? events.filter { $0.startDate > now }.min { $0.startDate < $1.startDate }
-            ?? events.max { $0.endDate < $1.endDate }
-        snapshot.event = event
-        guard let event else { return snapshot }
+        snapshot.events = [started, upcoming].compactMap(\.self)
 
-        snapshot.races = try await client.competitions(eventID: event.id)
-            .sorted { $0.startTime < $1.startTime }
+        var races: [Competition] = []
+        for event in snapshot.events {
+            races += try await client.competitions(eventID: event.id)
+        }
+        snapshot.races = races.sorted { $0.startTime < $1.startTime }
         if let live = snapshot.live {
             snapshot.liveResults = try await client.results(raceID: live.id)
         }

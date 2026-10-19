@@ -20,18 +20,17 @@ struct RootView: View {
     var body: some View {
         TabView {
             Tab("Accueil", systemImage: "house") {
-                NavigationStack { HomeView() }
+                NavigationStack { HomeView().navigationDestinations() }
             }
             Tab("Calendrier", systemImage: "calendar") {
-                NavigationStack { CalendarView() }
+                NavigationStack { CalendarView().navigationDestinations() }
             }
             Tab("Classements", systemImage: "list.number") {
-                NavigationStack { StandingsView() }
+                NavigationStack { StandingsView().navigationDestinations() }
             }
             Tab("Favoris", systemImage: "star") {
-                NavigationStack { FavoritesView() }
+                NavigationStack { FavoritesView().navigationDestinations() }
             }
         }
-        .navigationDestinations()
     }
 }
