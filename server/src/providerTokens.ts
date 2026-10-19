@@ -1,9 +1,14 @@
 import { makeProviderToken, PROVIDER_TOKEN_LIFETIME_S, type APNsEnvironment } from "./apns";
+import type { SubrequestBudget } from "./subrequests";
+
+/** A request left for the next run. */
+export type Deferred = { kind: "deferred" };
+const DEFERRED: Deferred = { kind: "deferred" };
 
 /**
  * The APNs provider tokens of one cron run, one per environment, as Apple
  * recommends for team-scoped keys. A token is reused from D1 while it is younger
- * than its lifetime.
+ * than its lifetime. Each request spends one subrequest of the run's budget.
  */
 export class ProviderTokens {
   private readonly tokens = new Map<APNsEnvironment, string>();
@@ -12,20 +17,23 @@ export class ProviderTokens {
   constructor(
     private readonly env: Env,
     private readonly now: number,
+    private readonly budget: SubrequestBudget,
   ) {}
 
   /**
    * Runs `request` with the environment's token. When APNs rejects the token, signs
    * a new one and retries, at most once per run: APNs rejects updates more frequent
-   * than every 20 minutes.
+   * than every 20 minutes. "deferred" once the run has no subrequest left.
    */
   async send<Outcome extends { kind: string }>(
     environment: APNsEnvironment,
     request: (token: string) => Promise<Outcome>,
-  ): Promise<Outcome> {
+  ): Promise<Outcome | Deferred> {
+    if (!this.budget.take()) return DEFERRED;
     const outcome = await request(await this.token(environment));
     if (outcome.kind !== "expiredProviderToken" || this.refreshed.has(environment)) return outcome;
     this.refreshed.add(environment);
+    if (!this.budget.take()) return DEFERRED;
     return request(await this.token(environment, true));
   }
 

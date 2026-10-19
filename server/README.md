@@ -15,7 +15,7 @@ Cloudflare Worker that:
 | `POST` | `/v1/app-attest/keys` | `{ "keyId": "<base64>", "attestation": "<base64>", "challenge": "…" }` |
 | `PUT` | `/v1/devices/:token` | `{ "environment": "sandbox" \| "production", "categories": ["SM","SW","MX"], "cancellation": true, "rescheduling": true, "locale": "fr-FR", "timeZone": "Europe/Paris" }` |
 | `DELETE` | `/v1/devices/:token` | |
-| `GET` | `/v1/races/:raceId/channels/:environment` | Returns `{"channelId":"…"}`, the broadcast channel the app subscribes the race's Live Activity to (`404` when the race has none). |
+| `GET` | `/v1/races/:raceId/channels/:environment` | Returns `{"channelId":"…","state":{…}}`, the broadcast channel the app subscribes the race's Live Activity to and the state last published on it, which the activity starts from (`404` when the race has none, or once its end is sent). |
 | `GET` | `/v1/health` | Returns `{"apns":{"pushes":{"http2":true},"channels":{"http2":true}}}` when the Worker reaches APNs over HTTP/2, for pushes and for channel management. |
 | `GET` | `/ibu/<endpoint>?…` | Same paths and query strings as the IBU API. |
 
@@ -49,9 +49,9 @@ Each `PUT` and `DELETE` on `/v1/devices/:token` then carries three headers: `X-A
 
 ## Limits (Workers Free plan)
 
-Each request to APNs or to the IBU API is a subrequest, and the Free plan allows 50 per invocation (D1 queries count separately, up to 1,000). `MAX_PUSHES_PER_RUN` (30 by default) caps the alerts sent per minute; the rest wait in the `outbox` table for the next runs, and alerts older than 30 minutes are dropped. On the Paid plan, raise it.
+Each request to APNs or to the IBU API is a subrequest, and the Free plan allows 50 per invocation (D1 queries count separately, up to 1,000). `MAX_PUSHES_PER_RUN` (30 by default) caps the alerts sent per minute; the rest wait in the `outbox` table for the next runs, and alerts older than 30 minutes are dropped. On the Paid plan, raise it along with `SUBREQUESTS_PER_RUN`.
 
-Live Activities take the rest: at most 2 channel creations per environment and run, then for each race running or just over, one IBU request and one broadcast per environment, and for an hour after the end, one broadcast per environment every 10 minutes. A broadcast reaches every subscriber at once, so their number doesn't count.
+A run spends them in this order: the IBU calendar, the alerts, then Live Activities, which take the rest (`src/subrequests.ts`); what doesn't fit waits for the next run. Live Activities need at most 2 channel creations per environment and run, then for each race running or just over, one IBU request and one broadcast per environment, and for an hour after the end, one broadcast per environment every 10 minutes. A broadcast reaches every subscriber at once, so their number doesn't count.
 
 ## Develop
 

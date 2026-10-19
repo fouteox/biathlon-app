@@ -54,9 +54,9 @@ final class LiveActivities {
 
     /// Starts the race's activity on its broadcast channel, or schedules it to start
     /// shortly before a later race (`RaceLiveState.activityStart`).
-    func follow(raceID: String, name: String, state: RaceLiveState) async throws {
+    func follow(raceID: String, name: String) async throws {
         guard !followedRaceIDs.contains(raceID) else { return }
-        try await start(raceID: raceID, name: name, state: state)
+        try await start(raceID: raceID, name: name)
     }
 
     /// Removes the race's activity from the Lock Screen at once, or cancels its request.
@@ -77,7 +77,7 @@ final class LiveActivities {
         guard let moved else { return }
         let (movedID, name) = (moved.id, moved.attributes.name)
         // The replacement first: the race stays followed if it can't be scheduled.
-        guard try await start(raceID: raceID, name: name, state: state) else { return }
+        guard try await start(raceID: raceID, name: name) else { return }
         await Self.end(raceID: raceID, activityID: movedID)
         refresh()
     }
@@ -85,27 +85,29 @@ final class LiveActivities {
     /// Requests the race's activity on its channel; `false` when `stopFollowing` cancels
     /// the request meanwhile.
     @discardableResult
-    private func start(raceID: String, name: String, state: RaceLiveState) async throws -> Bool {
+    private func start(raceID: String, name: String) async throws -> Bool {
         let request = UUID()
         requests[raceID] = request
         defer {
             if requests[raceID] == request { requests[raceID] = nil }
             refresh()
         }
-        let channelID = try await channel(raceID: raceID)
+        // The channel stores no messages: the activity starts from the state last published
+        // on it, which the app's cached results could lag behind.
+        let channel = try await channel(raceID: raceID)
         guard requests[raceID] == request else { return false }
-        let start = RaceLiveState.activityStart(raceStart: state.startTime, now: .now)
+        let start = RaceLiveState.activityStart(raceStart: channel.state.startTime, now: .now)
         let attributes = RaceActivityAttributes(raceID: raceID, name: name, scheduledStart: start)
-        let content = ActivityContent(state: state, staleDate: nil)
+        let content = ActivityContent(state: channel.state, staleDate: nil)
         if let start {
             let minutes = Int(RaceLiveState.activityLead / 60)
             _ = try Activity.request(
-                attributes: attributes, content: content, pushType: .channel(channelID), style: .standard,
+                attributes: attributes, content: content, pushType: .channel(channel.channelId), style: .standard,
                 alertConfiguration: AlertConfiguration(
                     title: "Live Activity", body: "Starts in \(minutes) minutes", sound: .default),
                 start: start)
         } else {
-            _ = try Activity.request(attributes: attributes, content: content, pushType: .channel(channelID))
+            _ = try Activity.request(attributes: attributes, content: content, pushType: .channel(channel.channelId))
         }
         return true
     }
@@ -142,12 +144,13 @@ final class LiveActivities {
             })
     }
 
-    private func channel(raceID: String) async throws -> String {
+    private func channel(raceID: String) async throws -> Channel {
         guard let serverURL else { throw Failure.noChannel }
         let url = serverURL.appending(path: "v1/races/\(raceID)/channels/\(APNsEnvironment.current.rawValue)")
         let (data, response) = try await URLSession.shared.data(from: url)
         switch (response as? HTTPURLResponse)?.statusCode {
-        case 200: return try JSONDecoder().decode(Channel.self, from: data).channelId
+        // Default strategies, like ActivityKit's for the `content-state` of the broadcasts.
+        case 200: return try JSONDecoder().decode(Channel.self, from: data)
         case 404: throw Failure.noChannel
         case let status: throw Failure.server(status: status ?? 0)
         }
@@ -155,5 +158,6 @@ final class LiveActivities {
 
     private struct Channel: Decodable {
         let channelId: String
+        let state: RaceLiveState
     }
 }

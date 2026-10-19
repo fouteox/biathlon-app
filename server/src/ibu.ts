@@ -1,5 +1,7 @@
 // Minimal client for the undocumented biathlonresults.com API.
 
+import type { SubrequestBudget } from "./subrequests";
+
 export const IBU_BASE_URL = "https://biathlonresults.com/modules/sportapi/api/";
 
 export interface IBUEvent {
@@ -30,7 +32,9 @@ export interface RaceSnapshot {
 
 export type RaceStatus = "scheduled" | "live" | "cancelled" | "finished";
 
-export async function fetchIBU<T>(path: string, query: Record<string, string>): Promise<T> {
+/** Spends one subrequest of the run's budget; throws once none is left. */
+export async function fetchIBU<T>(path: string, query: Record<string, string>, budget: SubrequestBudget): Promise<T> {
+  if (!budget.take()) throw new Error(`IBU ${path}: no subrequest left in this run`);
   const url = new URL(path, IBU_BASE_URL);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   const response = await fetch(url);

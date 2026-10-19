@@ -3,6 +3,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { snapshot, type IBUCompetition, type RaceSnapshot } from "../src/ibu";
 import { liveState, syncLiveActivities, type IBUResults } from "../src/live";
+import { SubrequestBudget } from "../src/subrequests";
+import { drainOutbox } from "../src/watcher";
 import { makeD1 } from "./d1";
 
 // Shared with the app's BiathlonKit tests: the app decodes this `content-state` with
@@ -45,14 +47,18 @@ interface Sent {
 }
 
 /** Answers like APNs and the IBU API, and records every request. */
-function stubNetwork(options: { results?: unknown; broadcastReason?: string; failingHost?: string } = {}): Sent[] {
+function stubNetwork(
+  options: { results?: unknown; resultsStatus?: number; broadcastReason?: string; failingHost?: string } = {},
+): Sent[] {
   const sent: Sent[] = [];
   let channels = 0;
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = String(input);
     const headers = Object.fromEntries(new Headers(init.headers).entries());
     sent.push({ method: init.method ?? "GET", url, headers, body: init.body ? JSON.parse(String(init.body)) : undefined });
-    if (url.includes("biathlonresults.com")) return Response.json(options.results ?? live.results);
+    if (url.includes("biathlonresults.com")) {
+      return Response.json(options.results ?? live.results, { status: options.resultsStatus ?? 200 });
+    }
     if (options.failingHost && url.includes(options.failingHost)) return new Response(null, { status: 500 });
     if (url.includes("api-manage-broadcast") && init.method === "POST") {
       channels += 1;
@@ -205,6 +211,48 @@ describe("Live Activity channels", () => {
     expect(broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
   });
 
+  it("ends a finished race with its last state when its results can't be read", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    const sent = stubNetwork({ resultsStatus: 503 });
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 60_000);
+
+    expect(broadcasts(sent).map((request) => request.body)).toEqual([
+      { aps: { timestamp: NOW / 1000 + 60, event: "end", "content-state": { ...(live.state as object), phase: "finished" } } },
+      { aps: { timestamp: NOW / 1000 + 60, event: "end", "content-state": { ...(live.state as object), phase: "finished" } } },
+    ]);
+  });
+
+  it("replaces the ended channels of a race that can be followed again", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], NOW);
+
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race()], NOW + 60_000);
+
+    expect(sent.filter((request) => request.method === "DELETE").length).toBe(2);
+    const rows = await channels(env);
+    expect(rows.map(({ channelId }) => channelId)).toEqual(["channel-1", "channel-2"]);
+    expect(rows.every(({ state }) => JSON.parse(state).phase === "scheduled")).toBe(true);
+  });
+
+  it("spends no more subrequests than the run has left", async () => {
+    const env = await makeEnv();
+    const sent = stubNetwork();
+
+    await syncLiveActivities(env, [race()], NOW, new SubrequestBudget(1));
+
+    expect(sent.length).toBe(1);
+    expect((await channels(env)).length).toBe(1);
+  });
+
   it("forgets a channel APNs no longer knows, to open a new one", async () => {
     const env = await makeEnv();
     stubNetwork();
@@ -276,14 +324,16 @@ describe("GET /v1/races/:id/channels/:environment", () => {
   const get = (env: Env, path: string) =>
     worker.fetch(new Request(`https://server.test${path}`), env, {} as ExecutionContext);
 
-  it("gives the app the race's channel for its APNs environment", async () => {
+  it("gives the app the race's channel for its APNs environment, with its current state", async () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
 
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ channelId: "channel-2" });
+    expect(await response.json()).toEqual({ channelId: "channel-2", state: live.state });
   });
 
   it("answers 404 once the race's activity has ended", async () => {
@@ -300,5 +350,25 @@ describe("GET /v1/races/:id/channels/:environment", () => {
     const env = await makeEnv();
     expect((await get(env, `/v1/races/${RACE_ID}/channels/production`)).status).toBe(404);
     expect((await get(env, `/v1/races/${RACE_ID}/channels/staging`)).status).toBe(400);
+  });
+});
+
+describe("alerts", () => {
+  it("leave the alerts the run has no subrequests left for to the next run", async () => {
+    const env = await makeEnv();
+    for (const token of ["a", "b"]) {
+      await env.DB.prepare(
+        "INSERT INTO outbox (token, environment, kind, race_id, race_name, start_time, locale, time_zone, created_at) VALUES (?1, 'sandbox', 'cancelled', ?2, 'x', '2026-11-26T15:15:00.000Z', 'en', 'UTC', ?3)",
+      )
+        .bind(token, RACE_ID, NOW)
+        .run();
+    }
+    const sent = stubNetwork();
+
+    await drainOutbox(env, NOW, new SubrequestBudget(1));
+
+    expect(sent.length).toBe(1);
+    const { results } = await env.DB.prepare("SELECT token, attempts FROM outbox").all();
+    expect(results).toEqual([{ token: "b", attempts: 0 }]);
   });
 });

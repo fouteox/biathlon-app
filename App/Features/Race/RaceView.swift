@@ -52,7 +52,7 @@ struct RaceView: View {
         .toolbar {
             if liveState.phase.canBeFollowedLive, liveActivities.isAvailable {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Toggle("Live Activity", systemImage: "dot.radiowaves.left.and.right", isOn: following(liveState))
+                    Toggle("Live Activity", systemImage: "dot.radiowaves.left.and.right", isOn: following)
                 }
             }
         }
@@ -87,14 +87,14 @@ struct RaceView: View {
         loader.state.value.map { RaceLiveState($0) ?? RaceLiveState(race: race) }
     }
 
-    private func following(_ state: RaceLiveState) -> Binding<Bool> {
+    private var following: Binding<Bool> {
         Binding {
             liveActivities.followedRaceIDs.contains(race.id)
         } set: { follow in
             Task {
                 guard follow else { return await liveActivities.stopFollowing(raceID: race.id) }
                 do {
-                    try await liveActivities.follow(raceID: race.id, name: race.shortDescription, state: state)
+                    try await liveActivities.follow(raceID: race.id, name: race.shortDescription)
                 } catch {
                     Logger.notifications.error(
                         "Starting the Live Activity failed: \(String(describing: error), privacy: .public)")

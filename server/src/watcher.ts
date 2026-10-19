@@ -5,6 +5,7 @@ import { activeEvents, fetchIBU, seasonId, snapshot, type IBUCompetition, type I
 import { syncLiveActivities } from "./live";
 import { buildPayload, type AlertInput } from "./payload";
 import { ProviderTokens } from "./providerTokens";
+import { SubrequestBudget } from "./subrequests";
 
 /** The calendar of events rarely changes: refresh it every 6 hours. */
 const EVENTS_TTL_MS = 6 * 60 * 60 * 1000;
@@ -13,19 +14,20 @@ const OUTBOX_MAX_AGE_MS = 30 * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
 /**
- * One cron run: detect race changes and queue alerts, update the races' Live
- * Activities, then send a batch of alerts.
+ * One cron run: detect race changes and queue alerts, send a batch of alerts, then
+ * update the races' Live Activities with the subrequests left.
  */
 export async function runCron(env: Env, now: number): Promise<void> {
+  const budget = new SubrequestBudget();
   let races: RaceSnapshot[] | undefined;
   try {
-    ({ races } = await pollRaces(env, now));
+    ({ races } = await pollRaces(env, now, budget));
   } finally {
-    // Ended activities and alerts queued by earlier runs still go out while the IBU API is down.
+    // Alerts queued by earlier runs and ended activities still go out while the IBU API is down.
     try {
-      await syncLiveActivities(env, races, now);
+      await drainOutbox(env, now, budget);
     } finally {
-      await drainOutbox(env, now);
+      await syncLiveActivities(env, races, now, budget);
     }
   }
 }
@@ -35,13 +37,17 @@ export async function runCron(env: Env, now: number): Promise<void> {
  * the alerts it triggers are written in one D1 batch, which is a transaction,
  * so a failed run cannot record a change without queuing its alerts.
  */
-export async function pollRaces(env: Env, now: number): Promise<{ changes: RaceChange[]; races: RaceSnapshot[] }> {
-  const events = activeEvents(await worldCupEvents(env.DB, now), now);
+export async function pollRaces(
+  env: Env,
+  now: number,
+  budget = new SubrequestBudget(),
+): Promise<{ changes: RaceChange[]; races: RaceSnapshot[] }> {
+  const events = activeEvents(await worldCupEvents(env.DB, now, budget), now);
   if (events.length === 0) return { changes: [], races: [] };
 
   const current: RaceSnapshot[] = [];
   for (const event of events) {
-    const races = await fetchIBU<IBUCompetition[]>("Competitions", { EventId: event.EventId });
+    const races = await fetchIBU<IBUCompetition[]>("Competitions", { EventId: event.EventId }, budget);
     current.push(...races.map(snapshot));
   }
 
@@ -102,7 +108,7 @@ interface OutboxRow {
   created_at: number;
 }
 
-export async function drainOutbox(env: Env, now: number): Promise<void> {
+export async function drainOutbox(env: Env, now: number, budget = new SubrequestBudget()): Promise<void> {
   const limit = Number(env.MAX_PUSHES_PER_RUN) || 30;
   const { results: rows } = await env.DB.prepare(
     "SELECT * FROM outbox WHERE created_at >= ?1 ORDER BY id LIMIT ?2",
@@ -114,7 +120,7 @@ export async function drainOutbox(env: Env, now: number): Promise<void> {
   const retry: number[] = [];
   const unregistered: string[] = [];
   if (rows.length > 0) {
-    const tokens = new ProviderTokens(env, now);
+    const tokens = new ProviderTokens(env, now, budget);
     for (const row of rows) {
       const request = {
         deviceToken: row.token,
@@ -139,6 +145,9 @@ export async function drainOutbox(env: Env, now: number): Promise<void> {
         case "unregistered":
           unregistered.push(row.token);
           break;
+        case "deferred":
+          // Left untouched for the next run.
+          break;
         case "retry":
           (row.attempts + 1 >= MAX_ATTEMPTS ? done : retry).push(row.id);
           console.warn("APNs retry", row.id, outcome.reason);
@@ -162,7 +171,7 @@ export async function drainOutbox(env: Env, now: number): Promise<void> {
 }
 
 /** World Cup events (Level=1) of the current season, cached in D1. */
-async function worldCupEvents(db: D1Database, now: number): Promise<IBUEvent[]> {
+async function worldCupEvents(db: D1Database, now: number, budget: SubrequestBudget): Promise<IBUEvent[]> {
   const season = seasonId(new Date(now));
   const key = `events_${season}`;
   const cached = await db.prepare("SELECT value, updated_at FROM settings WHERE key = ?1").bind(key).first<{
@@ -171,7 +180,7 @@ async function worldCupEvents(db: D1Database, now: number): Promise<IBUEvent[]> 
   }>();
   if (cached && now - cached.updated_at < EVENTS_TTL_MS) return JSON.parse(cached.value) as IBUEvent[];
 
-  const events = await fetchIBU<IBUEvent[]>("Events", { SeasonId: season, Level: "1" });
+  const events = await fetchIBU<IBUEvent[]>("Events", { SeasonId: season, Level: "1" }, budget);
   const slim = events.map(({ EventId, StartDate, EndDate }) => ({ EventId, StartDate, EndDate }));
   await db
     .prepare(
