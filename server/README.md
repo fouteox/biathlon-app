@@ -17,7 +17,7 @@ Cloudflare Worker that:
 
 ## Deploy
 
-1. In the Apple Developer account, create an APNs key (Certificates, Identifiers & Profiles > Keys) and note its Key ID and the Team ID.
+1. In the Apple Developer account (Certificates, Identifiers & Profiles > Keys), create two team-scoped APNs keys, one for Sandbox and one for Production, as Apple recommends one key per environment. Note each Key ID and the Team ID (Membership details).
 2. From this folder:
 
    ```sh
@@ -25,9 +25,11 @@ Cloudflare Worker that:
    npx wrangler login
    npx wrangler d1 create biathlon          # paste the printed database_id into wrangler.jsonc
    npx wrangler d1 migrations apply biathlon --remote
-   npx wrangler secret put APNS_KEY < AuthKey_XXXXXXXXXX.p8
-   npx wrangler secret put APNS_KEY_ID
    npx wrangler secret put APNS_TEAM_ID
+   npx wrangler secret put APNS_SANDBOX_KEY_ID
+   npx wrangler secret put APNS_SANDBOX_KEY < AuthKey_SANDBOXKEYID.p8
+   npx wrangler secret put APNS_PRODUCTION_KEY_ID
+   npx wrangler secret put APNS_PRODUCTION_KEY < AuthKey_PRODKEYID.p8
    npx wrangler deploy
    curl https://biathlon-server.<subdomain>.workers.dev/v1/health
    ```
