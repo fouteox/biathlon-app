@@ -1,0 +1,186 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "%lld min": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld min"
+          }
+        }
+      }
+    },
+    "Alerts": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alertes"
+          }
+        }
+      }
+    },
+    "Men": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hommes"
+          }
+        }
+      }
+    },
+    "Mixed": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mixte"
+          }
+        }
+      }
+    },
+    "Notifications": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications"
+          }
+        }
+      }
+    },
+    "Notifications are turned off for Biathlon in Settings.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les notifications de Biathlon sont désactivées dans Réglages."
+          }
+        }
+      }
+    },
+    "Notify me": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Me prévenir"
+          }
+        }
+      }
+    },
+    "Open Settings": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ouvrir Réglages"
+          }
+        }
+      }
+    },
+    "Race cancelled": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Course annulée"
+          }
+        }
+      }
+    },
+    "Races": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Courses"
+          }
+        }
+      }
+    },
+    "Reminder before the start": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rappel avant le départ"
+          }
+        }
+      }
+    },
+    "Scheduled on this iPhone for races in the coming week.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Programmé sur cet iPhone pour les courses de la semaine à venir."
+          }
+        }
+      }
+    },
+    "Start time changed": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Horaire modifié"
+          }
+        }
+      }
+    },
+    "Starts in %lld minutes": {
+      "localizations": {
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Starts in %lld minute"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Starts in %lld minutes"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Départ dans %lld minute"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Départ dans %lld minutes"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Women": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Femmes"
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}

@@ -6,6 +6,7 @@ struct HomeView: View {
     @Environment(\.ibu) private var ibu
     @State private var model = HomeModel()
     @Query private var favorites: [Favorite]
+    @State private var showsNotificationSettings = false
 
     var body: some View {
         LoadableView(state: model.state, retry: reload) { snapshot in
@@ -65,6 +66,22 @@ struct HomeView: View {
             .refreshable { await reload() }
         }
         .navigationTitle("Biathlon")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    showsNotificationSettings = true
+                } label: {
+                    Label {
+                        Text("Notifications", tableName: "Notifications")
+                    } icon: {
+                        Image(systemName: "bell")
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showsNotificationSettings) {
+            NavigationStack { NotificationSettingsView() }
+        }
         .ibuAttribution()
         .task { await reload() }
         // Rafraîchissement automatique tant qu'une course est en direct.
