@@ -21,5 +21,7 @@ CREATE TABLE live_channels (
 CREATE TABLE orphaned_channels (
   environment TEXT NOT NULL CHECK (environment IN ('sandbox', 'production')),
   channel_id TEXT NOT NULL,
+  -- When its deletion last failed: the oldest attempts go first, so failures can't hold the others back.
+  attempted_at INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (environment, channel_id)
 );

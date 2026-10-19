@@ -127,7 +127,7 @@ export async function syncLiveActivities(
   budget = new SubrequestBudget(),
 ): Promise<void> {
   const tokens = new ProviderTokens(env, now, budget);
-  await deleteOrphans(env, tokens);
+  await deleteOrphans(env, tokens, now);
   const { results: rows } = await env.DB.prepare(
     "SELECT race_id AS raceId, environment, channel_id AS channelId, state, ended_at AS endedAt, end_sent_at AS endSentAt, deleted_at AS deletedAt FROM live_channels",
   ).all<ChannelRow>();
@@ -293,15 +293,21 @@ async function replace(env: Env, tokens: ProviderTokens, channel: ChannelRow): P
 }
 
 /** Deletes a few of the channels left by overlapping runs, so failures can't starve the races. */
-async function deleteOrphans(env: Env, tokens: ProviderTokens) {
-  const { results } = await env.DB.prepare("SELECT environment, channel_id AS channelId FROM orphaned_channels LIMIT ?1")
+async function deleteOrphans(env: Env, tokens: ProviderTokens, now: number) {
+  const { results } = await env.DB.prepare(
+    "SELECT environment, channel_id AS channelId FROM orphaned_channels ORDER BY attempted_at LIMIT ?1",
+  )
     .bind(MAX_ORPHAN_DELETIONS_PER_RUN)
     .all<{ environment: APNsEnvironment; channelId: string }>();
   for (const { environment, channelId } of results) {
-    if (!(await deleteAtAPNs(env, tokens, environment, channelId))) continue;
-    await env.DB.prepare("DELETE FROM orphaned_channels WHERE environment = ?1 AND channel_id = ?2")
-      .bind(environment, channelId)
-      .run();
+    const statement = (await deleteAtAPNs(env, tokens, environment, channelId))
+      ? env.DB.prepare("DELETE FROM orphaned_channels WHERE environment = ?1 AND channel_id = ?2").bind(environment, channelId)
+      : env.DB.prepare("UPDATE orphaned_channels SET attempted_at = ?3 WHERE environment = ?1 AND channel_id = ?2").bind(
+          environment,
+          channelId,
+          now,
+        );
+    await statement.run();
   }
 }
 

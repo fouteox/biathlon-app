@@ -417,6 +417,21 @@ describe("Live Activity channels", () => {
     expect(sent.filter((request) => request.method === "DELETE").length).toBe(2);
   });
 
+  it("tries the orphaned channels in turn, so failing ones can't hold the others back", async () => {
+    const env = await makeEnv();
+    for (const id of ["a", "b", "c"]) {
+      await env.DB.prepare("INSERT INTO orphaned_channels (environment, channel_id) VALUES ('sandbox', ?1)").bind(id).run();
+    }
+    const deleted = (sent: Sent[]) => sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"]);
+
+    const first = stubNetwork({ failingHost: "api-manage-broadcast" });
+    await syncLiveActivities(env, [], NOW);
+    const second = stubNetwork({ failingHost: "api-manage-broadcast" });
+    await syncLiveActivities(env, [], NOW + 60_000);
+
+    expect(new Set([...deleted(first), ...deleted(second)])).toEqual(new Set(["a", "b", "c"]));
+  });
+
   it("moves the start time of a live race from the calendar while its results can't be read", async () => {
     const env = await makeEnv();
     stubNetwork();
