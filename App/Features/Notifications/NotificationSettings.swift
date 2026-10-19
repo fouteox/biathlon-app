@@ -12,41 +12,58 @@ extension RaceCategory {
     }
 }
 
-/// The user's notification preferences, stored in `UserDefaults`.
-@Observable
-final class NotificationSettings {
-    static let reminderChoices = [5, 10, 15, 30, 60]
-
-    var reminderEnabled: Bool { didSet { save() } }
-    var reminderMinutes: Int { didSet { save() } }
-    var cancellationAlerts: Bool { didSet { save() } }
-    var reschedulingAlerts: Bool { didSet { save() } }
-    var categories: Set<RaceCategory> { didSet { save() } }
-
-    @ObservationIgnored private let defaults: UserDefaults
-
-    init(defaults: UserDefaults = .standard) {
-        self.defaults = defaults
-        reminderEnabled = defaults.bool(forKey: Keys.reminderEnabled)
-        let minutes = defaults.integer(forKey: Keys.reminderMinutes)
-        reminderMinutes = Self.reminderChoices.contains(minutes) ? minutes : 15
-        cancellationAlerts = defaults.bool(forKey: Keys.cancellationAlerts)
-        reschedulingAlerts = defaults.bool(forKey: Keys.reschedulingAlerts)
-        let stored = defaults.stringArray(forKey: Keys.categories)?.compactMap(RaceCategory.init(rawValue:))
-        categories = Set(stored ?? RaceCategory.allCases)
-    }
+/// What the user asked to be notified of.
+struct NotificationPreferences: Equatable, Sendable {
+    var reminderEnabled = false
+    var reminderMinutes = 15
+    var cancellationAlerts = false
+    var reschedulingAlerts = false
+    var categories = Set(RaceCategory.allCases)
 
     var anyEnabled: Bool { reminderEnabled || wantsPush }
 
     /// Push alerts are only useful with at least one alert type and one category.
     var wantsPush: Bool { (cancellationAlerts || reschedulingAlerts) && !categories.isEmpty }
+}
+
+/// The user's notification preferences, stored in `UserDefaults`.
+@Observable
+final class NotificationSettings {
+    static let reminderChoices = [5, 10, 15, 30, 60]
+
+    var preferences: NotificationPreferences {
+        didSet {
+            save()
+            continuation.yield(preferences)
+        }
+    }
+
+    /// Every later change of `preferences`, for the code that applies them (server, reminders).
+    @ObservationIgnored let changes: AsyncStream<NotificationPreferences>
+    @ObservationIgnored private let continuation: AsyncStream<NotificationPreferences>.Continuation
+    @ObservationIgnored private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        (changes, continuation) = AsyncStream.makeStream(bufferingPolicy: .bufferingNewest(1))
+        var preferences = NotificationPreferences()
+        preferences.reminderEnabled = defaults.bool(forKey: Keys.reminderEnabled)
+        let minutes = defaults.integer(forKey: Keys.reminderMinutes)
+        if Self.reminderChoices.contains(minutes) { preferences.reminderMinutes = minutes }
+        preferences.cancellationAlerts = defaults.bool(forKey: Keys.cancellationAlerts)
+        preferences.reschedulingAlerts = defaults.bool(forKey: Keys.reschedulingAlerts)
+        if let stored = defaults.stringArray(forKey: Keys.categories) {
+            preferences.categories = Set(stored.compactMap(RaceCategory.init(rawValue:)))
+        }
+        self.preferences = preferences
+    }
 
     private func save() {
-        defaults.set(reminderEnabled, forKey: Keys.reminderEnabled)
-        defaults.set(reminderMinutes, forKey: Keys.reminderMinutes)
-        defaults.set(cancellationAlerts, forKey: Keys.cancellationAlerts)
-        defaults.set(reschedulingAlerts, forKey: Keys.reschedulingAlerts)
-        defaults.set(categories.map(\.rawValue).sorted(), forKey: Keys.categories)
+        defaults.set(preferences.reminderEnabled, forKey: Keys.reminderEnabled)
+        defaults.set(preferences.reminderMinutes, forKey: Keys.reminderMinutes)
+        defaults.set(preferences.cancellationAlerts, forKey: Keys.cancellationAlerts)
+        defaults.set(preferences.reschedulingAlerts, forKey: Keys.reschedulingAlerts)
+        defaults.set(preferences.categories.map(\.rawValue).sorted(), forKey: Keys.categories)
     }
 
     private enum Keys {

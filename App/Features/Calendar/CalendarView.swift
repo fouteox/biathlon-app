@@ -4,13 +4,13 @@ import SwiftUI
 struct CalendarView: View {
     @Environment(\.ibu) private var ibu
     @State private var season = SeasonID.containing(.now)
-    @State private var state: Loadable<[BiathlonEvent]> = .loading
+    @State private var loader = Loader<[BiathlonEvent]>()
 
     /// Current season and the four before it.
     private let seasons = SeasonID.recent(5, now: .now)
 
     var body: some View {
-        LoadableView(state: state, retry: load) { events in
+        LoadableView(state: loader.state, retry: load) { events in
             List(events) { event in
                 NavigationLink(value: Route.event(event)) {
                     HStack {
@@ -31,6 +31,7 @@ struct CalendarView: View {
                     }
                 }
             }
+            .refreshable { await load() }
             .overlay {
                 if events.isEmpty {
                     ContentUnavailableView("Calendar not published", systemImage: "calendar.badge.exclamationmark")
@@ -44,29 +45,28 @@ struct CalendarView: View {
             }
         }
         .ibuAttribution()
-        .task(id: season) { await load() }
+        .task(id: season) {
+            loader.reset()
+            await load()
+        }
     }
 
     private func load() async {
-        state = .loading
-        do {
-            state = .loaded(try await ibu.events(season: season).sorted { $0.startDate < $1.startDate })
-        } catch {
-            state = .failed(error)
-        }
+        await loader.load { try await ibu.events(season: season).sorted { $0.startDate < $1.startDate } }
     }
 }
 
 struct EventView: View {
     let event: BiathlonEvent
     @Environment(\.ibu) private var ibu
-    @State private var state: Loadable<[Competition]> = .loading
+    @State private var loader = Loader<[Competition]>()
 
     var body: some View {
-        LoadableView(state: state, retry: load) { races in
+        LoadableView(state: loader.state, retry: load) { races in
             List(races) { race in
                 NavigationLink(value: Route.race(race)) { RaceRow(race: race) }
             }
+            .refreshable { await load() }
         }
         .navigationTitle("\(Nation.flag(event.nation) ?? "") \(event.shortDescription)" as String)
         .ibuAttribution()
@@ -74,10 +74,6 @@ struct EventView: View {
     }
 
     private func load() async {
-        do {
-            state = .loaded(try await ibu.competitions(eventID: event.id).sorted { $0.startTime < $1.startTime })
-        } catch {
-            state = .failed(error)
-        }
+        await loader.load { try await ibu.competitions(eventID: event.id).sorted { $0.startTime < $1.startTime } }
     }
 }

@@ -8,10 +8,10 @@ struct StandingsView: View {
     @Environment(\.ibu) private var ibu
     @State private var category = RaceCategory.men
     @State private var discipline = StandingsDiscipline.total
-    @State private var state: Loadable<SeasonStandings> = .loading
+    @State private var loader = Loader<SeasonStandings>()
 
     var body: some View {
-        LoadableView(state: state, retry: load) { loaded in
+        LoadableView(state: loader.state, retry: load) { loaded in
             let standings = loaded.standings
             List {
                 Section {
@@ -48,16 +48,14 @@ struct StandingsView: View {
         }
         .navigationTitle("Standings")
         .ibuAttribution()
-        .task(id: [category.rawValue, discipline.rawValue]) { await load() }
+        .task(id: [category.rawValue, discipline.rawValue]) {
+            loader.reset()
+            await load()
+        }
     }
 
     private func load() async {
-        state = .loading
-        do {
-            state = .loaded(try await ibu.worldCupStandings(category: category, discipline: discipline, now: .now))
-        } catch {
-            state = .failed(error)
-        }
+        await loader.load { try await ibu.worldCupStandings(category: category, discipline: discipline, now: .now) }
     }
 }
 

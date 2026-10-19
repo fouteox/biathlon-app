@@ -181,16 +181,6 @@
         }
       }
     },
-    "Invalid server response.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Réponse du serveur invalide."
-          }
-        }
-      }
-    },
     "Latest result · %@": {
       "localizations": {
         "fr": {
@@ -401,6 +391,16 @@
         }
       }
     },
+    "Results are temporarily unavailable.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les résultats sont momentanément indisponibles."
+          }
+        }
+      }
+    },
     "Scheduled on this iPhone for races in the coming week.": {
       "localizations": {
         "fr": {
@@ -541,16 +541,6 @@
         }
       }
     },
-    "The server responded with %lld.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Le serveur a répondu %lld."
-          }
-        }
-      }
-    },
     "Try again": {
       "localizations": {
         "fr": {
@@ -567,16 +557,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chargement impossible"
-          }
-        }
-      }
-    },
-    "Unexpected data (%@).": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Données inattendues (%@)."
           }
         }
       }

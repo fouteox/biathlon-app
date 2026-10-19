@@ -80,16 +80,9 @@ public struct IBUClient: Sendable {
     }
 }
 
-public enum IBUError: Error, LocalizedError {
+/// Failures of the IBU API. The app shows its own message for them and logs the details.
+public enum IBUError: Error {
     case invalidResponse
     case http(Int)
     case decoding(path: String, underlying: any Error)
-
-    public var errorDescription: String? {
-        switch self {
-        case .invalidResponse: "Invalid server response."
-        case .http(let code): "The server responded with \(code)."
-        case .decoding(let path, _): "Unexpected data (\(path))."
-        }
-    }
 }

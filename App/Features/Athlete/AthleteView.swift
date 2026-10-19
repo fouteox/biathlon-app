@@ -6,11 +6,13 @@ struct AthleteView: View {
     let name: String
 
     @Environment(\.ibu) private var ibu
-    @State private var bio: Loadable<AthleteBio> = .loading
-    @State private var results: [AthleteResult] = []
+    @State private var bio = Loader<AthleteBio>()
+    /// Loaded on its own: the profile shows without waiting for it, and without it.
+    @State private var history = Loader<[AthleteResult]>()
 
     var body: some View {
-        LoadableView(state: bio, retry: load) { bio in
+        LoadableView(state: bio.state, retry: load) { bio in
+            let results = history.state.value ?? []
             List {
                 Section {
                     HStack(spacing: 16) {
@@ -61,11 +63,12 @@ struct AthleteView: View {
                     }
                 }
             }
+            .refreshable { await load() }
         }
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.value?.nation)
+            FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.state.value?.nation)
         }
         .ibuAttribution()
         .task { await load() }
@@ -79,13 +82,8 @@ struct AthleteView: View {
     }()
 
     private func load() async {
-        do {
-            async let bioTask = ibu.athlete(id: athleteID)
-            async let resultsTask = ibu.athleteResults(id: athleteID)
-            bio = .loaded(try await bioTask)
-            results = (try? await resultsTask) ?? []
-        } catch {
-            bio = .failed(error)
-        }
+        async let bioLoad: Void = bio.load { try await ibu.athlete(id: athleteID) }
+        async let historyLoad: Void = history.load { try await ibu.athleteResults(id: athleteID) }
+        _ = await (bioLoad, historyLoad)
     }
 }

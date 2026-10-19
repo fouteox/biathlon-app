@@ -1,12 +1,11 @@
 import BiathlonKit
 import SwiftUI
 import UserNotifications
+import os
 
 /// Notification preferences, built only from system form controls.
 struct NotificationSettingsView: View {
     @Environment(NotificationSettings.self) private var settings
-    @Environment(PushRegistration.self) private var push
-    @Environment(\.ibu) private var ibu
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var authorization: UNAuthorizationStatus = .notDetermined
@@ -25,9 +24,9 @@ struct NotificationSettingsView: View {
             }
 
             Section {
-                Toggle("Reminder before the start", isOn: $settings.reminderEnabled)
-                if settings.reminderEnabled {
-                    Picker("Notify me", selection: $settings.reminderMinutes) {
+                Toggle("Reminder before the start", isOn: $settings.preferences.reminderEnabled)
+                if settings.preferences.reminderEnabled {
+                    Picker("Notify me", selection: $settings.preferences.reminderMinutes) {
                         ForEach(NotificationSettings.reminderChoices, id: \.self) { minutes in
                             Text("\(minutes) min").tag(minutes)
                         }
@@ -38,8 +37,8 @@ struct NotificationSettingsView: View {
             }
 
             Section {
-                Toggle("Race cancelled", isOn: $settings.cancellationAlerts)
-                Toggle("Start time changed", isOn: $settings.reschedulingAlerts)
+                Toggle("Race cancelled", isOn: $settings.preferences.cancellationAlerts)
+                Toggle("Start time changed", isOn: $settings.preferences.reschedulingAlerts)
             } header: {
                 Text("Alerts")
             }
@@ -49,12 +48,12 @@ struct NotificationSettingsView: View {
                     Toggle(
                         category.title,
                         isOn: Binding(
-                            get: { settings.categories.contains(category) },
+                            get: { settings.preferences.categories.contains(category) },
                             set: { isOn in
                                 if isOn {
-                                    settings.categories.insert(category)
+                                    settings.preferences.categories.insert(category)
                                 } else {
-                                    settings.categories.remove(category)
+                                    settings.preferences.categories.remove(category)
                                 }
                             }
                         ))
@@ -71,31 +70,19 @@ struct NotificationSettingsView: View {
             }
         }
         .task { authorization = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus }
-        .onChange(of: settings.anyEnabled) { _, enabled in
+        .onChange(of: settings.preferences.anyEnabled) { _, enabled in
             if enabled { Task { await requestAuthorization() } }
-        }
-        .onChange(of: Preferences(settings)) {
-            // Owned by PushRegistration, so dismissing the sheet doesn't cancel it.
-            push.scheduleSync(settings, client: ibu)
         }
     }
 
     /// Apple recommends asking for permission in context, when the user turns a notification on.
     private func requestAuthorization() async {
         let center = UNUserNotificationCenter.current()
-        _ = try? await center.requestAuthorization(options: [.alert, .sound])
-        authorization = await center.notificationSettings().authorizationStatus
-    }
-
-    private struct Preferences: Equatable {
-        let reminder: Bool, minutes: Int, cancellation: Bool, rescheduling: Bool, categories: Set<RaceCategory>
-
-        init(_ settings: NotificationSettings) {
-            reminder = settings.reminderEnabled
-            minutes = settings.reminderMinutes
-            cancellation = settings.cancellationAlerts
-            rescheduling = settings.reschedulingAlerts
-            categories = settings.categories
+        do {
+            _ = try await center.requestAuthorization(options: [.alert, .sound])
+        } catch {
+            Logger.notifications.error("Authorization request failed: \(String(describing: error), privacy: .public)")
         }
+        authorization = await center.notificationSettings().authorizationStatus
     }
 }

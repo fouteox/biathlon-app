@@ -1,6 +1,7 @@
 import BiathlonKit
 import Foundation
 import UserNotifications
+import os
 
 /// Schedules the local "N minutes before the start" reminders.
 ///
@@ -9,14 +10,21 @@ import UserNotifications
 enum ReminderScheduler {
     private static let identifierPrefix = "reminder."
 
-    static func refresh(settings: NotificationSettings, client: IBUClient, now: Date = .now) async {
+    static func refresh(_ preferences: NotificationPreferences, client: IBUClient, now: Date = .now) async {
         let center = UNUserNotificationCenter.current()
         var reminders: [Reminder] = []
-        if settings.reminderEnabled, !settings.categories.isEmpty {
-            // Keep the current reminders when the calendar can't be fetched (e.g. offline).
-            guard let races = try? await client.upcomingRaces(now: now, horizon: ReminderPlan.horizon) else { return }
+        if preferences.reminderEnabled, !preferences.categories.isEmpty {
+            let races: [Competition]
+            do {
+                races = try await client.upcomingRaces(now: now, horizon: ReminderPlan.horizon)
+            } catch {
+                // Keep the current reminders when the calendar can't be fetched (e.g. offline).
+                Logger.notifications.error(
+                    "Calendar for reminders failed: \(String(describing: error), privacy: .public)")
+                return
+            }
             reminders = ReminderPlan.reminders(
-                for: races, categories: settings.categories, minutesBefore: settings.reminderMinutes, now: now)
+                for: races, categories: preferences.categories, minutesBefore: preferences.reminderMinutes, now: now)
         }
         let pending = await center.pendingNotificationRequests()
             .map(\.identifier)
@@ -27,7 +35,13 @@ enum ReminderScheduler {
             // Measured once: the trigger rejects an interval that isn't positive.
             let interval = reminder.fireDate.timeIntervalSinceNow
             guard interval >= 1 else { continue }
-            try? await center.add(request(for: reminder.race, minutes: settings.reminderMinutes, interval: interval))
+            do {
+                try await center.add(
+                    request(for: reminder.race, minutes: preferences.reminderMinutes, interval: interval))
+            } catch {
+                Logger.notifications.error(
+                    "Scheduling a reminder failed: \(String(describing: error), privacy: .public)")
+            }
         }
     }
 
