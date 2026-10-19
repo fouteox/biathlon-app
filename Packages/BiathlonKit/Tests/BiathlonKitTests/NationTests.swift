@@ -12,4 +12,10 @@ struct NationTests {
         #expect(Nation.flag("XXX") == nil)
         #expect(Nation.flag(nil) == nil)
     }
+
+    @Test func titlesStartWithTheFlagWhenKnown() {
+        #expect(Nation.titled("Hochfilzen", nation: "AUT") == "🇦🇹 Hochfilzen")
+        #expect(Nation.titled("Hochfilzen", nation: "XXX") == "Hochfilzen")
+        #expect(Nation.titled("Hochfilzen", nation: nil) == "Hochfilzen")
+    }
 }

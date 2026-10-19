@@ -33,21 +33,20 @@ struct StandingsView: View {
         // Filters live in system bars rather than a custom header, so the
         // list scrolls under the glass with the scroll edge effect.
         .safeAreaBar(edge: .top) {
-            Picker("Category", selection: $category) {
-                ForEach(Self.categories) { Text($0.title).tag($0) }
+            HStack {
+                Picker("Category", selection: $category) {
+                    ForEach(Self.categories) { Text($0.title).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                Picker("Discipline", selection: $discipline) {
+                    ForEach(StandingsDiscipline.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.menu)
             }
-            .pickerStyle(.segmented)
             .padding(.horizontal)
             .padding(.bottom, 8)
         }
-        .toolbar {
-            Picker("Discipline", selection: $discipline) {
-                ForEach(StandingsDiscipline.allCases) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.menu)
-        }
         .navigationTitle("Standings")
-        .ibuAttribution()
         .task(id: [category.rawValue, discipline.rawValue]) {
             loader.reset()
             await load()
@@ -74,16 +73,18 @@ extension StandingsDiscipline {
 
 private struct StandingRow: View {
     let row: CupRow
+    @ScaledMetric(relativeTo: .headline) private var rankWidth = 36.0
 
     var body: some View {
         let content = HStack(spacing: 12) {
-            Text(row.rank ?? "–")
-                .font(.headline.monospacedDigit())
-                .frame(width: 36, alignment: .leading)
-            Text(Nation.flag(row.isNation ? row.nation ?? row.name : row.nation) ?? "")
+            RankText(rank: row.rank).frame(width: rankWidth, alignment: .leading)
+            NationMark(code: row.isNation ? row.nation ?? row.name : row.nation)
             Text(row.shortName ?? row.name)
             if row.bibColors.contains("yellow") {
-                Image(systemName: "tshirt.fill").foregroundStyle(.yellow)
+                // The leader's bib is yellow: here the color is the information.
+                Image(systemName: "tshirt.fill")
+                    .foregroundStyle(.yellow)
+                    .accessibilityLabel("Yellow bib")
             }
             Spacer()
             if let change = row.rankChange, change != 0 {
@@ -91,8 +92,9 @@ private struct StandingRow: View {
                     .font(.caption)
                     .foregroundStyle(change < 0 ? .green : .red)
             }
-            Text(row.score ?? "")
-                .font(.subheadline.monospacedDigit().bold())
+            if let score = row.score {
+                Text(score).font(.subheadline.monospacedDigit().bold())
+            }
             if row.isNation, let nation = row.nation {
                 FavoriteButton(kind: .nation, key: nation, name: row.name, nation: nation)
             }

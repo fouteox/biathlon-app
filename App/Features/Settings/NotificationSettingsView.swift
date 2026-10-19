@@ -6,7 +6,6 @@ import os
 /// Notification preferences, built only from system form controls.
 struct NotificationSettingsView: View {
     @Environment(NotificationSettings.self) private var settings
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var authorization: UNAuthorizationStatus = .notDetermined
 
@@ -19,7 +18,7 @@ struct NotificationSettingsView: View {
                         if let url = URL(string: UIApplication.openNotificationSettingsURLString) { openURL(url) }
                     }
                 } footer: {
-                    Text("Notifications are turned off for Biathlon in Settings.")
+                    Text("Notifications are turned off in Settings.")
                 }
             }
 
@@ -28,7 +27,10 @@ struct NotificationSettingsView: View {
                 if settings.preferences.reminderEnabled {
                     Picker("Notify me", selection: $settings.preferences.reminderMinutes) {
                         ForEach(NotificationSettings.reminderChoices, id: \.self) { minutes in
-                            Text("\(minutes) min").tag(minutes)
+                            Text(
+                                Duration.seconds(minutes * 60), format: .units(allowed: [.minutes], width: .abbreviated)
+                            )
+                            .tag(minutes)
                         }
                     }
                 }
@@ -63,12 +65,6 @@ struct NotificationSettingsView: View {
             }
         }
         .navigationTitle("Notifications")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(role: .confirm) { dismiss() }
-            }
-        }
         .task { authorization = await UNUserNotificationCenter.current().notificationSettings().authorizationStatus }
         .onChange(of: settings.preferences.anyEnabled) { _, enabled in
             if enabled { Task { await requestAuthorization() } }

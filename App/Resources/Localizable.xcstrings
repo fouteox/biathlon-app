@@ -1,12 +1,12 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "%lld min": {
+    "About": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld min"
+            "value": "À propos"
           }
         }
       }
@@ -51,16 +51,6 @@
         }
       }
     },
-    "Biathlon": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Biathlon"
-          }
-        }
-      }
-    },
     "Calendar": {
       "localizations": {
         "fr": {
@@ -101,12 +91,12 @@
         }
       }
     },
-    "Data: IBU Datacenter · biathlonresults.com": {
+    "Data": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Données : IBU Datacenter · biathlonresults.com"
+            "value": "Données"
           }
         }
       }
@@ -131,6 +121,16 @@
         }
       }
     },
+    "Favorite": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favori"
+          }
+        }
+      }
+    },
     "Favorites": {
       "localizations": {
         "fr": {
@@ -151,12 +151,12 @@
         }
       }
     },
-    "Follow team %@ %@": {
+    "Follow team %@": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Suivre l'équipe %1$@ %2$@"
+            "value": "Suivre l'équipe %@"
           }
         }
       }
@@ -301,12 +301,12 @@
         }
       }
     },
-    "Notifications are turned off for Biathlon in Settings.": {
+    "Notifications are turned off in Settings.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les notifications de Biathlon sont désactivées dans Réglages."
+            "value": "Les notifications sont désactivées dans Réglages."
           }
         }
       }
@@ -401,6 +401,16 @@
         }
       }
     },
+    "Results, calendar and standings come from biathlonresults.com, the IBU Datacenter.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les résultats, le calendrier et les classements proviennent de biathlonresults.com, le centre de données de l'IBU."
+          }
+        }
+      }
+    },
     "Scheduled on this iPhone for races in the coming week.": {
       "localizations": {
         "fr": {
@@ -427,6 +437,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saison %1$@ : le classement %2$@ apparaîtra après la première course."
+          }
+        }
+      }
+    },
+    "Settings": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réglages"
           }
         }
       }
@@ -571,6 +591,16 @@
         }
       }
     },
+    "Version": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        }
+      }
+    },
     "Women": {
       "localizations": {
         "fr": {
@@ -587,6 +617,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mondiaux"
+          }
+        }
+      }
+    },
+    "Yellow bib": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dossard jaune"
           }
         }
       }

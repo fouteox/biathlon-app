@@ -13,4 +13,9 @@ public enum Nation {
         guard let code, let iso = iso[code.uppercased()] else { return nil }
         return String(String.UnicodeScalarView(iso.unicodeScalars.compactMap { Unicode.Scalar(127_397 + $0.value) }))
     }
+
+    /// The text preceded by the nation's flag, or the text alone when the flag is unknown.
+    public static func titled(_ text: String, nation: String?) -> String {
+        [flag(nation), text].compactMap(\.self).joined(separator: " ")
+    }
 }
