@@ -2,14 +2,14 @@ import BiathlonKit
 import Foundation
 import Observation
 
-/// Ce que montre l'accueil : la course en direct s'il y en a une, sinon la
-/// prochaine, plus les derniers résultats de l'étape en cours.
+/// What the home screen shows: the live race if there is one, otherwise the
+/// next one, plus the latest results of the current event.
 @Observable
 final class HomeModel {
     struct Snapshot {
-        /// L'étape la plus récente déjà commencée et la suivante : une course
-        /// peut se terminer après la `EndDate` de son étape, et entre deux
-        /// étapes il faut à la fois le dernier résultat et la prochaine course.
+        /// The most recent event already started and the next one: a race
+        /// can finish after its event's `EndDate`, and between two events
+        /// both the latest result and the next race are needed.
         var events: [BiathlonEvent] = []
         var races: [Competition] = []
         var liveResults: RaceResults?
@@ -23,7 +23,7 @@ final class HomeModel {
         var latestFinished: Competition? {
             races.filter { $0.state == .finished }.max { $0.startTime < $1.startTime }
         }
-        /// Étape de la course mise en avant (`RaceId` commence par l'`EventId`).
+        /// Event of the featured race (`RaceId` starts with the `EventId`).
         var event: BiathlonEvent? {
             guard let race = live ?? next ?? latestFinished else { return events.last }
             return events.first { race.id.hasPrefix($0.id) } ?? events.last
@@ -32,7 +32,7 @@ final class HomeModel {
 
     private(set) var state: Loadable<Snapshot> = .loading
 
-    /// Intervalle de rafraîchissement pendant une course en direct.
+    /// Refresh interval while a race is live.
     static let livePollInterval: Duration = .seconds(20)
 
     func load(using client: IBUClient, now: Date = .now) async {
@@ -53,7 +53,7 @@ final class HomeModel {
         let sorted = try await client.events(season: season).sorted { $0.startDate < $1.startDate }
         let upcoming = sorted.first { $0.startDate > now }
         var started = sorted.last { $0.startDate <= now }
-        // Avant la première étape : dernier résultat de la saison précédente.
+        // Before the first event: latest result of the previous season.
         if started == nil {
             started = try await client.events(season: season.previous).max { $0.startDate < $1.startDate }
         }

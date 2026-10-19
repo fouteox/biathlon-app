@@ -1,10 +1,10 @@
 #!/bin/bash
-# Installation de Swift pour l'environnement Claude Code cloud (Ubuntu 24.04).
-# À coller dans « Setup script » de l'environnement cloud. Nécessite l'accès HTTPS à
-# download.swift.org et keyserver.ubuntu.com.
-# Reprend la méthode du Dockerfile officiel (github.com/swiftlang/swift-docker, 24.04) :
-# archive officielle vérifiée par GPG, installée dans /usr. La clé est récupérée en HTTPS
-# plutôt qu'en hkp:// (port 11371), bloqué dans l'environnement cloud.
+# Installs Swift for the Claude Code cloud environment (Ubuntu 24.04).
+# Paste into the cloud environment's "Setup script". Needs HTTPS access to
+# download.swift.org and keyserver.ubuntu.com.
+# Follows the official Dockerfile (github.com/swiftlang/swift-docker, 24.04):
+# GPG-verified official archive, installed into /usr. The key is fetched over HTTPS
+# rather than hkp:// (port 11371), which is blocked in the cloud environment.
 set -euo pipefail
 
 SWIFT_VERSION=6.4.1
@@ -20,7 +20,7 @@ apt-get -q install -y curl binutils git unzip gnupg2 libc6-dev libcurl4-openssl-
   libz3-dev pkg-config tzdata zlib1g-dev
 
 case "$(dpkg --print-architecture)" in
-  amd64) SFX="" ;; arm64) SFX="-aarch64" ;; *) echo "arch non supportée" >&2; exit 1 ;;
+  amd64) SFX="" ;; arm64) SFX="-aarch64" ;; *) echo "unsupported architecture" >&2; exit 1 ;;
 esac
 V="swift-${SWIFT_VERSION}-RELEASE"
 URL="https://download.swift.org/swift-${SWIFT_VERSION}-release/ubuntu2404${SFX}/${V}/${V}-ubuntu24.04${SFX}.tar.gz"
@@ -36,5 +36,5 @@ tar -xzf "$WORK/swift.tar.gz" --directory / --strip-components=1
 chmod -R o+r /usr/lib/swift
 rm -rf "$WORK" "$GNUPGHOME"
 swift --version
-# Échoue si un autre swift (ancien lien swiftly, etc.) passe avant /usr/bin dans le PATH.
-swift --version 2>/dev/null | grep -qF "Swift version ${SWIFT_VERSION} (" || { echo "swift dans le PATH n'est pas ${SWIFT_VERSION}" >&2; exit 1; }
+# Fails if another swift (old swiftly link, etc.) comes before /usr/bin in PATH.
+swift --version 2>/dev/null | grep -qF "Swift version ${SWIFT_VERSION} (" || { echo "swift in PATH is not ${SWIFT_VERSION}" >&2; exit 1; }

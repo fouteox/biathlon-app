@@ -1,6 +1,6 @@
 import Foundation
 
-/// Un classement disponible pour une saison, issu de `Cups?SeasonId=`.
+/// A standings table available for a season, from `Cups?SeasonId=`.
 public struct Cup: Decodable, Identifiable, Hashable, Sendable {
     public let id: String
     public let description: String
@@ -25,26 +25,26 @@ public struct Cup: Decodable, Identifiable, Hashable, Sendable {
         self.level = level
     }
 
-    /// Biathlon (`BT`) et non para-biathlon (`PB`).
+    /// Biathlon (`BT`) rather than para-biathlon (`PB`).
     public var isBiathlon: Bool { id.hasPrefix("BT") }
     public var isWorldCup: Bool { id.contains("SWRLCP") }
 
-    /// Les quatre derniers caractères : `SMTS` (général hommes), `SWSP`
-    /// (sprint femmes), `MXRL` (relais mixte)…
+    /// The last four characters: `SMTS` (men's overall), `SWSP`
+    /// (women's sprint), `MXRL` (mixed relay)…
     public var discipline: String { String(id.suffix(4)) }
     public var isMen: Bool { discipline.hasPrefix("SM") }
     public var isWomen: Bool { discipline.hasPrefix("SW") }
 }
 
 extension Cup {
-    /// Identifiant du classement Coupe du monde d'une saison, par exemple
-    /// `worldCup(.current, "SMTS")` → `BT2627SWRLCP__SMTS`.
+    /// World Cup standings ID for a season, for example
+    /// `worldCupID(.current, "SMTS")` → `BT2627SWRLCP__SMTS`.
     public static func worldCupID(_ season: SeasonID, _ discipline: String) -> String {
         "BT\(season.rawValue)SWRLCP__\(discipline)"
     }
 }
 
-/// Réponse de `CupResults?CupId=`.
+/// Response of `CupResults?CupId=`.
 public struct CupStandings: Decodable, Sendable {
     public let cupID: String
     public let name: String
@@ -82,7 +82,7 @@ public struct CupRow: Decodable, Identifiable, Hashable, Sendable {
     public let shortName: String?
     public let nation: String?
     public let score: String?
-    /// Évolution depuis la dernière course : négatif = places gagnées.
+    /// Change since the last race: negative = places gained.
     public let rankChange: Int?
     public let bibColors: [String]
 
@@ -115,6 +115,6 @@ public struct CupRow: Decodable, Identifiable, Hashable, Sendable {
         bibColors = bibs?.compactMap(\.color) ?? []
     }
 
-    /// Classement des nations : pas d'`IBUId`, le nom est le pays.
+    /// Nations standings: no `IBUId`, the name is the country.
     public var isNation: Bool { athleteID == nil }
 }

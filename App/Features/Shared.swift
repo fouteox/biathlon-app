@@ -1,7 +1,7 @@
 import BiathlonKit
 import SwiftUI
 
-/// Destinations de navigation communes à tous les onglets.
+/// Navigation destinations shared by every tab.
 enum Route: Hashable {
     case event(BiathlonEvent)
     case race(Competition)
@@ -19,20 +19,20 @@ extension View {
         }
     }
 
-    /// Mention de la source, demandée dans l'e-mail à l'IBU.
+    /// Source credit, as offered in the email to the IBU. A bar with no
+    /// background: content scrolls beneath it with the system scroll edge
+    /// effect (Liquid Glass).
     func ibuAttribution() -> some View {
-        safeAreaInset(edge: .bottom) {
-            Text("Données : IBU Datacenter · biathlonresults.com")
+        safeAreaBar(edge: .bottom) {
+            Text("Data: IBU Datacenter · biathlonresults.com")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
-                .background(.bar)
         }
     }
 }
 
-/// État de chargement générique pour les écrans.
+/// Generic loading state for screens.
 enum Loadable<Value> {
     case loading
     case loaded(Value)
@@ -54,20 +54,30 @@ struct LoadableView<Value, Content: View>: View {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
         case .failed(let error):
             ContentUnavailableView {
-                Label("Chargement impossible", systemImage: "wifi.exclamationmark")
+                Label("Unable to load", systemImage: "wifi.exclamationmark")
             } description: {
-                Text(error.localizedDescription)
+                Self.message(for: error)
             } actions: {
-                Button("Réessayer") { Task { await retry() } }
+                Button("Try again") { Task { await retry() } }
             }
         case .loaded(let value):
             content(value)
         }
     }
+
+    /// IBU errors get a localized message; system errors (URLError…) already have one.
+    private static func message(for error: any Error) -> Text {
+        switch error as? IBUError {
+        case .invalidResponse: Text("Invalid server response.")
+        case .http(let code): Text("The server responded with \(code).")
+        case .decoding(let path, _): Text("Unexpected data (\(path)).")
+        case nil: Text(error.localizedDescription)
+        }
+    }
 }
 
 enum Nation {
-    /// Codes CIO vers codes ISO pour les drapeaux.
+    /// IOC codes to ISO codes, for flags.
     private static let iso: [String: String] = [
         "AUT": "AT", "BEL": "BE", "BUL": "BG", "CAN": "CA", "CHN": "CN", "CZE": "CZ",
         "EST": "EE", "FIN": "FI", "FRA": "FR", "GER": "DE", "GBR": "GB", "ITA": "IT",
@@ -88,13 +98,13 @@ enum Nation {
 }
 
 extension Competition.State {
-    var label: String {
+    var label: LocalizedStringResource {
         switch self {
-        case .scheduled: "À venir"
-        case .live: "En direct"
-        case .delayed: "Retardée"
-        case .cancelled: "Annulée"
-        case .finished: "Terminée"
+        case .scheduled: "Upcoming"
+        case .live: "Live"
+        case .delayed: "Delayed"
+        case .cancelled: "Cancelled"
+        case .finished: "Finished"
         }
     }
 

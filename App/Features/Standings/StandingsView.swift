@@ -5,18 +5,18 @@ struct StandingsView: View {
     enum Gender: String, CaseIterable, Identifiable {
         case men = "M", women = "W"
         var id: String { rawValue }
-        var label: String { self == .men ? "Hommes" : "Femmes" }
+        var label: LocalizedStringResource { self == .men ? "Men" : "Women" }
     }
 
     enum Discipline: String, CaseIterable, Identifiable {
         case total = "TS", sprint = "SP", pursuit = "PU", individual = "IN", massStart = "MS", nations = "NC"
         var id: String { rawValue }
-        var label: String {
+        var label: LocalizedStringResource {
             switch self {
-            case .total: "Général"
+            case .total: "Overall"
             case .sprint: "Sprint"
-            case .pursuit: "Poursuite"
-            case .individual: "Individuel"
+            case .pursuit: "Pursuit"
+            case .individual: "Individual"
             case .massStart: "Mass start"
             case .nations: "Nations"
             }
@@ -31,52 +31,47 @@ struct StandingsView: View {
     private var key: String { gender.rawValue + discipline.rawValue }
 
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 8) {
-                Picker("Catégorie", selection: $gender) {
-                    ForEach(Gender.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                ScrollView(.horizontal) {
-                    HStack {
-                        ForEach(Discipline.allCases) { item in
-                            Button(item.label) { discipline = item }
-                                .buttonStyle(.bordered)
-                                .tint(item == discipline ? Color.accentColor : Color.secondary)
-                        }
+        LoadableView(state: state, retry: load) { loaded in
+            let season = loaded.season
+            let standings = loaded.standings
+            List {
+                Section {
+                    ForEach(standings.rows) { row in
+                        StandingRow(row: row)
+                    }
+                } footer: {
+                    if season != .current {
+                        Text("Season \(season.displayName): the \(SeasonID.current.displayName) standings will appear after the first race.")
+                    } else if let asOf = standings.asOf {
+                        Text(asOf)
                     }
                 }
-                .scrollIndicators(.hidden)
             }
+            .refreshable { await load() }
+        }
+        // Filters live in system bars rather than a custom header, so the
+        // list scrolls under the glass with the scroll edge effect.
+        .safeAreaBar(edge: .top) {
+            Picker("Category", selection: $gender) {
+                ForEach(Gender.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
             .padding(.horizontal)
             .padding(.bottom, 8)
-
-            LoadableView(state: state, retry: load) { loaded in
-                let season = loaded.season
-                let standings = loaded.standings
-                List {
-                    Section {
-                        ForEach(standings.rows) { row in
-                            StandingRow(row: row)
-                        }
-                    } footer: {
-                        if season != .current {
-                            Text("Saison \(season.displayName) : le classement \(SeasonID.current.displayName) apparaîtra après la première course.")
-                        } else if let asOf = standings.asOf {
-                            Text(asOf)
-                        }
-                    }
-                }
-                .refreshable { await load() }
-            }
         }
-        .navigationTitle("Classements")
+        .toolbar {
+            Picker("Discipline", selection: $discipline) {
+                ForEach(Discipline.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.menu)
+        }
+        .navigationTitle("Standings")
         .ibuAttribution()
         .task(id: key) { await load() }
     }
 
-    /// Avant la première course, le classement de la saison est vide : on
-    /// affiche celui de la saison précédente.
+    /// Before the first race the season's standings are empty, so the
+    /// previous season's are shown instead.
     private func load() async {
         state = .loading
         do {

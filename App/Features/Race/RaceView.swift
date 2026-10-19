@@ -18,7 +18,7 @@ struct RaceView: View {
                 Section {
                     RaceRow(race: results.competition ?? race)
                     if results.isStartList && !results.isResult {
-                        Text("Liste de départ").font(.caption).foregroundStyle(.secondary)
+                        Text("Start list").font(.caption).foregroundStyle(.secondary)
                     }
                 }
                 Section {
@@ -38,7 +38,7 @@ struct RaceView: View {
             .refreshable { await load() }
             .overlay {
                 if results.rows.isEmpty {
-                    ContentUnavailableView("Pas encore de liste de départ", systemImage: "clock")
+                    ContentUnavailableView("No start list yet", systemImage: "clock")
                 }
             }
         }
