@@ -24,6 +24,10 @@ Mise en forme du code Swift (`swift format`, inclus dans la toolchain Swift 6 ; 
 swift format --in-place --recursive App Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
 ```
 
+## Xcode Cloud
+
+`ci_scripts/ci_post_clone.sh` installe XcodeGen et génère `Biathlon.xcodeproj` après le clone, puisque le projet Xcode n'est pas versionné. Xcode Cloud numérote lui-même les builds à partir de 1 : n'envoyer les builds TestFlight que par Xcode Cloud, sinon les numéros se chevauchent.
+
 ## Environnement Claude Code cloud
 
 Le conteneur cloud est sous Linux : il compile et teste `BiathlonKit`, mais pas l'app SwiftUI, qui demande macOS et Xcode. L'app est compilée par la CI GitHub Actions sur un runner macOS.
