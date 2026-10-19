@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "biathlon-server",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  // Every minute: the finest Cron Trigger granularity.
+  "triggers": { "crons": ["* * * * *"] },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "biathlon",
+      // Replace with the id printed by `npx wrangler d1 create biathlon`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "APNS_TOPIC": "com.fouteox.biathlon",
+    // Each push is one subrequest; the Free plan allows 50 per invocation.
+    "MAX_PUSHES_PER_RUN": "30"
+  },
+  "secrets": {
+    "required": ["APNS_KEY", "APNS_KEY_ID", "APNS_TEAM_ID"]
+  }
+}
