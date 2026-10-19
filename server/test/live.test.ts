@@ -333,6 +333,38 @@ describe("Live Activity channels", () => {
     expect(rows.every(({ state }) => JSON.parse(state).phase === "scheduled")).toBe(true);
   });
 
+  it("lets only a run started after the end reinstate a race", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 60_000);
+
+    // An older run, started before the end, still holds a snapshot of the race under way.
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 30_000);
+
+    expect(sent.filter((request) => request.url.includes("api-manage-broadcast"))).toEqual([]);
+    expect((await channels(env)).map(({ channelId }) => channelId)).toEqual(["channel-1", "channel-2"]);
+  });
+
+  it("clears the leaders of a race the calendar cancels", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], NOW + 60_000);
+
+    const states = broadcasts(sent).map((request) => (request.body as { aps: { "content-state": { phase: string; leaders: unknown[] } } }).aps["content-state"]);
+    expect(states.map(({ phase, leaders }) => [phase, leaders])).toEqual([
+      ["cancelled", []],
+      ["cancelled", []],
+    ]);
+  });
+
   it("opens new channels for a race followable again once its old ones are deleted", async () => {
     const env = await makeEnv();
     stubNetwork();

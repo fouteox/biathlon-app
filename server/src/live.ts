@@ -140,8 +140,9 @@ export async function syncLiveActivities(
     if (channel.endedAt === null) {
       open.push(channel);
       kept.push(channel);
-    } else if (isFollowable(watched.get(channel.raceId))) {
-      // A race followable again, like a cancellation called off, gets new channels.
+    } else if (isFollowable(watched.get(channel.raceId)) && now > channel.endedAt) {
+      // A race followable again, like a cancellation called off, gets new channels, in
+      // a run started after the end: an older run's snapshot may predate it.
       await replace(env, channel);
     } else {
       if (channel.deletedAt === null) await resendEnd(env, tokens, channel, now);
@@ -189,15 +190,14 @@ function isFollowable(race: RaceSnapshot | undefined): race is RaceSnapshot {
  * channel then always means the calendar ended the race, or stopped listing it, so a
  * race it lists as followable again gets new channels. The results give the leaders
  * of the races under way, which keep their last ones when the results can't be read
- * or don't describe the race; upcoming races have none.
+ * or don't describe the race; upcoming and cancelled races have none.
  */
 async function currentState(
   raceId: string,
   race: RaceSnapshot | undefined,
   budget: SubrequestBudget,
 ): Promise<Partial<LiveState> | undefined> {
-  if (race?.status === "scheduled") return { ...calendarFields(race), leaders: [] };
-  if (race?.status === "cancelled") return calendarFields(race);
+  if (race?.status === "scheduled" || race?.status === "cancelled") return { ...calendarFields(race), leaders: [] };
   try {
     const state = liveState(await fetchIBU<IBUResults>("Results", { RaceId: raceId }, budget));
     return { ...state, ...(race && calendarFields(race)) };

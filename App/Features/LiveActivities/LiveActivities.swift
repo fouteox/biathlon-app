@@ -11,7 +11,7 @@ import os
 /// the activity's content: the app's cached results could be older than a push.
 @Observable
 final class LiveActivities {
-    enum Failure: Error {
+    enum Failure: Error, Equatable {
         /// The server has no channel for the race yet.
         case noChannel
         /// The race's activity is over, with its final state.
@@ -87,9 +87,17 @@ final class LiveActivities {
             if try await replaceOutdatedActivities(raceID: raceID) {
                 try await replaceOutdatedActivities(raceID: raceID)
             }
-        } catch Failure.noChannel {
+        } catch let Failure.ended(finalState) {
+            // The end was sent while the device was offline, which the channel doesn't keep.
+            await Self.end(raceID: raceID, finalState: finalState)
+        } catch {
             // The server opens a channel in place of one APNs dropped at one of its next
-            // runs, a few per run: looked up again while the race's activity is shown.
+            // runs, a few per run, and the network or the server can fail for a while:
+            // looked up again while the race's activity is shown.
+            if error as? Failure != .noChannel {
+                Logger.notifications.error(
+                    "Reconciling the Live Activity failed: \(String(describing: error), privacy: .public)")
+            }
             guard pendingLookups.insert(raceID).inserted else { return }
             Task { [weak self] in
                 try? await Task.sleep(for: Self.channelLookupInterval)
@@ -97,12 +105,6 @@ final class LiveActivities {
                 pendingLookups.remove(raceID)
                 if startedRaceIDs.contains(raceID) { await reconcile(raceID: raceID) }
             }
-        } catch let Failure.ended(finalState) {
-            // The end was sent while the device was offline, which the channel doesn't keep.
-            await Self.end(raceID: raceID, finalState: finalState)
-        } catch {
-            Logger.notifications.error(
-                "Reconciling the Live Activity failed: \(String(describing: error), privacy: .public)")
         }
     }
 
