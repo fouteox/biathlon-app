@@ -29,6 +29,15 @@ const CURVES: Record<string, { name: string; size: number }> = {
 
 export type AttestEnvironment = "development" | "production";
 
+/**
+ * `apple_validation_category_01` values an iOS build of this app can have, from
+ * the table in "Validating apps that connect to your server": 2 TestFlight,
+ * 3 development signing, 4 App Store. The others (0 invalid, 1 operating
+ * system, 5 Enterprise or ad hoc, 6 Developer ID, 7-9 restricted, 10 unmatched
+ * identity) are rejected.
+ */
+const APP_VALIDATION_CATEGORIES: readonly number[] = [2, 3, 4];
+
 export class AttestationError extends Error {}
 
 export interface AttestedKey {
@@ -63,6 +72,7 @@ export async function verifyAttestation(input: {
   appId: string;
   now: number;
   root?: Uint8Array;
+  validationCategories?: readonly number[];
 }): Promise<AttestedKey> {
   return guarded(async () => {
     const object = asMap(decode(input.attestation));
@@ -110,8 +120,9 @@ export async function verifyAttestation(input: {
     // 9. credentialId is the key identifier too.
     if (!equal(authData.credentialId!, input.keyId)) throw new AttestationError("credential mismatch");
 
-    // 10-11. Apple doesn't document the raw values of the validation category,
-    // so they are recorded, not enforced (parseAuthenticatorData checks their types).
+    // 10. The build is one of this app's. 11. The bundle version is recorded: it changes
+    // with every build. Devices that send no extensions are accepted.
+    checkValidationCategory(authData, input.validationCategories);
     return {
       publicKey: leaf.publicKey,
       environment,
@@ -132,6 +143,7 @@ export async function verifyAssertion(input: {
   publicKey: Uint8Array;
   appId: string;
   previousCounter: number;
+  validationCategories?: readonly number[];
 }): Promise<number> {
   return guarded(async () => {
     const object = asMap(decode(input.assertion));
@@ -161,7 +173,9 @@ export async function verifyAssertion(input: {
     }
     // 5. The counter only grows, which rejects replayed assertions.
     if (authData.counter <= input.previousCounter) throw new AttestationError("counter did not increase");
-    // 6. The caller checks the challenge embedded in clientData. 7-8: see verifyAttestation.
+    // 6. The caller checks the challenge embedded in clientData.
+    // 7-8. Same checks as for the attestation.
+    checkValidationCategory(authData, input.validationCategories);
     return authData.counter;
   });
 }
@@ -202,6 +216,12 @@ function parseAuthenticatorData(data: Uint8Array, attested: boolean): Authentica
     }
   }
   return result;
+}
+
+function checkValidationCategory(authData: AuthenticatorData, allowed = APP_VALIDATION_CATEGORIES): void {
+  if (authData.validationCategory !== undefined && !allowed.includes(authData.validationCategory)) {
+    throw new AttestationError(`validation category ${authData.validationCategory} not allowed`);
+  }
 }
 
 function attestEnvironment(aaguid: Uint8Array): AttestEnvironment {

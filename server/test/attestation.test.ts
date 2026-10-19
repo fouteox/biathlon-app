@@ -17,6 +17,8 @@ const sampleInput = {
   clientDataHash: new TextEncoder().encode(sample.challenge),
   appId: sample.appId,
   now: sampleTime,
+  // Apple's sample is an operating system executable (category 1).
+  validationCategories: [1],
 };
 
 describe("attestation", () => {
@@ -33,6 +35,12 @@ describe("attestation", () => {
     await expect(verifyAttestation({ ...sampleInput, appId: "1234567890.com.example.other" })).rejects.toThrow("App ID mismatch");
     await expect(verifyAttestation({ ...sampleInput, keyId: new Uint8Array(32) })).rejects.toThrow("key identifier mismatch");
     await expect(verifyAttestation({ ...sampleInput, clientDataHash: new Uint8Array(32) })).rejects.toThrow("nonce mismatch");
+  });
+
+  it("rejects validation categories other than this app's builds", async () => {
+    await expect(verifyAttestation({ ...sampleInput, validationCategories: undefined })).rejects.toThrow(
+      "validation category 1 not allowed",
+    );
   });
 
   it("rejects an expired credential certificate", async () => {
@@ -97,6 +105,12 @@ describe("assertion", () => {
       "App ID mismatch",
     );
     await expect(verifyAssertion({ ...input, assertion: await device.assert(data, { counter: 5 }) })).rejects.toThrow("counter");
+  });
+
+  it("rejects malformed CBOR text as a verification failure", async () => {
+    // { "fmt": <text with an invalid UTF-8 byte> }
+    const bad = Uint8Array.from([0xa1, 0x63, 0x66, 0x6d, 0x74, 0x61, 0xff]);
+    await expect(verifyAttestation({ ...sampleInput, attestation: bad })).rejects.toThrow("invalid UTF-8 text");
   });
 
   it("converts DER signatures with and without leading zeros", () => {

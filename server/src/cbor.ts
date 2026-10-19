@@ -39,7 +39,7 @@ export function decodeItem(data: Uint8Array, offset = 0, depth = 0): { value: CB
       const end = position + argument;
       if (end > data.length) throw new CBORError("truncated string");
       const bytes = data.subarray(position, end);
-      return { value: major === 2 ? bytes : new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes), end };
+      return { value: major === 2 ? bytes : decodeText(bytes), end };
     }
     case 4: {
       const items: CBORValue[] = [];
@@ -76,6 +76,14 @@ export function decode(data: Uint8Array): CBORValue {
   const { value, end } = decodeItem(data);
   if (end !== data.length) throw new CBORError("trailing bytes");
   return value;
+}
+
+function decodeText(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
+  } catch {
+    throw new CBORError("invalid UTF-8 text");
+  }
 }
 
 function byteAt(data: Uint8Array, index: number): number {

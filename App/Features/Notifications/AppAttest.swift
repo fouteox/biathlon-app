@@ -7,7 +7,7 @@ import os
 /// they come from this app on a genuine Apple device (protocol in server/src/keys.ts).
 ///
 /// Following Apple's "Establishing your app's integrity": one key per install, attested
-/// once with a one-time challenge from the server, then one assertion per request.
+/// once with a challenge from the server, then one assertion per request.
 final class AppAttest {
     enum Failure: Error {
         case unsupported
@@ -23,10 +23,19 @@ final class AppAttest {
     private enum DefaultsKey {
         /// Key the server accepted.
         static let keyID = "appAttest.keyID"
-        /// Key and challenge of an attestation that failed with `serverUnavailable`:
-        /// Apple asks to retry with the same key and the same `clientDataHash`.
-        static let pendingKeyID = "appAttest.pendingKeyID"
-        static let pendingChallenge = "appAttest.pendingChallenge"
+        /// `Pending` key, not yet accepted by the server.
+        static let pending = "appAttest.pending"
+    }
+
+    /// A key on its way to the server, kept until the server answers so that a failure
+    /// doesn't cost a new key: Apple asks to generate keys only when needed.
+    private struct Pending: Codable {
+        let keyID: String
+        /// Kept to retry `attestKey` after `serverUnavailable` with the same key and
+        /// `clientDataHash`, as Apple asks. The server accepts it for a day.
+        let challenge: String
+        /// Set once Apple attested the key, until the server confirms it stored it.
+        var attestation: Data?
     }
 
     init(serverURL: URL, defaults: UserDefaults = .standard) {
@@ -44,7 +53,7 @@ final class AppAttest {
             do {
                 let (data, response) = try await URLSession.shared.data(for: try await signed(request, keyID: keyID))
                 guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-                if http.statusCode == 401, !retried, Self.isUnknownKey(data) {
+                if http.statusCode == 401, !retried, Self.serverError(data) == "unknown key" {
                     Logger.notifications.info("The server doesn't know the App Attest key, attesting a new one")
                     defaults.removeObject(forKey: DefaultsKey.keyID)
                     retried = true
@@ -61,48 +70,64 @@ final class AppAttest {
 
     private func attestedKey() async throws -> String {
         if let keyID = defaults.string(forKey: DefaultsKey.keyID) { return keyID }
-        let keyID: String
-        let challenge: String
-        if let pendingKey = defaults.string(forKey: DefaultsKey.pendingKeyID),
-            let pendingChallenge = defaults.string(forKey: DefaultsKey.pendingChallenge)
-        {
-            (keyID, challenge) = (pendingKey, pendingChallenge)
+        var pending: Pending
+        if let saved = loadPending() {
+            pending = saved
         } else {
-            keyID = try await service.generateKey()
-            challenge = try await fetchChallenge(purpose: "attest")
+            // The challenge first: a failed fetch then leaves no unused key behind.
+            let challenge = try await fetchChallenge(purpose: "attest")
+            pending = Pending(keyID: try await service.generateKey(), challenge: challenge)
         }
-        let attestation: Data
-        do {
-            attestation = try await service.attestKey(
-                keyID, clientDataHash: Data(SHA256.hash(data: Data(challenge.utf8))))
-        } catch let error as DCError where error.code == .serverUnavailable {
-            // The server accepts an attest challenge for a day; past that, it rejects the
-            // registration below and the next sync starts over with a new key.
-            defaults.set(keyID, forKey: DefaultsKey.pendingKeyID)
-            defaults.set(challenge, forKey: DefaultsKey.pendingChallenge)
-            throw error
-        } catch {
-            // Apple: for any other error, discard the key and create a new one next time.
-            clearPending()
-            throw error
+
+        if pending.attestation == nil {
+            do {
+                pending.attestation = try await service.attestKey(
+                    pending.keyID, clientDataHash: Data(SHA256.hash(data: Data(pending.challenge.utf8))))
+            } catch let error as DCError where error.code == .serverUnavailable {
+                savePending(pending)
+                throw error
+            } catch {
+                // Apple: for any other error, discard the key and create a new one next time.
+                clearPending()
+                throw error
+            }
         }
-        clearPending()
+        savePending(pending)
 
         var request = URLRequest(url: serverURL.appending(path: "v1/app-attest/keys"))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(
-            KeyRegistration(keyId: keyID, attestation: attestation.base64EncodedString(), challenge: challenge))
-        let (_, response) = try await URLSession.shared.data(for: request)
+            KeyRegistration(
+                keyId: pending.keyID,
+                attestation: pending.attestation?.base64EncodedString() ?? "",
+                challenge: pending.challenge
+            ))
+        // A transport error keeps the key pending: the next sync sends the same attestation.
+        let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 204 else { throw Failure.server(status: status) }
-        defaults.set(keyID, forKey: DefaultsKey.keyID)
-        return keyID
+        let error = Self.serverError(data)
+        // "key already attested": an earlier try was stored but its answer was lost.
+        guard status == 204 || error == "key already attested" else {
+            // Any other refusal, an expired challenge included, won't change: start over.
+            if (400..<500).contains(status) { clearPending() }
+            throw Failure.server(status: status)
+        }
+        defaults.set(pending.keyID, forKey: DefaultsKey.keyID)
+        clearPending()
+        return pending.keyID
+    }
+
+    private func loadPending() -> Pending? {
+        defaults.data(forKey: DefaultsKey.pending).flatMap { try? JSONDecoder().decode(Pending.self, from: $0) }
+    }
+
+    private func savePending(_ pending: Pending) {
+        defaults.set(try? JSONEncoder().encode(pending), forKey: DefaultsKey.pending)
     }
 
     private func clearPending() {
-        defaults.removeObject(forKey: DefaultsKey.pendingKeyID)
-        defaults.removeObject(forKey: DefaultsKey.pendingChallenge)
+        defaults.removeObject(forKey: DefaultsKey.pending)
     }
 
     /// Adds the assertion headers. The signed bytes are the challenge, the method and
@@ -132,8 +157,8 @@ final class AppAttest {
         return try JSONDecoder().decode(Challenge.self, from: data).challenge
     }
 
-    private static func isUnknownKey(_ data: Data) -> Bool {
-        (try? JSONDecoder().decode(ServerError.self, from: data))?.error == "unknown key"
+    private static func serverError(_ data: Data) -> String? {
+        (try? JSONDecoder().decode(ServerError.self, from: data))?.error
     }
 
     private struct KeyRegistration: Encodable {
