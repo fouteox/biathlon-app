@@ -4,6 +4,10 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
   "observability": { "enabled": true },
+  // Public URL the app registers devices with: https://biathlon-server.fouteox.workers.dev
+  "workers_dev": true,
+  // Not used: new versions are deployed with `wrangler deploy`, never previewed.
+  "preview_urls": false,
   // Every minute: the finest Cron Trigger granularity.
   "triggers": { "crons": ["* * * * *"] },
   "d1_databases": [
