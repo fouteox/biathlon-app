@@ -50,9 +50,9 @@ struct RaceView: View {
         .navigationTitle(race.shortDescription)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            if let state = liveState, state.phase.canBeFollowedLive, liveActivities.isAvailable {
+            if liveState.phase.canBeFollowedLive, liveActivities.isAvailable {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Toggle("Live Activity", systemImage: "dot.radiowaves.left.and.right", isOn: following(state))
+                    Toggle("Live Activity", systemImage: "dot.radiowaves.left.and.right", isOn: following(liveState))
                 }
             }
         }
@@ -79,8 +79,11 @@ struct RaceView: View {
         FavoriteSet(favorites).contains(row)
     }
 
+    /// From the calendar while the results load or fail.
+    private var liveState: RaceLiveState { loadedState ?? RaceLiveState(race: race) }
+
     /// From the results, or from the calendar when they don't describe the race yet.
-    private var liveState: RaceLiveState? {
+    private var loadedState: RaceLiveState? {
         loader.state.value.map { RaceLiveState($0) ?? RaceLiveState(race: race) }
     }
 
@@ -116,9 +119,10 @@ struct RaceView: View {
 
     private func load() async {
         await loader.load { try await ibu.results(raceID: race.id) }
-        guard let liveState else { return }
+        // A failed load leaves the activity as the server last published it.
+        guard let loadedState else { return }
         do {
-            try await liveActivities.update(raceID: race.id, with: liveState)
+            try await liveActivities.update(raceID: race.id, with: loadedState)
         } catch {
             Logger.notifications.error(
                 "Rescheduling the Live Activity failed: \(String(describing: error), privacy: .public)")

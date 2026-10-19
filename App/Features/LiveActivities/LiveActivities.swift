@@ -56,16 +56,7 @@ final class LiveActivities {
     /// shortly before a later race (`RaceLiveState.activityStart`).
     func follow(raceID: String, name: String, state: RaceLiveState) async throws {
         guard !followedRaceIDs.contains(raceID) else { return }
-        let request = UUID()
-        requests[raceID] = request
-        defer {
-            if requests[raceID] == request { requests[raceID] = nil }
-            refresh()
-        }
-        let channelID = try await channel(raceID: raceID)
-        // Turned off meanwhile.
-        guard requests[raceID] == request else { return }
-        try Self.request(raceID: raceID, name: name, state: state, channelID: channelID)
+        try await start(raceID: raceID, name: name, state: state)
     }
 
     /// Removes the race's activity from the Lock Screen at once, or cancels its request.
@@ -85,14 +76,23 @@ final class LiveActivities {
         guard let moved else { return await Self.update(raceID: raceID, with: state) }
         let (movedID, name) = (moved.id, moved.attributes.name)
         // The replacement first: the race stays followed if it can't be scheduled.
-        let channelID = try await channel(raceID: raceID)
-        try Self.request(raceID: raceID, name: name, state: state, channelID: channelID)
+        guard try await self.start(raceID: raceID, name: name, state: state) else { return }
         await Self.end(raceID: raceID, activityID: movedID)
         refresh()
     }
 
-    /// Requests the race's activity, scheduled to start shortly before a later race.
-    private static func request(raceID: String, name: String, state: RaceLiveState, channelID: String) throws {
+    /// Requests the race's activity on its channel; `false` when `stopFollowing` cancels
+    /// the request meanwhile.
+    @discardableResult
+    private func start(raceID: String, name: String, state: RaceLiveState) async throws -> Bool {
+        let request = UUID()
+        requests[raceID] = request
+        defer {
+            if requests[raceID] == request { requests[raceID] = nil }
+            refresh()
+        }
+        let channelID = try await channel(raceID: raceID)
+        guard requests[raceID] == request else { return false }
         let start = RaceLiveState.activityStart(raceStart: state.startTime, now: .now)
         let attributes = RaceActivityAttributes(raceID: raceID, name: name, scheduledStart: start)
         let content = ActivityContent(state: state, staleDate: nil)
@@ -106,6 +106,7 @@ final class LiveActivities {
         } else {
             _ = try Activity.request(attributes: attributes, content: content, pushType: .channel(channelID))
         }
+        return true
     }
 
     // `Activity` isn't `Sendable` and its `update` and `end` run off the main actor:
