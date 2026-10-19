@@ -32,5 +32,6 @@ struct RootView: View {
                 NavigationStack { FavoritesView().navigationDestinations() }
             }
         }
+        .tabBarMinimizeBehavior(.onScrollDown)
     }
 }

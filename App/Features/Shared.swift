@@ -19,15 +19,14 @@ extension View {
         }
     }
 
-    /// Mention de la source, demandée dans l'e-mail à l'IBU.
+    /// Mention de la source, demandée dans l'e-mail à l'IBU. Barre sans fond :
+    /// le contenu défile dessous avec l'effet de bord du système (Liquid Glass).
     func ibuAttribution() -> some View {
-        safeAreaInset(edge: .bottom) {
+        safeAreaBar(edge: .bottom) {
             Text("Données : IBU Datacenter · biathlonresults.com")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity)
                 .padding(.vertical, 4)
-                .background(.bar)
         }
     }
 }

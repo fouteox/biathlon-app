@@ -31,44 +31,39 @@ struct StandingsView: View {
     private var key: String { gender.rawValue + discipline.rawValue }
 
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 8) {
-                Picker("Catégorie", selection: $gender) {
-                    ForEach(Gender.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                ScrollView(.horizontal) {
-                    HStack {
-                        ForEach(Discipline.allCases) { item in
-                            Button(item.label) { discipline = item }
-                                .buttonStyle(.bordered)
-                                .tint(item == discipline ? Color.accentColor : Color.secondary)
-                        }
+        LoadableView(state: state, retry: load) { loaded in
+            let season = loaded.season
+            let standings = loaded.standings
+            List {
+                Section {
+                    ForEach(standings.rows) { row in
+                        StandingRow(row: row)
+                    }
+                } footer: {
+                    if season != .current {
+                        Text("Saison \(season.displayName) : le classement \(SeasonID.current.displayName) apparaîtra après la première course.")
+                    } else if let asOf = standings.asOf {
+                        Text(asOf)
                     }
                 }
-                .scrollIndicators(.hidden)
             }
+            .refreshable { await load() }
+        }
+        // Filtres dans les barres du système plutôt qu'un en-tête maison :
+        // la liste défile sous le verre avec l'effet de bord.
+        .safeAreaBar(edge: .top) {
+            Picker("Catégorie", selection: $gender) {
+                ForEach(Gender.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
             .padding(.horizontal)
             .padding(.bottom, 8)
-
-            LoadableView(state: state, retry: load) { loaded in
-                let season = loaded.season
-                let standings = loaded.standings
-                List {
-                    Section {
-                        ForEach(standings.rows) { row in
-                            StandingRow(row: row)
-                        }
-                    } footer: {
-                        if season != .current {
-                            Text("Saison \(season.displayName) : le classement \(SeasonID.current.displayName) apparaîtra après la première course.")
-                        } else if let asOf = standings.asOf {
-                            Text(asOf)
-                        }
-                    }
-                }
-                .refreshable { await load() }
+        }
+        .toolbar {
+            Picker("Épreuve", selection: $discipline) {
+                ForEach(Discipline.allCases) { Text($0.label).tag($0) }
             }
+            .pickerStyle(.menu)
         }
         .navigationTitle("Classements")
         .ibuAttribution()
