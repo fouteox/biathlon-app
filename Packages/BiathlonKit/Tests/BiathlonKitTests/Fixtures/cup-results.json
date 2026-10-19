@@ -1,0 +1,3 @@
+{"CupId":"BT2526SWRLCP__SMTS","CupName":"Men's World Cup Total Score","CupShortName":"","CupInfo":"","AsOf":"after 3 of 26 races","RaceCount":3,"TotalRaces":26,"MaxPossiblePoints":null,"Notes":null,
+"Rows":[{"Rank":"1","Bibs":[{"Code":"Y","Color":"yellow","Description":"Yellow Bib World Cup Total Score Leader"}],"ResultOrder":1,"IBUId":"BTFRA12906200101","Name":"PERROT Eric","ShortName":"PERROT E.","FamilyName":"PERROT","GivenName":"Eric","Nat":"FRA","Score":"1263","Scrachable":null,"Diff":null,"RnkDiff":null,"Groups":null,"ParaSportClass":null},
+{"Rank":"3","Bibs":null,"ResultOrder":3,"IBUId":"BTNOR11806199901","Name":"BOTN Johan-Olav Smoerdal","ShortName":"BOTN J.","Nat":"NOR","Score":968,"RnkDiff":-1}]}
