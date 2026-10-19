@@ -73,17 +73,25 @@ jobs:
               }
 
               // Every thread Codex opened must have at least one reply.
-              const threads = await github.graphql(`
-                query($owner: String!, $repo: String!, $number: Int!) {
-                  repository(owner: $owner, name: $repo) {
-                    pullRequest(number: $number) {
-                      reviewThreads(first: 100) {
-                        nodes { comments(first: 100) { nodes { author { login } } } }
+              const threads = [];
+              let cursor = null;
+              do {
+                const page = await github.graphql(`
+                  query($owner: String!, $repo: String!, $number: Int!, $cursor: String) {
+                    repository(owner: $owner, name: $repo) {
+                      pullRequest(number: $number) {
+                        reviewThreads(first: 100, after: $cursor) {
+                          pageInfo { hasNextPage endCursor }
+                          nodes { comments(first: 100) { nodes { author { login } } } }
+                        }
                       }
                     }
-                  }
-                }`, { owner, repo, number });
-              const unanswered = threads.repository.pullRequest.reviewThreads.nodes.filter((t) => {
+                  }`, { owner, repo, number, cursor });
+                const { nodes, pageInfo } = page.repository.pullRequest.reviewThreads;
+                threads.push(...nodes);
+                cursor = pageInfo.hasNextPage ? pageInfo.endCursor : null;
+              } while (cursor);
+              const unanswered = threads.filter((t) => {
                 const authors = t.comments.nodes.map((c) => c.author?.login);
                 return isCodex(authors[0]) && authors.every(isCodex);
               }).length;
