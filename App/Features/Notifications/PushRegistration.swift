@@ -42,7 +42,8 @@ final class PushRegistration {
     /// Applies every later change of the preferences, wherever it is made.
     func observe(_ settings: NotificationSettings, client: IBUClient) {
         observation = Task {
-            for await preferences in Observations { @MainActor in settings.preferences }.dropFirst() {
+            let changes = Observations { @MainActor in settings.preferences }.dropFirst()
+            for await preferences in changes {
                 scheduleSync(preferences, client: client)
             }
         }
