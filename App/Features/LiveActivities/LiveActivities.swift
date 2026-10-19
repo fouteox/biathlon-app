@@ -30,6 +30,8 @@ final class LiveActivities {
 
     @ObservationIgnored private let serverURL = Bundle.main.serverURL
     @ObservationIgnored private var observers: [Task<Void, Never>] = []
+    /// Races whose channel is looked up again shortly, at most once at a time.
+    @ObservationIgnored private var pendingLookups: Set<String> = []
 
     var isAvailable: Bool { serverURL != nil && areEnabled }
 
@@ -88,10 +90,12 @@ final class LiveActivities {
         } catch Failure.noChannel {
             // The server opens a channel in place of one APNs dropped at one of its next
             // runs, a few per run: looked up again while the race's activity is shown.
+            guard pendingLookups.insert(raceID).inserted else { return }
             Task { [weak self] in
                 try? await Task.sleep(for: Self.channelLookupInterval)
-                guard let self, startedRaceIDs.contains(raceID) else { return }
-                await reconcile(raceID: raceID)
+                guard let self else { return }
+                pendingLookups.remove(raceID)
+                if startedRaceIDs.contains(raceID) { await reconcile(raceID: raceID) }
             }
         } catch let Failure.ended(finalState) {
             // The end was sent while the device was offline, which the channel doesn't keep.
