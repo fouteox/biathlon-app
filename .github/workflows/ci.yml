@@ -15,6 +15,24 @@ jobs:
       - run: swift test
         working-directory: Packages/BiathlonKit
 
+  server:
+    name: Server (Cloudflare Worker)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - run: npx wrangler types --check
+      - run: npm run typecheck
+      - run: npm test
+
   app-ios:
     name: App (iOS Simulator)
     runs-on: macos-26

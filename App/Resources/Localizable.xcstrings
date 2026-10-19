@@ -460,6 +460,78 @@
           }
         }
       }
+    },
+    "push.cancelled.body": {
+      "comment": "Body of the cancellation push. %@ is the race name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ will not take place."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ n'aura pas lieu."
+          }
+        }
+      }
+    },
+    "push.cancelled.title": {
+      "comment": "Title of the push alert sent by the server when a race is cancelled.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Race cancelled"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Course annulée"
+          }
+        }
+      }
+    },
+    "push.rescheduled.body": {
+      "comment": "Body of the start time push. First %@ is the race name, second the new start time.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ now starts at %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ : nouveau départ à %@."
+          }
+        }
+      }
+    },
+    "push.rescheduled.title": {
+      "comment": "Title of the push alert sent by the server when a start time moves.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start time changed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Horaire modifié"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

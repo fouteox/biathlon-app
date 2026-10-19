@@ -29,9 +29,16 @@ targets:
       - App
     dependencies:
       - package: BiathlonKit
+    entitlements:
+      path: App/Resources/Biathlon.entitlements
+      properties:
+        # Xcode sets it from the provisioning profile: production for App Store and TestFlight builds.
+        aps-environment: development
     info:
       path: App/Resources/Info.plist
       properties:
+        # Cloudflare Worker base URL (see server/README.md); push alerts stay off while empty.
+        BiathlonServerURL: ""
         CFBundleDisplayName: Biathlon Live
         CFBundleDevelopmentRegion: $(DEVELOPMENT_LANGUAGE)
         UILaunchScreen: {}
