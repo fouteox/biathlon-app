@@ -49,20 +49,23 @@ struct FavoritesView: View {
         let ibu = ibu
         await withTaskGroup { group in
             for id in ids {
-                group.addTask { () -> AthleteBio? in
+                group.addTask { () -> (String, Result<AthleteBio, any Error>) in
                     do {
-                        return try await ibu.athlete(id: id)
+                        return (id, .success(try await ibu.athlete(id: id)))
                     } catch {
-                        Logger.data.error(
-                            "Refreshing favorite \(id, privacy: .public) failed: \(String(describing: error), privacy: .public)"
-                        )
-                        return nil
+                        return (id, .failure(error))
                     }
                 }
             }
-            for await bio in group {
-                guard let bio else { continue }
-                favorites.first { $0.kind == .athlete && $0.key == bio.id }?.update(from: bio)
+            for await (id, result) in group {
+                switch result {
+                case .success(let bio):
+                    favorites.first { $0.kind == .athlete && $0.key == id }?.update(from: bio)
+                case .failure(let error):
+                    Logger.data.error(
+                        "Refreshing favorite \(id, privacy: .public) failed: \(String(describing: error), privacy: .public)"
+                    )
+                }
             }
         }
     }
