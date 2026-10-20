@@ -2,16 +2,45 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { LOC_KEYS } from "../src/payload";
 
-// APNs resolves loc-keys from the app's Localizable table, so every key the
-// server sends must exist there in every app language.
-describe("app String Catalog", () => {
-  const catalog = JSON.parse(readFileSync(new URL("../../Shared/Localizable.xcstrings", import.meta.url), "utf8"));
+type StringUnit = { state?: string; value?: string };
+type Localization = { stringUnit?: StringUnit; variations?: { plural?: Record<string, { stringUnit?: StringUnit }> } };
+type Entry = { extractionState?: string; shouldTranslate?: boolean; localizations?: Record<string, Localization> };
 
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+const catalog: { sourceLanguage: string; strings: Record<string, Entry> } = JSON.parse(read("../../Shared/Localizable.xcstrings"));
+
+// The languages the app ships: the Xcode project's known regions, as Xcode lists
+// them once a language is added under Project > Info > Localizations.
+const languages = (read("../../Biathlon.xcodeproj/project.pbxproj").match(/knownRegions = \(([^)]*)\)/)?.[1] ?? "")
+  .split(",")
+  .map((region) => region.trim())
+  .filter((region) => region !== "" && region !== "Base");
+
+const isTranslated = (localization: Localization | undefined) => {
+  const units = localization?.variations?.plural
+    ? Object.values(localization.variations.plural).map((variation) => variation.stringUnit)
+    : [localization?.stringUnit];
+  return units.every((unit) => unit?.state === "translated" && !!unit.value);
+};
+
+describe("app String Catalog", () => {
+  it("is registered in the Xcode project with every app language", () => {
+    expect(languages).toEqual(expect.arrayContaining([catalog.sourceLanguage, "fr", "de"]));
+  });
+
+  // A string extracted from code reads as its own key in the source language;
+  // a manual key needs a value there too.
+  for (const [key, entry] of Object.entries(catalog.strings).filter(([, entry]) => entry.shouldTranslate !== false)) {
+    const required = entry.extractionState === "manual" ? languages : languages.filter((language) => language !== catalog.sourceLanguage);
+    it(`translates "${key}" in ${required.join(", ")}`, () => {
+      expect(required.filter((language) => !isTranslated(entry.localizations?.[language]))).toEqual([]);
+    });
+  }
+
+  // APNs resolves loc-keys from the app's Localizable table.
   for (const key of Object.values(LOC_KEYS).flatMap((pair) => Object.values(pair))) {
-    it(`translates ${key}`, () => {
-      const localizations = catalog.strings[key]?.localizations;
-      expect(localizations?.en?.stringUnit?.value).toBeTruthy();
-      expect(localizations?.fr?.stringUnit?.value).toBeTruthy();
+    it(`holds the push key ${key}`, () => {
+      expect(catalog.strings[key]?.extractionState).toBe("manual");
     });
   }
 });
