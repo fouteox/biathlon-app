@@ -540,6 +540,59 @@ describe("Live Activity channels", () => {
     expect(broadcasts(sent).map((request) => request.headers["apns-channel-id"])).toEqual(["channel-1", "channel-2"]);
   });
 
+  it("sends the ends again in turns, a failing one after those not tried yet", async () => {
+    const env = await makeEnv();
+    for (const environment of ["production", "sandbox"]) {
+      await env.DB.prepare(
+        "INSERT INTO live_channels (race_id, environment, channel_id, state, created_at, ended_at, end_sent_at) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?5)",
+      )
+        .bind(RACE_ID, environment, `ended-${environment}`, JSON.stringify(relayFinal), NOW - 20 * 60_000)
+        .run();
+    }
+    const finished = [race({ StatusId: 11, ScheduleStatus: "FINISHED" })];
+
+    const hosts: string[] = [];
+    for (const run of [0, 1]) {
+      const sent = stubNetwork({ failingHost: "api.push.apple.com" });
+      await syncLiveActivities(env, finished, NOW + run * 60_000, new SubrequestBudget(1));
+      hosts.push(...broadcasts(sent).map((request) => new URL(request.url).host));
+    }
+
+    expect(hosts).toEqual(["api.push.apple.com", "api.sandbox.push.apple.com"]);
+  });
+
+  it("drops a channel APNs no longer knows even after an overlapping run updated it", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    vi.stubGlobal("fetch", async (input: string) => {
+      const url = String(input);
+      if (url.includes("biathlonresults.com")) return Response.json(live.results);
+      // An overlapping run published a newer state first.
+      await env.DB.prepare("UPDATE live_channels SET state = ?1").bind(JSON.stringify(live.state)).run();
+      return Response.json({ reason: "ChannelNotRegistered" }, { status: 400 });
+    });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    const { results } = await env.DB.prepare("SELECT deleted_at AS deletedAt FROM live_channels").all();
+    expect(results).toEqual([{ deletedAt: NOW }, { deletedAt: NOW }]);
+  });
+
+  it("clears the leaders of a dropped channel's replacement when the race is scheduled again", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+    stubNetwork({ broadcastReason: "ChannelNotRegistered", results: relay.results });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
+
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW + 2 * 60_000);
+
+    expect((await channels(env)).map(({ state }) => JSON.parse(state).leaders)).toEqual([[], []]);
+  });
+
   it("keeps a race's lookup for a run that can broadcast its result", async () => {
     const env = await makeEnv();
     stubNetwork();
