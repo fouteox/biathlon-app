@@ -3,6 +3,12 @@
   "strings": {
     "About": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Info"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -13,6 +19,12 @@
     },
     "Add %@ to favorites": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ zu Favoriten hinzufügen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -23,6 +35,12 @@
     },
     "Add to favorites": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu Favoriten hinzufügen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -31,18 +49,14 @@
         }
       }
     },
-    "Alerts": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Alertes"
-          }
-        }
-      }
-    },
     "All results": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Ergebnisse"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -53,6 +67,12 @@
     },
     "Biathletes": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biathleten"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -63,6 +83,12 @@
     },
     "Calendar": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kalender"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -73,6 +99,12 @@
     },
     "Calendar not published": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kalender nicht veröffentlicht"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -83,6 +115,12 @@
     },
     "Cancelled": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abgesagt"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -93,6 +131,12 @@
     },
     "Category": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kategorie"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -103,6 +147,12 @@
     },
     "Data": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Daten"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -114,6 +164,12 @@
     "Deceased": {
       "comment": "Under the name of an athlete the IBU records as deceased.",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verstorben"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -124,6 +180,12 @@
     },
     "Discipline": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disziplin"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -134,6 +196,12 @@
     },
     "Down": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verschlechtert"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -144,6 +212,12 @@
     },
     "Event": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Station"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -154,6 +228,12 @@
     },
     "Favorite": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favorit"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -164,6 +244,12 @@
     },
     "Favorites": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favoriten"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -174,6 +260,12 @@
     },
     "Favorites · %@": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favoriten · %@"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -184,6 +276,12 @@
     },
     "Finished": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beendet"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -194,6 +292,12 @@
     },
     "Home": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersicht"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -204,6 +308,12 @@
     },
     "Individual": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einzel"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -214,6 +324,12 @@
     },
     "Latest result · %@": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuestes Ergebnis · %@"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -224,6 +340,12 @@
     },
     "Latest results": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neueste Ergebnisse"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -234,6 +356,12 @@
     },
     "Live": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -244,6 +372,12 @@
     },
     "Live Activities are temporarily unavailable.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Aktivitäten sind vorübergehend nicht verfügbar."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -254,6 +388,12 @@
     },
     "Live Activity": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Aktivität"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -264,6 +404,12 @@
     },
     "Live Activity when a favorite races": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Aktivität, wenn ein Favorit startet"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -274,6 +420,12 @@
     },
     "Mass start": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Massenstart"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -284,6 +436,12 @@
     },
     "Men": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herren"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -294,6 +452,12 @@
     },
     "Mixed": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mixed"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -304,6 +468,12 @@
     },
     "Nations": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nationen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -314,6 +484,12 @@
     },
     "Next race": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächstes Rennen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -324,6 +500,12 @@
     },
     "No favorites": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Favoriten"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -334,6 +516,12 @@
     },
     "No races": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Rennen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -344,6 +532,12 @@
     },
     "No start list yet": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Startliste"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -354,6 +548,12 @@
     },
     "Notifications": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitteilungen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -364,6 +564,12 @@
     },
     "Notifications are turned off in Settings.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitteilungen sind in den Einstellungen deaktiviert."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -374,6 +580,12 @@
     },
     "Notify for": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitteilungen für"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -384,6 +596,12 @@
     },
     "Notify me": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erinnern"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -394,6 +612,12 @@
     },
     "Olympic Games": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Olympische Spiele"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -404,6 +628,12 @@
     },
     "Open Settings": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen öffnen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -414,6 +644,12 @@
     },
     "Overall": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesamt"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -424,6 +660,12 @@
     },
     "Pursuit": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verfolgung"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -434,6 +676,12 @@
     },
     "Race cancelled": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rennen abgesagt"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -444,6 +692,12 @@
     },
     "Reminder before the start": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erinnerung vor dem Start"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -454,6 +708,12 @@
     },
     "Remove %@ from favorites": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ aus Favoriten entfernen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -464,6 +724,12 @@
     },
     "Remove from favorites": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus Favoriten entfernen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -474,6 +740,12 @@
     },
     "Results": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ergebnisse"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -484,6 +756,12 @@
     },
     "Results are temporarily unavailable.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ergebnisse sind vorübergehend nicht verfügbar."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -494,6 +772,12 @@
     },
     "Schedule not published": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeitplan nicht veröffentlicht"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -504,6 +788,12 @@
     },
     "Season": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saison"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -514,6 +804,12 @@
     },
     "Season %@: the %@ standings will appear after the first race.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saison %1$@: Die Wertung %2$@ erscheint nach dem ersten Rennen."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -524,6 +820,12 @@
     },
     "Settings": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -534,6 +836,12 @@
     },
     "Shows the race on the Lock Screen 30 minutes before the start when a favorite is on the start list.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigt das Rennen 30 Minuten vor dem Start auf dem Sperrbildschirm an, wenn ein Favorit auf der Startliste steht."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -544,6 +852,12 @@
     },
     "Sprint": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprint"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -554,6 +868,12 @@
     },
     "Standings": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wertungen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -564,6 +884,12 @@
     },
     "Start %@": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start %@"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -574,6 +900,12 @@
     },
     "Start list": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startliste"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -584,6 +916,12 @@
     },
     "Start time changed": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startzeit geändert"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -594,6 +932,24 @@
     },
     "Starts in %lld minutes": {
       "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Start in %lld Minute"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "Start in %lld Minuten"
+                }
+              }
+            }
+          }
+        },
         "en": {
           "variations": {
             "plural": {
@@ -634,6 +990,12 @@
     },
     "Tap the star on a biathlete or a team to follow their results from the home screen.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tippe auf den Stern bei einem Biathleten oder einem Team, um die Ergebnisse in der Übersicht zu verfolgen."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -644,6 +1006,12 @@
     },
     "Teams": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teams"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -654,6 +1022,12 @@
     },
     "This race can't be followed live yet. Try again closer to the start.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Rennen kann noch nicht live verfolgt werden. Versuche es kurz vor dem Start erneut."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -664,6 +1038,12 @@
     },
     "This race is over.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieses Rennen ist beendet."
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -674,6 +1054,12 @@
     },
     "Try again": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut versuchen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -684,6 +1070,12 @@
     },
     "Unable to load": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laden nicht möglich"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -694,6 +1086,12 @@
     },
     "Unable to start the Live Activity": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Aktivität kann nicht gestartet werden"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -704,6 +1102,12 @@
     },
     "Up": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbessert"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -714,6 +1118,12 @@
     },
     "Upcoming": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Demnächst"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -724,6 +1134,12 @@
     },
     "Version": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Version"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -734,6 +1150,12 @@
     },
     "Women": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Damen"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -744,6 +1166,12 @@
     },
     "World Championships": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weltmeisterschaften"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -754,6 +1182,12 @@
     },
     "Yellow bib": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gelbes Trikot"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -766,6 +1200,12 @@
       "comment": "Body of the cancellation push. %@ is the race name.",
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ findet nicht statt."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -784,6 +1224,12 @@
       "comment": "Title of the push alert sent by the server when a race is cancelled.",
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rennen abgesagt"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -802,6 +1248,12 @@
       "comment": "Body of the alert of a Live Activity the server starts for a favorite. %@ is the race name.",
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verfolge %@ live auf dem Sperrbildschirm."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -820,6 +1272,12 @@
       "comment": "Title of the alert of a Live Activity the server starts because a favorite is on the start list.",
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Favorit ist am Start"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -838,6 +1296,12 @@
       "comment": "Body of the start time push: the race name, then the new start's weekday and time.",
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ startet jetzt am %2$@ um %3$@."
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -856,6 +1320,12 @@
       "comment": "Title of the push alert sent by the server when a start time moves.",
       "extractionState": "manual",
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startzeit geändert"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
