@@ -153,7 +153,7 @@ export async function startFavoriteActivities(
         (JSON.parse(device.athletes) as string[]).some((id) => entrants.athletes.has(id)) ||
         (JSON.parse(device.nations) as string[]).some((nation) => entrants.nations.has(nation));
       if (!isEntered) {
-        await claim(env, race.id, device.keyId, false);
+        await recordMismatch(env, race.id, device);
         continue;
       }
       // Claimed before the push: an overlapping run that read the same pending token skips it.
@@ -238,7 +238,7 @@ function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, n
   };
 }
 
-/** Records that the race was checked for the install; `false` when another run already had. */
+/** Claims the install's start of the race; `false` when another run already checked it. */
 async function claim(env: Env, raceId: string, keyId: string, started: boolean): Promise<boolean> {
   const { meta } = await env.DB.prepare(
     "INSERT INTO live_starts (race_id, app_attest_key_id, started) VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING",
@@ -246,6 +246,36 @@ async function claim(env: Env, raceId: string, keyId: string, started: boolean):
     .bind(raceId, keyId, started ? 1 : 0)
     .run();
   return meta.changes === 1;
+}
+
+/**
+ * Records that none of the install's favorites races, unless they changed since they were
+ * read: saved during the start list's lookup, they had no check to clear yet.
+ */
+function recordMismatch(env: Env, raceId: string, device: PendingToken) {
+  return env.DB.prepare(
+    `INSERT INTO live_starts (race_id, app_attest_key_id, started)
+     SELECT ?1, ?2, 0 WHERE EXISTS (
+       SELECT 1 FROM live_start_tokens
+       WHERE app_attest_key_id = ?2 AND environment = ?3 AND athletes = ?4 AND nations = ?5)
+     ON CONFLICT DO NOTHING`,
+  )
+    .bind(raceId, device.keyId, device.environment, device.athletes, device.nations)
+    .run();
+}
+
+/**
+ * How long a race's checks are kept: past this, it can't be followed any more, its activity
+ * lasting at most 12 hours (live.ts), nor reinstated.
+ */
+const START_RETENTION_MS = 48 * 60 * 60_000;
+
+/** Deletes the checks of the races that started more than two days ago. */
+export async function pruneStarts(db: D1Database, now: number): Promise<void> {
+  await db
+    .prepare("DELETE FROM live_starts WHERE race_id IN (SELECT id FROM races WHERE start_time < ?1)")
+    .bind(new Date(now - START_RETENTION_MS).toISOString())
+    .run();
 }
 
 /** Gives a start that didn't go through back to a later run. */

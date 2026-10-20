@@ -4,6 +4,7 @@ import {
   deleteOwnedStartToken,
   ownsStartToken,
   parseStartRegistration,
+  pruneStarts,
   saveStartToken,
   type StartRegistration,
 } from "./liveStarts";
@@ -57,9 +58,12 @@ export default {
     try {
       await runCron(env, controller.scheduledTime);
     } finally {
-      // Once a day is enough, and keeps the scan of the keys table off every run.
+      // Once a day is enough, and keeps these table scans off every run.
       const time = new Date(controller.scheduledTime);
-      if (time.getUTCHours() === 3 && time.getUTCMinutes() === 0) await pruneKeys(env.DB, controller.scheduledTime);
+      if (time.getUTCHours() === 3 && time.getUTCMinutes() === 0) {
+        await pruneStarts(env.DB, controller.scheduledTime);
+        await pruneKeys(env.DB, controller.scheduledTime);
+      }
     }
   },
 } satisfies ExportedHandler<Env>;

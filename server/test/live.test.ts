@@ -3,7 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { snapshot, type IBUCompetition, type RaceSnapshot } from "../src/ibu";
 import { liveState, relevanceScore, syncLiveActivities, type IBUResults, type LiveState } from "../src/live";
-import { parseStartRegistration, saveStartToken, startFavoriteActivities } from "../src/liveStarts";
+import { parseStartRegistration, pruneStarts, saveStartToken, startFavoriteActivities } from "../src/liveStarts";
 import { ProviderTokens } from "../src/providerTokens";
 import { SubrequestBudget } from "../src/subrequests";
 import { drainOutbox } from "../src/watcher";
@@ -53,7 +53,15 @@ interface Sent {
 
 /** Answers like APNs and the IBU API, and records every request. */
 function stubNetwork(
-  options: { results?: unknown; resultsStatus?: number; broadcastReason?: string; failingHost?: string; deviceStatus?: number } = {},
+  options: {
+    results?: unknown;
+    resultsStatus?: number;
+    broadcastReason?: string;
+    failingHost?: string;
+    deviceStatus?: number;
+    /** Runs while the IBU API answers, like a request served meanwhile. */
+    duringResults?: () => Promise<void>;
+  } = {},
 ): Sent[] {
   const sent: Sent[] = [];
   let channels = 0;
@@ -62,6 +70,7 @@ function stubNetwork(
     const headers = Object.fromEntries(new Headers(init.headers).entries());
     sent.push({ method: init.method ?? "GET", url, headers, body: init.body ? JSON.parse(String(init.body)) : undefined });
     if (url.includes("biathlonresults.com")) {
+      await options.duringResults?.();
       return Response.json(options.results ?? live.results, { status: options.resultsStatus ?? 200 });
     }
     if (options.failingHost && url.includes(options.failingHost)) return new Response(null, { status: 500 });
@@ -1090,6 +1099,27 @@ describe("Live Activities started for favorites", () => {
     const sent = stubNetwork();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
     expect(sent).toEqual([]);
+  });
+
+  it("checks again a device whose favorites changed while the start list was read", async () => {
+    const env = await setUp();
+    stubNetwork({ duringResults: () => save(env, "bb".repeat(32), { nations: ["FRA"] }) });
+    await startFavoriteActivities(env, [race()], DUE);
+
+    const sent = stubNetwork();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
+  });
+
+  it("forgets the checks of races two days after their start", async () => {
+    const env = await setUp();
+    stubNetwork();
+    await startFavoriteActivities(env, [race()], DUE);
+    const checks = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM live_starts").first<{ n: number }>())!.n;
+    await pruneStarts(env.DB, START + 47 * 60 * 60_000);
+    expect(await checks()).toBe(3);
+    await pruneStarts(env.DB, START + 49 * 60 * 60_000);
+    expect(await checks()).toBe(0);
   });
 
   it("sends each start once when cron runs overlap", async () => {

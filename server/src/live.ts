@@ -420,9 +420,14 @@ async function replace(env: Env, channel: ChannelRow) {
   const deleteRow = env.DB.prepare(
     "DELETE FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3",
   ).bind(channel.raceId, channel.environment, channel.channelId);
-  const recheck = env.DB.prepare("DELETE FROM live_starts WHERE race_id = ?1").bind(channel.raceId);
+  // Before the row goes, and only while it is there: an overlapping run that replaced it
+  // already, then started activities on the new channel, keeps their checks.
+  const recheck = env.DB.prepare(
+    `DELETE FROM live_starts WHERE race_id = ?1 AND EXISTS (
+       SELECT 1 FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3)`,
+  ).bind(channel.raceId, channel.environment, channel.channelId);
   await env.DB.batch(
-    channel.deletedAt === null ? [retire(env, channel.environment, channel.channelId), deleteRow, recheck] : [deleteRow, recheck],
+    channel.deletedAt === null ? [recheck, retire(env, channel.environment, channel.channelId), deleteRow] : [recheck, deleteRow],
   );
 }
 

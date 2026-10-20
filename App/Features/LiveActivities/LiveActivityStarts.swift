@@ -57,8 +57,8 @@ final class LiveActivityStarts {
         guard let serverURL, let appAttest, let token = registration.token else { return }
         let favorites = registration.favorites
         let wanted = registration.isEnabled && !favorites.isEmpty
-        // Nothing to delete unless the server was sent favorites.
-        guard wanted || defaults.bool(forKey: Keys.isRegistered) else { return }
+        // Nothing to delete unless favorites may have reached the server.
+        guard wanted || defaults.bool(forKey: Keys.mayBeRegistered) else { return }
         var request = URLRequest(url: serverURL.appending(path: "v1/live-activity-starts/\(token)"))
         request.httpMethod = wanted ? "PUT" : "DELETE"
         if wanted {
@@ -75,6 +75,8 @@ final class LiveActivityStarts {
                 return
             }
         }
+        // Set before the PUT: the server may store it even if its answer is lost.
+        if wanted { defaults.set(true, forKey: Keys.mayBeRegistered) }
         do {
             let response = try await appAttest.send(request)
             guard (200..<300).contains(response.statusCode) else {
@@ -82,7 +84,7 @@ final class LiveActivityStarts {
                     "Server answered \(response.statusCode) to the Live Activity favorites")
                 return
             }
-            defaults.set(wanted, forKey: Keys.isRegistered)
+            if !wanted { defaults.set(false, forKey: Keys.mayBeRegistered) }
         } catch AppAttest.Failure.unsupported {
             Logger.notifications.notice("App Attest is unavailable, Live Activities for favorites stay off")
         } catch {
@@ -104,7 +106,7 @@ final class LiveActivityStarts {
 
     private enum Keys {
         static let isEnabled = "liveActivities.favoriteStarts"
-        /// Whether the server holds this install's favorites.
-        static let isRegistered = "liveActivities.favoriteStartsRegistered"
+        /// Whether the server may hold this install's favorites.
+        static let mayBeRegistered = "liveActivities.favoriteStartsMayBeRegistered"
     }
 }
