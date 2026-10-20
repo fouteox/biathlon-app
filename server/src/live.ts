@@ -205,7 +205,7 @@ async function updateOpenChannels(
       if (!race || isTerminal(race.status)) {
         // Over, or unlisted for longer than an activity lasts: it ends with the latest state there is.
         await end(env, tokens, channel, state, now);
-      } else if (channel.deletedAt === null && JSON.stringify(state) !== channel.state) {
+      } else if (JSON.stringify(state) !== channel.state) {
         await publish(env, tokens, channel, state, now);
       }
     }
@@ -285,7 +285,7 @@ async function openChannels(
       continue;
     }
     // A live race starts from the calendar too: its first results are published at the next run.
-    // The new channel replaces a dropped one, with the leaders last published on it while the race runs.
+    // The new channel replaces a dropped one, with the leaders last recorded on it while the race runs.
     const stored = race.status === "live" ? dropped.get(key(race.id, environment))?.state : undefined;
     const state: LiveState = { leaders: [], ...(stored && (JSON.parse(stored) as LiveState)), ...calendarFields(race) };
     try {
@@ -316,20 +316,28 @@ async function openChannels(
   }
 }
 
+/**
+ * Broadcasts the new state and records it. A dropped channel, which APNs no longer knows,
+ * only records it: its replacement, opened later in the run, starts from it.
+ */
 async function publish(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
-  const outcome = await send(env, tokens, channel, "update", state, now);
-  if (outcome === "sent") {
-    await env.DB.prepare(`UPDATE live_channels SET state = ?1, published_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`)
-      .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state, now)
-      .run();
-  } else if (outcome === "unregistered") {
-    // Dropped, whatever state an overlapping run stored since: a new channel replaces it at a
-    // next run while the race is still upcoming or live, and the row keeps the state for the
-    // end if the race is over first.
-    await env.DB.prepare(`UPDATE live_channels SET deleted_at = ?1 WHERE ${OPEN_CHANNEL}`)
-      .bind(now, channel.raceId, channel.environment, channel.channelId)
-      .run();
+  if (!isDropped(channel)) {
+    const outcome = await send(env, tokens, channel, "update", state, now);
+    if (outcome === "unregistered") {
+      // Dropped, whatever state an overlapping run stored since: a new channel replaces it at a
+      // next run while the race is still upcoming or live, and the row keeps the state for the
+      // end if the race is over first.
+      await env.DB.prepare(`UPDATE live_channels SET deleted_at = ?1 WHERE ${OPEN_CHANNEL}`)
+        .bind(now, channel.raceId, channel.environment, channel.channelId)
+        .run();
+    }
+    if (outcome !== "sent") return;
   }
+  const stored = JSON.stringify(state);
+  const { meta } = await env.DB.prepare(`UPDATE live_channels SET state = ?1, published_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`)
+    .bind(stored, channel.raceId, channel.environment, channel.channelId, channel.state, now)
+    .run();
+  if (meta.changes > 0) channel.state = stored;
 }
 
 /** An open channel APNs no longer knows, waiting for its replacement. */

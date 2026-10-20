@@ -746,6 +746,20 @@ describe("Live Activity channels", () => {
     expect((await channels(env)).map(({ state }) => JSON.parse(state))).toEqual([live.state, live.state]);
   });
 
+  it("seeds a dropped channel's replacement with the leaders the same run looked up", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork({ broadcastReason: "ChannelNotRegistered", results: live.results });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    stubNetwork({ results: relay.results });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
+
+    const ahead = { ...relayFinal, phase: "live" };
+    expect((await channels(env)).map(({ state }) => JSON.parse(state))).toEqual([ahead, ahead]);
+  });
+
   it("takes turns among the races under way when the budget can't cover them all", async () => {
     const env = await makeEnv();
     const races = ["A", "B"].map((suffix) => race({ RaceId: RACE_ID + suffix, IsLive: true }));
