@@ -6,14 +6,23 @@ import os
 /// Receives the APNs device token and notifications delivered while the app is open.
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     let settings = NotificationSettings()
-    let push = PushRegistration()
+    let push: PushRegistration
     let liveActivities = LiveActivities()
+    let liveActivityStarts: LiveActivityStarts
     /// IBU data goes through the server's cache when there is a server, to spare the IBU API.
     let client = IBUClient(baseURL: Bundle.main.serverURL?.appending(path: "ibu/") ?? IBUClient.ibuBaseURL)
 
     private var preferenceChanges: Task<Void, Never>?
     private var pendingChange: Task<Void, Never>?
     private var reminderRefresh: Task<Void, Never>?
+
+    override init() {
+        // One for every request to the server: it attests a single key for the install.
+        let appAttest = Bundle.main.serverURL.map { AppAttest(serverURL: $0) }
+        push = PushRegistration(appAttest: appAttest)
+        liveActivityStarts = LiveActivityStarts(appAttest: appAttest)
+        super.init()
+    }
 
     func application(
         _ application: UIApplication,

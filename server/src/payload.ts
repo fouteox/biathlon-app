@@ -8,6 +8,8 @@ import type { ChangeKind } from "./changes";
 export const LOC_KEYS = {
   cancelled: { title: "push.cancelled.title", body: "push.cancelled.body" },
   rescheduled: { title: "push.rescheduled.title", body: "push.rescheduled.body" },
+  /** The alert of a Live Activity started for a favorite (liveStarts.ts). */
+  liveActivityStart: { title: "push.liveActivity.title", body: "push.liveActivity.body" },
 } as const;
 
 export interface AlertInput {

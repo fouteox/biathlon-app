@@ -231,6 +231,16 @@
         }
       }
     },
+    "Live Activity when a favorite races": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activité en direct quand un favori court"
+          }
+        }
+      }
+    },
     "Mass start": {
       "localizations": {
         "fr": {
@@ -467,6 +477,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Réglages"
+          }
+        }
+      }
+    },
+    "Shows a race on the Lock Screen 30 minutes before the start when one of your favorites is on the start list. Your favorites are sent to the app's server for this.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Affiche une course sur l'écran verrouillé 30 minutes avant le départ quand l'un de vos favoris est sur la liste de départ. Vos favoris sont alors envoyés au serveur de l'app."
           }
         }
       }
@@ -713,6 +733,42 @@
           "stringUnit": {
             "state": "translated",
             "value": "Course annulée"
+          }
+        }
+      }
+    },
+    "push.liveActivity.body": {
+      "comment": "Body of the alert of a Live Activity the server starts for a favorite. %@ is the race name.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow %@ live on the Lock Screen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suivez %@ en direct sur l'écran verrouillé."
+          }
+        }
+      }
+    },
+    "push.liveActivity.title": {
+      "comment": "Title of the alert of a Live Activity the server starts because a favorite is on the start list.",
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A favorite is racing"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Un favori est au départ"
           }
         }
       }

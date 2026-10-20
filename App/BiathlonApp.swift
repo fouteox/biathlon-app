@@ -12,6 +12,7 @@ struct BiathlonApp: App {
             RootView()
                 .environment(appDelegate.settings)
                 .environment(appDelegate.liveActivities)
+                .environment(appDelegate.liveActivityStarts)
                 .environment(\.ibu, appDelegate.client)
                 .task(id: scenePhase) {
                     guard scenePhase == .active else { return }
@@ -33,6 +34,9 @@ extension EnvironmentValues {
 }
 
 struct RootView: View {
+    @Environment(LiveActivityStarts.self) private var liveActivityStarts
+    @Query private var favorites: [Favorite]
+
     var body: some View {
         TabView {
             Tab("Home", systemImage: "house") {
@@ -49,5 +53,20 @@ struct RootView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        // At launch, and whenever the favorites, the setting or the token change, wherever in
+        // the app. A change cancels the sync still waiting, which coalesces quick successive ones.
+        .task(id: registration) {
+            let registration = registration
+            do {
+                try await Task.sleep(for: .milliseconds(500))
+            } catch {
+                return
+            }
+            await liveActivityStarts.sync(registration)
+        }
+    }
+
+    private var registration: LiveActivityStarts.Registration {
+        liveActivityStarts.registration(favorites: FavoriteSet(favorites))
     }
 }

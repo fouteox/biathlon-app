@@ -19,6 +19,8 @@ export interface IBUResults {
 }
 
 export interface IBUResultRow {
+  /** An athlete's row, not a team's. */
+  IBUId?: string | null;
   IsTeam?: boolean | null;
   Name?: string | null;
   ShortName?: string | null;
@@ -226,7 +228,7 @@ function mayStillBeShown(channels: ChannelRow[], now: number): boolean {
   );
 }
 
-function isFollowable(race: RaceSnapshot | undefined): race is RaceSnapshot {
+export function isFollowable(race: RaceSnapshot | undefined): race is RaceSnapshot {
   return race?.status === "scheduled" || race?.status === "live";
 }
 

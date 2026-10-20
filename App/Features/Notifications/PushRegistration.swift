@@ -12,7 +12,11 @@ final class PushRegistration {
     private var deviceToken: String?
 
     private let serverURL = Bundle.main.serverURL
-    private let appAttest = Bundle.main.serverURL.map { AppAttest(serverURL: $0) }
+    private let appAttest: AppAttest?
+
+    init(appAttest: AppAttest?) {
+        self.appAttest = appAttest
+    }
 
     /// Registering doesn't prompt the user. It runs at every launch so the
     /// server also learns when alerts were turned off.

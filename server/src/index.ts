@@ -1,5 +1,12 @@
 import { isEnvironment, probe } from "./apns";
-import { deleteOwnedDevice, isDeviceToken, ownsDevice, parseRegistration, saveDevice } from "./devices";
+import { deleteOwnedDevice, isDeviceToken, ownsDevice, parseRegistration, saveDevice, type DeviceRegistration } from "./devices";
+import {
+  deleteOwnedStartToken,
+  ownsStartToken,
+  parseStartRegistration,
+  saveStartToken,
+  type StartRegistration,
+} from "./liveStarts";
 import { IBU_BASE_URL } from "./ibu";
 import { isPurpose, issueChallenge } from "./challenges";
 import { authorize, pruneKeys, registerKey } from "./keys";
@@ -9,22 +16,9 @@ import { runCron } from "./watcher";
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
-    const device = url.pathname.match(/^\/v1\/devices\/([^/]+)$/);
-
-    if (device) {
-      if (request.method !== "PUT" && request.method !== "DELETE") return new Response(null, { status: 405 });
-      const token = decodeURIComponent(device[1] ?? "").toLowerCase();
-      // Read once: the assertion signs these exact bytes.
-      const body = new Uint8Array(await request.arrayBuffer());
-      const registration = request.method === "PUT" ? parseRegistration(token, parseJSON(body)) : undefined;
-      if (typeof registration === "string") return json({ error: registration }, 400);
-      if (!isDeviceToken(token)) return json({ error: "invalid device token" }, 400);
-      const auth = await authorize(env, request, body, Date.now());
-      if ("error" in auth) return json({ error: auth.error }, auth.status);
-      if (!(await ownsDevice(env.DB, token, auth.keyId))) return json({ error: "token registered by another key" }, 403);
-      if (registration) await saveDevice(env.DB, registration, auth.keyId, Date.now());
-      else await deleteOwnedDevice(env.DB, token, auth.keyId);
-      return new Response(null, { status: 204 });
+    for (const [pattern, register] of TOKEN_ROUTES) {
+      const match = url.pathname.match(pattern);
+      if (match) return register(request, env, decodeURIComponent(match[1] ?? "").toLowerCase());
     }
 
     if (url.pathname === "/v1/app-attest/challenges" && request.method === "POST") {
@@ -69,6 +63,48 @@ export default {
     }
   },
 } satisfies ExportedHandler<Env>;
+
+/** A token the app registers with a signed `PUT` and unregisters with a signed `DELETE`, owned by the key that registered it. */
+interface TokenStore<Registration> {
+  parse(token: string, body: unknown): Registration | string;
+  owns(db: D1Database, token: string, keyId: string): Promise<boolean>;
+  save(db: D1Database, registration: Registration, keyId: string, now: number): Promise<void>;
+  delete(db: D1Database, token: string, keyId: string): Promise<void>;
+}
+
+const DEVICES: TokenStore<DeviceRegistration> = {
+  parse: parseRegistration,
+  owns: ownsDevice,
+  save: saveDevice,
+  delete: deleteOwnedDevice,
+};
+
+const LIVE_ACTIVITY_STARTS: TokenStore<StartRegistration> = {
+  parse: parseStartRegistration,
+  owns: ownsStartToken,
+  save: saveStartToken,
+  delete: deleteOwnedStartToken,
+};
+
+const TOKEN_ROUTES: [RegExp, (request: Request, env: Env, token: string) => Promise<Response>][] = [
+  [/^\/v1\/devices\/([^/]+)$/, (request, env, token) => registerToken(request, env, token, DEVICES)],
+  [/^\/v1\/live-activity-starts\/([^/]+)$/, (request, env, token) => registerToken(request, env, token, LIVE_ACTIVITY_STARTS)],
+];
+
+async function registerToken<Registration>(request: Request, env: Env, token: string, store: TokenStore<Registration>) {
+  if (request.method !== "PUT" && request.method !== "DELETE") return new Response(null, { status: 405 });
+  // Read once: the assertion signs these exact bytes.
+  const body = new Uint8Array(await request.arrayBuffer());
+  const registration = request.method === "PUT" ? store.parse(token, parseJSON(body)) : undefined;
+  if (typeof registration === "string") return json({ error: registration }, 400);
+  if (!isDeviceToken(token)) return json({ error: "invalid token" }, 400);
+  const auth = await authorize(env, request, body, Date.now());
+  if ("error" in auth) return json({ error: auth.error }, auth.status);
+  if (!(await store.owns(env.DB, token, auth.keyId))) return json({ error: "token registered by another key" }, 403);
+  if (registration !== undefined) await store.save(env.DB, registration, auth.keyId, Date.now());
+  else await store.delete(env.DB, token, auth.keyId);
+  return new Response(null, { status: 204 });
+}
 
 /**
  * Read-only cache in front of biathlonresults.com, with the same paths and

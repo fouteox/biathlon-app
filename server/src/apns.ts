@@ -67,6 +67,8 @@ export interface PushRequest {
   topic: string;
   payload: unknown;
   collapseId?: string;
+  /** An alert unless given: `liveactivity` for an ActivityKit push, whose topic ends in `.push-type.liveactivity`. */
+  pushType?: "alert" | "liveactivity";
   /** UNIX time in seconds after which APNs stops trying to deliver. */
   expiration: number;
 }
@@ -82,7 +84,7 @@ export type PushOutcome =
 
 export async function sendPush(request: PushRequest, providerToken: string): Promise<PushOutcome> {
   const headers: Record<string, string> = {
-    "apns-push-type": "alert",
+    "apns-push-type": request.pushType ?? "alert",
     "apns-topic": request.topic,
     "apns-priority": "10",
     "apns-expiration": String(request.expiration),

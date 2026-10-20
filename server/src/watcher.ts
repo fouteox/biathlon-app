@@ -3,6 +3,7 @@ import { detectChange, hasChanged, type RaceChange } from "./changes";
 import { deleteDevice } from "./devices";
 import { activeEvents, fetchIBU, seasonId, snapshot, type IBUCompetition, type IBUEvent, type RaceSnapshot } from "./ibu";
 import { syncLiveActivities } from "./live";
+import { startFavoriteActivities } from "./liveStarts";
 import { buildPayload, type AlertInput } from "./payload";
 import { ProviderTokens } from "./providerTokens";
 import { SubrequestBudget } from "./subrequests";
@@ -15,7 +16,8 @@ const MAX_ATTEMPTS = 5;
 
 /**
  * One cron run: detect race changes and queue alerts, send a batch of alerts, then
- * update the races' Live Activities with the subrequests left.
+ * update the races' Live Activities and start those of the favorites' races with the
+ * subrequests left.
  */
 export async function runCron(env: Env, now: number): Promise<void> {
   const budget = new SubrequestBudget();
@@ -28,6 +30,8 @@ export async function runCron(env: Env, now: number): Promise<void> {
       await drainOutbox(env, now, budget);
     } finally {
       await syncLiveActivities(env, races, now, budget);
+      // After the channels it subscribes the new activities to.
+      if (races) await startFavoriteActivities(env, races, now, budget);
     }
   }
 }
