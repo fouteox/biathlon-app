@@ -410,7 +410,7 @@ describe("Live Activity channels", () => {
       if (init.method === "POST" && String(input).includes("api-manage-broadcast")) {
         const environment = String(input).includes("sandbox") ? "sandbox" : "production";
         await env.DB.prepare(
-          "INSERT INTO live_channels (race_id, environment, channel_id, state, created_at) VALUES (?1, ?2, 'other', '{}', 0)",
+          "INSERT INTO live_channels (race_id, environment, channel_id, state, published_at, created_at) VALUES (?1, ?2, 'other', '{}', 0, 0)",
         )
           .bind(RACE_ID, environment)
           .run();
@@ -519,7 +519,7 @@ describe("Live Activity channels", () => {
     const ended = JSON.stringify(relayFinal);
     for (const environment of ["production", "sandbox"]) {
       await env.DB.prepare(
-        "INSERT INTO live_channels (race_id, environment, channel_id, state, created_at, ended_at, end_sent_at) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?5)",
+        "INSERT INTO live_channels (race_id, environment, channel_id, state, published_at, created_at, ended_at, end_sent_at) VALUES (?1, ?2, ?3, ?4, 0, 0, ?5, ?5)",
       )
         .bind(RACE_ID, environment, `ended-${environment}`, ended, NOW - 20 * 60_000)
         .run();
@@ -547,7 +547,7 @@ describe("Live Activity channels", () => {
     const env = await makeEnv();
     for (const environment of ["production", "sandbox"]) {
       await env.DB.prepare(
-        "INSERT INTO live_channels (race_id, environment, channel_id, state, created_at, ended_at, end_sent_at) VALUES (?1, ?2, ?3, ?4, 0, ?5, ?5)",
+        "INSERT INTO live_channels (race_id, environment, channel_id, state, published_at, created_at, ended_at, end_sent_at) VALUES (?1, ?2, ?3, ?4, 0, 0, ?5, ?5)",
       )
         .bind(RACE_ID, environment, `ended-${environment}`, JSON.stringify(relayFinal), NOW - 20 * 60_000)
         .run();
@@ -828,16 +828,26 @@ describe("GET /v1/races/:id/channels/:environment", () => {
   const get = (env: Env, path: string) =>
     worker.fetch(new Request(`https://server.test${path}`), env, {} as ExecutionContext);
 
-  it("gives the app the race's channel for its APNs environment, with its current state", async () => {
+  it("gives the app the race's channel for its APNs environment, with its current state and the broadcast's timestamp", async () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
-    stubNetwork();
-    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 90_000);
 
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ channelId: "channel-2", state: live.state });
+    const { aps } = broadcasts(sent)[0]?.body as { aps: { timestamp: number } };
+    expect(await response.json()).toEqual({ channelId: "channel-2", state: live.state, timestamp: aps.timestamp });
+  });
+
+  it("dates the state a channel opens with from its opening, older than any broadcast on it", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW + 1_500);
+
+    const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
+    expect(await response.json()).toMatchObject({ timestamp: Math.floor((NOW + 1_500) / 1000) });
   });
 
   it("keeps its answers out of HTTP caches, since the channel can change at every run", async () => {

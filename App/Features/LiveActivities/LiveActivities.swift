@@ -106,13 +106,14 @@ final class LiveActivities {
     /// stays followed if it can't be, and only when no activity matches already, like one
     /// requested by a reconciliation the app was quit during. The current ones get the
     /// channel's state, for a broadcast they missed while the device was offline: the
-    /// channel stores none. `true` when it requested a replacement.
+    /// channel stores none. The update carries that broadcast's timestamp, for ActivityKit to
+    /// ignore it once a newer broadcast arrived during the lookup. `true` when it requested a replacement.
     @discardableResult
     private func replaceOutdatedActivities(raceID: String) async throws -> Bool {
         guard let name = Self.activities(of: raceID).first?.attributes.name else { return false }
         var outdated: [String] = []
         var missed: [String] = []
-        var latest: RaceLiveState?
+        var latest: Channel?
         var requested = false
         let checked = try await withChannel(raceID: raceID) { channel in
             let shown = Self.activities(of: raceID).filter { Self.shownStates.contains($0.activityState) }
@@ -124,14 +125,18 @@ final class LiveActivities {
             }
             outdated = shown.filter { !isCurrent($0) }.map(\.id)
             missed = shown.filter { isCurrent($0) && $0.content.state != channel.state }.map(\.id)
-            latest = channel.state
+            latest = channel
             if !outdated.isEmpty && !shown.contains(where: isCurrent) {
                 try Self.request(raceID: raceID, name: name, on: channel)
                 requested = true
             }
         }
         guard checked else { return false }
-        if let latest, !missed.isEmpty { await Self.update(raceID: raceID, activityIDs: missed, state: latest) }
+        if let latest, !missed.isEmpty {
+            await Self.update(
+                raceID: raceID, activityIDs: missed, state: latest.state,
+                timestamp: Date(timeIntervalSince1970: latest.timestamp))
+        }
         for activityID in outdated { await Self.end(raceID: raceID, activityID: activityID) }
         refresh()
         return requested
@@ -175,11 +180,13 @@ final class LiveActivities {
     // `Activity` isn't `Sendable` and its `update` and `end` run off the main actor: the
     // activities are looked up, updated and ended off the main actor as well.
 
-    /// Shows `state` on the race's activities `activityIDs`.
-    @concurrent private static func update(raceID: String, activityIDs: [String], state: RaceLiveState) async {
+    /// Shows `state`, published at `timestamp`, on the race's activities `activityIDs`.
+    @concurrent private static func update(
+        raceID: String, activityIDs: [String], state: RaceLiveState, timestamp: Date
+    ) async {
         let content = ActivityContent(state: state, staleDate: nil)
         for activity in activities(of: raceID) where activityIDs.contains(activity.id) {
-            await activity.update(content)
+            await activity.update(content, timestamp: timestamp)
         }
     }
 
@@ -247,6 +254,9 @@ final class LiveActivities {
     private struct Channel: Decodable {
         let channelId: String
         let state: RaceLiveState
+        /// The `timestamp` of the broadcast that published `state`, in seconds since 1970 like
+        /// that of an ActivityKit push.
+        let timestamp: TimeInterval
     }
 
     private struct Ended: Decodable {

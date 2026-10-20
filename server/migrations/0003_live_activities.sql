@@ -5,8 +5,10 @@ CREATE TABLE live_channels (
   environment TEXT NOT NULL CHECK (environment IN ('sandbox', 'production')),
   -- Base64 identifier from the apns-channel-id response header.
   channel_id TEXT NOT NULL,
-  -- Last content-state published on the channel, as JSON.
+  -- Last content-state published on the channel, as JSON, and the timestamp of its broadcast
+  -- (when the channel opened, for the state it opened with): the app's own updates carry it.
   state TEXT NOT NULL,
+  published_at INTEGER NOT NULL,
   created_at INTEGER NOT NULL,
   -- When the activity ended, NULL while the race is followed; when its end event was last
   -- sent, NULL until it goes through.

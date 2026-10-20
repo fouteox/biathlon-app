@@ -15,7 +15,7 @@ Cloudflare Worker that:
 | `POST` | `/v1/app-attest/keys` | `{ "keyId": "<base64>", "attestation": "<base64>", "challenge": "…" }` |
 | `PUT` | `/v1/devices/:token` | `{ "environment": "sandbox" \| "production", "categories": ["SM","SW","MX"], "cancellation": true, "rescheduling": true, "locale": "fr-FR", "timeZone": "Europe/Paris" }` |
 | `DELETE` | `/v1/devices/:token` | |
-| `GET` | `/v1/races/:raceId/channels/:environment` | Returns `{"channelId":"…","state":{…}}`, the broadcast channel the app subscribes the race's Live Activity to and the state last published on it, which the activity starts from. `410` with `{"state":{…}}`, the final state, once its end is sent: the app ends the activities that missed it. `404` when the race has no channel yet, or while one APNs no longer knows waits for its replacement. |
+| `GET` | `/v1/races/:raceId/channels/:environment` | Returns `{"channelId":"…","state":{…},"timestamp":…}`, the broadcast channel the app subscribes the race's Live Activity to, the state last published on it, which the activity starts from, and that broadcast's `timestamp` (seconds since 1970), which the app's own updates carry so that ActivityKit ignores them once a newer broadcast arrived. `410` with `{"state":{…}}`, the final state, once its end is sent: the app ends the activities that missed it. `404` when the race has no channel yet, or while one APNs no longer knows waits for its replacement. |
 | `GET` | `/v1/health` | Returns `{"apns":{"pushes":{"http2":true},"channels":{"http2":true}}}` when the Worker reaches APNs over HTTP/2, for pushes and for channel management. |
 | `GET` | `/ibu/<endpoint>?…` | Same paths and query strings as the IBU API. |
 

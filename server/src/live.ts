@@ -277,9 +277,11 @@ async function openChannels(
     const state: LiveState = { leaders: [], ...(stored && (JSON.parse(stored) as LiveState)), ...calendarFields(race) };
     try {
       const { meta } = await env.DB.prepare(
-        `INSERT INTO live_channels (race_id, environment, channel_id, state, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
+        `INSERT INTO live_channels (race_id, environment, channel_id, state, published_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?5)
          ON CONFLICT (race_id, environment) DO UPDATE
-         SET channel_id = excluded.channel_id, state = excluded.state, created_at = excluded.created_at, deleted_at = NULL
+         SET channel_id = excluded.channel_id, state = excluded.state, published_at = excluded.published_at,
+           created_at = excluded.created_at, deleted_at = NULL
          WHERE ended_at IS NULL AND deleted_at IS NOT NULL`,
       )
         .bind(race.id, environment, outcome.channelId, JSON.stringify(state), now)
@@ -304,8 +306,8 @@ async function openChannels(
 async function publish(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
   const outcome = await send(env, tokens, channel, "update", state, now);
   if (outcome === "sent") {
-    await env.DB.prepare(`UPDATE live_channels SET state = ?1 WHERE ${UNCHANGED_OPEN_CHANNEL}`)
-      .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state)
+    await env.DB.prepare(`UPDATE live_channels SET state = ?1, published_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`)
+      .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state, now)
       .run();
   } else if (outcome === "unregistered") {
     // Dropped, whatever state an overlapping run stored since: a new channel replaces it at a
@@ -339,7 +341,7 @@ const UNCHANGED_OPEN_CHANNEL = `${OPEN_CHANNEL} AND state = ?5`;
  * through or not.
  */
 async function end(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
-  const { meta } = await env.DB.prepare(`UPDATE live_channels SET state = ?1, ended_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`)
+  const { meta } = await env.DB.prepare(`UPDATE live_channels SET state = ?1, published_at = ?6, ended_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`)
     .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state, now)
     .run();
   // A dropped channel, already unknown to APNs, has no subscriber left to tell.
@@ -424,6 +426,11 @@ async function deleteRetiredChannels(env: Env, tokens: ProviderTokens, now: numb
   }
 }
 
+/** The `timestamp` of an ActivityKit push, in seconds since 1970, from a time in milliseconds. */
+function broadcastTimestamp(ms: number): number {
+  return Math.floor(ms / 1000);
+}
+
 /**
  * Broadcasts an ActivityKit event; "unregistered" when APNs no longer knows the channel,
  * "deferred" when the run has no subrequest left.
@@ -436,7 +443,7 @@ async function send(
   state: LiveState,
   now: number,
 ): Promise<"sent" | "unregistered" | "deferred" | "failed"> {
-  const payload = { aps: { timestamp: Math.floor(now / 1000), event, "content-state": state } };
+  const payload = { aps: { timestamp: broadcastTimestamp(now), event, "content-state": state } };
   const outcome = await tokens.send(channel.environment, (token) =>
     broadcast({ environment: channel.environment, bundleId: env.APNS_TOPIC, channelId: channel.channelId, payload }, token),
   );
@@ -456,15 +463,18 @@ export async function channelFor(
   db: D1Database,
   raceId: string,
   environment: APNsEnvironment,
-): Promise<{ channelId: string; state: LiveState } | { ended: LiveState } | undefined> {
+): Promise<{ channelId: string; state: LiveState; timestamp: number } | { ended: LiveState } | undefined> {
   const row = await db
     .prepare(
-      "SELECT channel_id AS channelId, state, ended_at AS endedAt, deleted_at AS deletedAt FROM live_channels WHERE race_id = ?1 AND environment = ?2",
+      `SELECT channel_id AS channelId, state, published_at AS publishedAt, ended_at AS endedAt, deleted_at AS deletedAt
+       FROM live_channels WHERE race_id = ?1 AND environment = ?2`,
     )
     .bind(raceId, environment)
-    .first<{ channelId: string; state: string; endedAt: number | null; deletedAt: number | null }>();
+    .first<{ channelId: string; state: string; publishedAt: number; endedAt: number | null; deletedAt: number | null }>();
   if (!row) return undefined;
   const state = JSON.parse(row.state) as LiveState;
   if (row.endedAt !== null) return { ended: state };
-  return row.deletedAt === null ? { channelId: row.channelId, state } : undefined;
+  return row.deletedAt === null
+    ? { channelId: row.channelId, state, timestamp: broadcastTimestamp(row.publishedAt) }
+    : undefined;
 }
