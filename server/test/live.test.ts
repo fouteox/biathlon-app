@@ -701,6 +701,20 @@ describe("Live Activity channels", () => {
     expect(cached).toEqual({ updatedAt: later });
   });
 
+  it("keeps the activity of a race the calendar stops listing until the system has ended it", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    const events = (sent: Sent[]) => broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event);
+
+    const meanwhile = stubNetwork();
+    await syncLiveActivities(env, [], NOW);
+    const later = stubNetwork();
+    await syncLiveActivities(env, [], Date.parse("2026-11-27T03:16:00Z"));
+
+    expect([events(meanwhile), events(later)]).toEqual([[], ["end", "end"]]);
+  });
+
   it("keeps a race's lookup for a run that can broadcast its result", async () => {
     const env = await makeEnv();
     stubNetwork();

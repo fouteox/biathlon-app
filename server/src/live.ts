@@ -69,6 +69,12 @@ const MAX_CHANNEL_DELETIONS_PER_RUN = 4;
  */
 const END_RESEND_INTERVAL_MS = 10 * 60_000;
 const END_GRACE_MS = 60 * 60_000;
+/**
+ * A race the calendar stops listing, which a partial response can do, keeps its activity
+ * until the system has ended it: a Live Activity lasts at most 8 hours, then stays on the
+ * Lock Screen for up to 4 more (ActivityKit, "Displaying live data with Live Activities").
+ */
+const UNLISTED_GRACE_MS = 12 * 60 * 60_000;
 
 /** The state the app shows, from a race's results; `undefined` without a `Competition` block. */
 export function liveState(results: IBUResults): LiveState | undefined {
@@ -104,6 +110,11 @@ function isTerminal(phase: RaceStatus): boolean {
 
 function referenceSeconds(time: string): number {
   return parseIBUDate(time) / 1000 - REFERENCE_DATE_S;
+}
+
+/** UNIX milliseconds of a `startTime` in seconds since 2001-01-01. */
+function referenceMs(seconds: number): number {
+  return (seconds + REFERENCE_DATE_S) * 1000;
 }
 
 interface ChannelRow {
@@ -172,13 +183,14 @@ async function updateOpenChannels(
   // The races least recently looked up first: a budget too short for all of them takes turns among them.
   for (const [raceId, channels] of Map.groupBy(open, (row) => row.raceId)) {
     const race = watched.get(raceId);
+    if (!race && mayStillBeShown(channels, now)) continue;
     // A lookup waits for a run that can also broadcast its result to every channel.
     if (needsResults(race) && !budget.has(1 + channels.length)) continue;
     const known = await currentState(raceId, race, budget);
     for (const channel of channels) {
       const state: LiveState = { ...(JSON.parse(channel.state) as LiveState), ...known };
       if (!race || isTerminal(race.status)) {
-        // Over, or no longer watched: the activity ends with the latest state there is.
+        // Over, or unlisted for longer than an activity lasts: it ends with the latest state there is.
         await end(env, tokens, channel, state, now);
       } else if (channel.deletedAt === null && JSON.stringify(state) !== channel.state) {
         await publish(env, tokens, channel, state, now);
@@ -190,6 +202,13 @@ async function updateOpenChannels(
         .run();
     }
   }
+}
+
+/** Whether the activity of these channels' race may still be on screen (`UNLISTED_GRACE_MS`). */
+function mayStillBeShown(channels: ChannelRow[], now: number): boolean {
+  return channels.some(
+    (channel) => now < referenceMs((JSON.parse(channel.state) as LiveState).startTime) + UNLISTED_GRACE_MS,
+  );
 }
 
 function isFollowable(race: RaceSnapshot | undefined): race is RaceSnapshot {
