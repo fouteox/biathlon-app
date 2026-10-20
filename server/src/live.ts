@@ -152,7 +152,7 @@ export async function syncLiveActivities(
     }
   }
   if (races) {
-    await openChannels(env, tokens, races, kept, now);
+    await openChannels(env, tokens, races, kept, now, budget);
     await updateOpenChannels(env, tokens, open, watched, now, budget);
   }
   // After the races followed in the budget, the ends least recently tried first, then the deletions.
@@ -223,7 +223,14 @@ async function currentState(
   }
 }
 
-async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapshot[], rows: ChannelRow[], now: number) {
+async function openChannels(
+  env: Env,
+  tokens: ProviderTokens,
+  races: RaceSnapshot[],
+  rows: ChannelRow[],
+  now: number,
+  budget: SubrequestBudget,
+) {
   const key = (raceId: string, environment: APNsEnvironment) => `${raceId} ${environment}`;
   const open = new Set(rows.filter((row) => !isDropped(row)).map((row) => key(row.raceId, row.environment)));
   const dropped = new Map(rows.filter(isDropped).map((row) => [key(row.raceId, row.environment), row]));
@@ -236,6 +243,8 @@ async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapsho
   );
 
   for (const { race, environment } of missing) {
+    // A creation keeps a subrequest back, to delete its channel if it can't be recorded.
+    if (!budget.has(2)) return;
     const outcome = await tokens.send(environment, (token) => createChannel(environment, env.APNS_TOPIC, token));
     if (outcome.kind === "deferred") return;
     if (outcome.kind !== "created") {

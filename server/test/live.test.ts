@@ -485,14 +485,16 @@ describe("Live Activity channels", () => {
     ]);
   });
 
-  it("spends no more subrequests than the run has left", async () => {
+  it("spends no more subrequests than the run has left, keeping one to delete a channel it can't record", async () => {
     const env = await makeEnv();
-    const sent = stubNetwork();
+    const counts: number[] = [];
+    for (const budget of [1, 2]) {
+      const sent = stubNetwork();
+      await syncLiveActivities(env, [race()], NOW, new SubrequestBudget(budget));
+      counts.push(sent.length, (await channels(env)).length);
+    }
 
-    await syncLiveActivities(env, [race()], NOW, new SubrequestBudget(1));
-
-    expect(sent.length).toBe(1);
-    expect((await channels(env)).length).toBe(1);
+    expect(counts).toEqual([0, 0, 1, 1]);
   });
 
   it("replaces a channel APNs no longer knows at the next run", async () => {
@@ -528,7 +530,7 @@ describe("Live Activity channels", () => {
       .bind(followed.id)
       .run();
     stubNetwork();
-    await syncLiveActivities(env, [followed], NOW, new SubrequestBudget(2));
+    await syncLiveActivities(env, [followed], NOW, new SubrequestBudget(3));
 
     const sent = stubNetwork();
     await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" }), followed], NOW, new SubrequestBudget(3));
