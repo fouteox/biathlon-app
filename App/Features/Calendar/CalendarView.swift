@@ -65,6 +65,11 @@ struct EventView: View {
                 NavigationLink(value: Route.race(race)) { RaceRow(race: race) }
             }
             .refreshable { await load() }
+            .overlay {
+                if races.isEmpty {
+                    ContentUnavailableView("Schedule not published", systemImage: "calendar.badge.exclamationmark")
+                }
+            }
         }
         .navigationTitle(Nation.titled(event.shortDescription, nation: event.nation))
         .task { await load() }

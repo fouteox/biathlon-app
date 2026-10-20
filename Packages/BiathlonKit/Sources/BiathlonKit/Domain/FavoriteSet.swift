@@ -16,3 +16,14 @@ public struct FavoriteSet: Equatable, Sendable {
         return false
     }
 }
+
+extension RaceResults {
+    /// A standings row is a favorite itself or, for a relay team, through one of its legs.
+    public func isFavorite(_ row: ResultRow, in favorites: FavoriteSet) -> Bool {
+        favorites.contains(row) || (row.isTeam && legs(of: row).contains(where: favorites.contains))
+    }
+
+    public func favoriteStandings(in favorites: FavoriteSet) -> [ResultRow] {
+        standings.filter { isFavorite($0, in: favorites) }
+    }
+}

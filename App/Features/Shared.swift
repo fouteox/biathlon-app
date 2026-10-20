@@ -74,14 +74,21 @@ struct RaceRow: View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(race.shortDescription).font(.headline)
-                Text(race.startTime, format: .dateTime.weekday(.wide).day().month().hour().minute())
+                RaceStart(race: race)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             Spacer()
-            Text(race.state.label)
-                .font(.caption.bold())
-                .foregroundStyle(race.state.tint)
+            race.state.badge?.font(.caption.bold())
         }
+    }
+}
+
+/// When a race starts, as every race screen writes it.
+struct RaceStart: View {
+    let race: Competition
+
+    var body: some View {
+        Text(race.startTime, format: .dateTime.weekday(.wide).day().month().hour().minute())
     }
 }

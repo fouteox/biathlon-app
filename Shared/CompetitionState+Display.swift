@@ -20,4 +20,10 @@ extension Competition.State {
         case .scheduled: .blue
         }
     }
+
+    /// The state in race lists, where upcoming goes without a badge: the start time says it.
+    var badge: Text? {
+        guard self != .scheduled else { return nil }
+        return Text(label).foregroundStyle(tint)
+    }
 }

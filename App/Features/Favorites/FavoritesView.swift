@@ -22,7 +22,7 @@ struct FavoritesView: View {
                         isOn: $liveActivityStarts.isEnabled)
                 } footer: {
                     Text(
-                        "Shows a race on the Lock Screen 30 minutes before the start when one of your favorites is on the start list. Your favorites are sent to the app's server for this."
+                        "Shows the race on the Lock Screen 30 minutes before the start when a favorite is on the start list."
                     )
                 }
             }
@@ -106,21 +106,25 @@ struct FavoritesView: View {
     }
 }
 
-/// Reusable star for detail screens and lists.
+/// Reusable star for detail screens and lists. Its title shows in a list row and reads out
+/// with VoiceOver; toolbars and `.labelStyle(.iconOnly)` show the star alone.
 struct FavoriteButton: View {
     let kind: Favorite.Kind
     let key: String
     let name: String
     var nation: String?
+    /// Named in the title, for a button whose favorite the screen doesn't already show.
+    var subject: String?
 
     @Environment(\.modelContext) private var context
     @Query private var matches: [Favorite]
 
-    init(kind: Favorite.Kind, key: String, name: String, nation: String? = nil) {
+    init(kind: Favorite.Kind, key: String, name: String, nation: String? = nil, subject: String? = nil) {
         self.kind = kind
         self.key = key
         self.name = name
         self.nation = nation
+        self.subject = subject
         let raw = kind.rawValue
         _matches = Query(filter: #Predicate<Favorite> { $0.kindRaw == raw && $0.key == key })
     }
@@ -129,10 +133,22 @@ struct FavoriteButton: View {
         Button {
             context.toggleFavorite(kind, key: key, name: name, nation: nation)
         } label: {
-            Image(systemName: matches.isEmpty ? "star" : "star.fill")
+            Label {
+                title
+            } icon: {
+                Image(systemName: matches.isEmpty ? "star" : "star.fill")
+            }
         }
         .buttonStyle(.borderless)
         .sensoryFeedback(.selection, trigger: matches.isEmpty)
-        .accessibilityLabel(matches.isEmpty ? Text("Add to favorites") : Text("Remove from favorites"))
+    }
+
+    private var title: Text {
+        switch (subject, matches.isEmpty) {
+        case (nil, true): Text("Add to favorites")
+        case (nil, false): Text("Remove from favorites")
+        case (let subject?, true): Text("Add \(subject) to favorites")
+        case (let subject?, false): Text("Remove \(subject) from favorites")
+        }
     }
 }

@@ -26,6 +26,11 @@ public struct HomeFeed: Sendable {
         guard let race = live ?? next ?? latestFinished else { return events.last }
         return events.first { race.id.hasPrefix($0.id) } ?? events.last
     }
+
+    /// Nothing to feature: no race to show and no event to open.
+    public var isEmpty: Bool {
+        live == nil && next == nil && latestFinished == nil && event == nil
+    }
 }
 
 extension IBUClient {

@@ -17,11 +17,14 @@ struct HomeView: View {
                             LiveHeader(race: live)
                         }
                         if let results = feed.liveResults {
-                            TopResults(rows: results.standings, limit: 5, favorites: favoriteSet)
+                            TopResults(rows: results.standings.prefix(5), of: results, favorites: favoriteSet)
                         }
                     } header: {
                         Label("Live", systemImage: "dot.radiowaves.left.and.right")
                             .foregroundStyle(.red)
+                    }
+                    if let results = feed.liveResults {
+                        favoritesSection(results, of: live)
                     }
                 }
 
@@ -39,14 +42,9 @@ struct HomeView: View {
                 }
 
                 if let results = feed.latestResults, let race = feed.latestFinished {
-                    let mine = results.standings.filter(favoriteSet.contains)
-                    if !mine.isEmpty {
-                        Section("My favorites · \(race.shortDescription)") {
-                            TopResults(rows: mine, limit: mine.count, favorites: favoriteSet)
-                        }
-                    }
+                    favoritesSection(results, of: race)
                     Section {
-                        TopResults(rows: results.standings, limit: 3, favorites: favoriteSet)
+                        TopResults(rows: results.standings.prefix(3), of: results, favorites: favoriteSet)
                         NavigationLink("All results", value: Route.race(race))
                     } header: {
                         Text("Latest result · \(race.shortDescription)")
@@ -66,6 +64,11 @@ struct HomeView: View {
                 }
             }
             .refreshable { await load() }
+            .overlay {
+                if feed.isEmpty {
+                    ContentUnavailableView("No races", systemImage: "calendar")
+                }
+            }
         }
         .navigationTitle("Home")
         .toolbar {
@@ -89,6 +92,17 @@ struct HomeView: View {
     }
 
     private var favoriteSet: FavoriteSet { FavoriteSet(favorites) }
+
+    /// Every favorite in the race, wherever they rank.
+    @ViewBuilder
+    private func favoritesSection(_ results: RaceResults, of race: Competition) -> some View {
+        let favoriteRows = results.favoriteStandings(in: favoriteSet)
+        if !favoriteRows.isEmpty {
+            Section("Favorites · \(race.shortDescription)") {
+                TopResults(rows: favoriteRows[...], of: results, favorites: favoriteSet)
+            }
+        }
+    }
 }
 
 private struct LiveHeader: View {
@@ -105,13 +119,19 @@ private struct LiveHeader: View {
 }
 
 struct TopResults: View {
-    let rows: [ResultRow]
-    let limit: Int
+    let rows: ArraySlice<ResultRow>
+    let results: RaceResults
     let favorites: FavoriteSet
 
+    init(rows: ArraySlice<ResultRow>, of results: RaceResults, favorites: FavoriteSet) {
+        self.rows = rows
+        self.results = results
+        self.favorites = favorites
+    }
+
     var body: some View {
-        ForEach(rows.prefix(limit)) { row in
-            ResultLine(row: row, highlighted: favorites.contains(row))
+        ForEach(rows) { row in
+            ResultLine(row: row, highlighted: results.isFavorite(row, in: favorites))
         }
     }
 }
