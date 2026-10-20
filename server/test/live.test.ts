@@ -761,6 +761,31 @@ describe("Live Activity channels", () => {
     expect((await channels(env)).map(({ state }) => JSON.parse(state))).toEqual([ahead, ahead]);
   });
 
+  it("keeps the newer state an overlapping run recorded on a dropped channel, retiring its own replacement", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork({ broadcastReason: "ChannelNotRegistered", results: live.results });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+
+    const newer = JSON.stringify({ ...relayFinal, phase: "live" });
+    const sent = stubNetwork({ resultsStatus: 503 });
+    const fetch = globalThis.fetch;
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      // An overlapping run records newer leaders while this one creates the replacements.
+      if (String(input).includes("api-manage-broadcast") && init.method === "POST") {
+        await env.DB.prepare("UPDATE live_channels SET state = ?1").bind(newer).run();
+      }
+      return fetch(input, init);
+    });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
+
+    expect((await channels(env)).map(({ state }) => state)).toEqual([newer, newer]);
+    // Both replacements were created, then deleted at APNs in the same run.
+    const managed = sent.filter((request) => request.url.includes("api-manage-broadcast"));
+    expect(managed.map((request) => request.method)).toEqual(["POST", "POST", "DELETE", "DELETE"]);
+  });
+
   it("takes turns among the races under way when the budget can't cover them all", async () => {
     const env = await makeEnv();
     const races = ["A", "B"].map((suffix) => race({ RaceId: RACE_ID + suffix, IsLive: true }));

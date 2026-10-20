@@ -286,7 +286,8 @@ async function openChannels(
     }
     // A live race starts from the calendar too: its first results are published at the next run.
     // The new channel replaces a dropped one, with the leaders last recorded on it while the race runs.
-    const stored = race.status === "live" ? dropped.get(key(race.id, environment))?.state : undefined;
+    const replaced = dropped.get(key(race.id, environment));
+    const stored = race.status === "live" ? replaced?.state : undefined;
     const state: LiveState = { leaders: [], ...(stored && (JSON.parse(stored) as LiveState)), ...calendarFields(race) };
     try {
       const { meta } = await env.DB.prepare(
@@ -295,11 +296,12 @@ async function openChannels(
          ON CONFLICT (race_id, environment) DO UPDATE
          SET channel_id = excluded.channel_id, state = excluded.state, published_at = excluded.published_at,
            created_at = excluded.created_at, deleted_at = NULL
-         WHERE ended_at IS NULL AND deleted_at IS NOT NULL`,
+         WHERE ended_at IS NULL AND deleted_at IS NOT NULL AND live_channels.state = ?6`,
       )
-        .bind(race.id, environment, outcome.channelId, JSON.stringify(state), now)
+        .bind(race.id, environment, outcome.channelId, JSON.stringify(state), now, replaced?.state ?? null)
         .run();
-      // An overlapping run recorded its channel first: this one has no row to be deleted with.
+      // An overlapping run recorded its channel first, or a newer state on the dropped one, which a
+      // next run's replacement starts from: this channel has no row to be deleted with.
       if (meta.changes === 0) await retire(env, environment, outcome.channelId).run();
     } catch (error) {
       // Recorded nowhere, the channel would count against the limit forever: deleted before the run
