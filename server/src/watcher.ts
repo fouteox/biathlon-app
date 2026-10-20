@@ -6,14 +6,13 @@ import { syncLiveActivities } from "./live";
 import { startFavoriteActivities } from "./liveStarts";
 import type { AlertInput } from "./payload";
 import { ProviderTokens } from "./providerTokens";
-import { PushLots } from "./pushLots";
+import { MAX_SEND_ATTEMPTS, PushLots } from "./pushLots";
 import { SubrequestBudget } from "./subrequests";
 
 /** The calendar of events rarely changes: refresh it every 6 hours. */
 const EVENTS_TTL_MS = 6 * 60 * 60 * 1000;
 /** An alert older than this is no longer useful. */
 const OUTBOX_MAX_AGE_MS = 30 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
 
 /**
  * One cron run: detect race changes and queue alerts, send a batch of alerts, then
@@ -156,7 +155,7 @@ export async function drainOutbox(
         break;
       case "retry":
       case "expiredProviderToken":
-        (row.attempts + 1 >= MAX_ATTEMPTS ? done : retry).push(row.id);
+        (row.attempts + 1 >= MAX_SEND_ATTEMPTS ? done : retry).push(row.id);
         console.warn("APNs retry", row.id, outcome);
         break;
       default:

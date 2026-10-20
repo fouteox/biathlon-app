@@ -4,7 +4,7 @@ import { fetchIBU, parseIBUDate, type RaceSnapshot } from "./ibu";
 import { isFollowable, relevanceScore, type IBUResults, type LiveState } from "./live";
 import { LOC_KEYS } from "./payload";
 import { ProviderTokens, type Deferred } from "./providerTokens";
-import { PushLots } from "./pushLots";
+import { MAX_SEND_ATTEMPTS, PushLots } from "./pushLots";
 import type { LotPush } from "./pushSender";
 import { SubrequestBudget } from "./subrequests";
 
@@ -124,13 +124,16 @@ interface PendingToken {
 const STARTED = `s.channel_id IN (SELECT channel_id FROM live_channels
   WHERE race_id = ?1 AND environment = t.environment AND ended_at IS NULL AND deleted_at IS NULL)`;
 
+/** Whether the start of the check `s` failed too many times to be sent again. */
+const EXHAUSTED = `s.attempts >= ${MAX_SEND_ATTEMPTS}`;
+
 /**
  * The tokens `t` of the environments ?2 (a JSON array) whose install race ?1 started nothing
- * for, unless it was checked against the entrants ?5 (their `digest`).
+ * for, unless it was checked against the entrants ?5 (their `digest`) or its start was given up.
  */
 const UNCHECKED = `t.environment IN (SELECT value FROM json_each(?2))
   AND t.app_attest_key_id NOT IN (
-    SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR s.entrants = ?5))`;
+    SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR s.entrants = ?5 OR ${EXHAUSTED}))`;
 
 /** Whether one of the favorites of `t` is among the athletes ?3 or the nations ?4 (JSON arrays). */
 const ENTERED = `(EXISTS (SELECT 1 FROM json_each(t.athletes) WHERE value IN (SELECT value FROM json_each(?3)))
@@ -163,7 +166,7 @@ export async function startFavoriteActivities(
     const unchecked = await env.DB.prepare(
       `SELECT 1 FROM live_start_tokens t WHERE t.environment IN (SELECT value FROM json_each(?2))
          AND t.app_attest_key_id NOT IN (
-           SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR (s.entrants IS NOT NULL AND ?3)))
+           SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR (s.entrants IS NOT NULL AND ?3) OR ${EXHAUSTED}))
        LIMIT 1`,
     )
       .bind(race.id, environments, race.status === "scheduled" ? 0 : 1)
@@ -221,13 +224,15 @@ async function settle(env: Env, raceId: string, claims: Claim[], outcomes: (Push
       case "sent":
         return [];
       case "unregistered":
-        return [release(env, claimed), deleteStartToken(env.DB, claimed.token)];
+        return [release(env, claimed, 0), deleteStartToken(env.DB, claimed.token)];
       case "deferred":
+        // Not sent: the run had no provider token to send it with.
+        return [release(env, claimed, 0)];
       case "retry":
       case "expiredProviderToken":
         // The APNs key or clock may be fixed by the next run.
         console.warn("APNs Live Activity start retry", raceId, outcome);
-        return [release(env, claimed)];
+        return [release(env, claimed, 1)];
       default:
         // Refused, the claim stays: sent again, it would be refused again.
         console.error("APNs Live Activity start failed", raceId, outcome);
@@ -375,15 +380,15 @@ export async function pruneStarts(db: D1Database, now: number): Promise<void> {
 }
 
 /**
- * Gives a start that didn't go through back to a later run, unless its channel was replaced
- * meanwhile: the claim is then a newer run's, on the new channel.
+ * Gives a start that didn't go through back to a later run, counting the `failed` send, unless
+ * its channel was replaced meanwhile: the claim is then a newer run's, on the new channel. Its
+ * row is kept, for one write rather than a delete and an insert at each retry.
  */
-function release(env: Env, claimed: Claim): D1PreparedStatement {
-  return env.DB.prepare("DELETE FROM live_starts WHERE race_id = ?1 AND app_attest_key_id = ?2 AND channel_id = ?3").bind(
-    claimed.raceId,
-    claimed.keyId,
-    claimed.channelId,
-  );
+function release(env: Env, claimed: Claim, failed: 0 | 1): D1PreparedStatement {
+  return env.DB.prepare(
+    `UPDATE live_starts SET channel_id = NULL, attempts = attempts + ?4
+     WHERE race_id = ?1 AND app_attest_key_id = ?2 AND channel_id = ?3`,
+  ).bind(claimed.raceId, claimed.keyId, claimed.channelId, failed);
 }
 
 /** Deletes a token APNs reported as no longer valid. */

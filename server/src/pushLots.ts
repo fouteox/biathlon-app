@@ -14,6 +14,9 @@ export const LOT_SIZE = SUBREQUESTS_PER_RUN;
  */
 export const MAX_PUSHES_PER_RUN = 500;
 
+/** The sends of a push that may fail before it is given up, so that an APNs outage doesn't retry it every minute. */
+export const MAX_SEND_ATTEMPTS = 5;
+
 interface Pending {
   push: LotPush;
   resolve: (outcome: PushOutcome) => void;

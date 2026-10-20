@@ -1467,6 +1467,21 @@ describe("Live Activities started for favorites", () => {
     ]);
   });
 
+  it("stops retrying a start after five failed sends", async () => {
+    const env = await setUp();
+    for (const minute of [0, 1, 2, 3, 4]) {
+      const failed = stub({ deviceStatus: 503 });
+      await startFavoriteActivities(env, [race()], DUE + minute * 60_000);
+      expect(starts(failed).length).toBe(2);
+    }
+
+    // Each failed send writes its row of live_starts twice, claimed then given back: past five,
+    // a lasting APNs outage would spend the day's D1 row writes of the Free plan.
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 5 * 60_000);
+    expect(starts(sent)).toEqual([]);
+  });
+
   it("forgets a token APNs no longer knows, and doesn't retry a start APNs refused", async () => {
     const env = await setUp();
     stub({ deviceStatus: 410 });
