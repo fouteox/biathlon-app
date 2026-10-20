@@ -29,7 +29,10 @@ export interface StartRegistration {
 const MAX_FAVORITES = 500;
 /** The activity starts this long before the race, like one the app schedules (`RaceLiveState.activityLead`). */
 const START_LEAD_MS = 30 * 60_000;
-/** A start delivered later than this would show an outdated state: the race may be well under way. */
+/**
+ * How long after the race's start APNs keeps a start for a device that is offline: later, it
+ * would show an outdated state, the race being well under way.
+ */
 const START_EXPIRATION_S = 15 * 60;
 /** The attributes type the payload names, which ActivityKit decodes `attributes` into. */
 const ATTRIBUTES_TYPE = "RaceActivityAttributes";
@@ -69,7 +72,7 @@ export async function saveStartToken(db: D1Database, registration: StartRegistra
     // Read before the upsert: the app sends its favorites at every launch, mostly unchanged.
     db
       .prepare(
-        `DELETE FROM live_starts WHERE app_attest_key_id = ?1 AND started = 0 AND NOT EXISTS (
+        `DELETE FROM live_starts WHERE app_attest_key_id = ?1 AND channel_id IS NULL AND NOT EXISTS (
            SELECT 1 FROM live_start_tokens
            WHERE app_attest_key_id = ?1 AND environment = ?2 AND athletes = ?3 AND nations = ?4)`,
       )
@@ -146,15 +149,15 @@ export async function startFavoriteActivities(
     if (!unchecked) continue;
     // The start list, then at least one start.
     if (!budget.has(2)) return;
-    const entrants = await startList(race.id, budget);
+    const entrants = await startList(race, budget);
     if (!entrants) continue;
 
     // Matched in D1 against the favorites stored when each statement runs: one write for all
     // the installs none of whose favorites races, then each start claimed only if it still matches.
     const lists = [JSON.stringify(entrants.athletes), JSON.stringify(entrants.nations)];
     await env.DB.prepare(
-      `INSERT INTO live_starts (race_id, app_attest_key_id, started)
-       SELECT ?1, t.app_attest_key_id, 0 FROM live_start_tokens t WHERE ${UNCHECKED} AND NOT ${ENTERED}
+      `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id)
+       SELECT ?1, t.app_attest_key_id, NULL FROM live_start_tokens t WHERE ${UNCHECKED} AND NOT ${ENTERED}
        ON CONFLICT DO NOTHING`,
     )
       .bind(race.id, environments, ...lists)
@@ -166,11 +169,12 @@ export async function startFavoriteActivities(
       .all<PendingToken>();
 
     for (const device of pending) {
+      const channel = channels.find((row) => row.environment === device.environment)!;
       // Claimed before the push: an overlapping run that read the same token skips it, and so
       // does a device whose favorites or opt-out were saved meanwhile.
-      const keyId = await claim(env, race.id, device, lists);
+      const keyId = await claim(env, race.id, channel.channelId, device, lists);
       if (!keyId) continue;
-      const channel = channels.find((row) => row.environment === device.environment)!;
+      const claimed = { raceId: race.id, keyId, channelId: channel.channelId };
       const state = JSON.parse(channel.state) as LiveState;
       const outcome = await tokens.send(device.environment, (token) =>
         sendPush(
@@ -179,7 +183,7 @@ export async function startFavoriteActivities(
             environment: device.environment,
             topic: `${env.APNS_TOPIC}.push-type.liveactivity`,
             pushType: "liveactivity",
-            expiration: Math.floor(now / 1000) + START_EXPIRATION_S,
+            expiration: Math.floor(Math.max(now, parseIBUDate(race.startTime)) / 1000) + START_EXPIRATION_S,
             payload: startPayload(race, channel.channelId, state, now),
           },
           token,
@@ -189,15 +193,17 @@ export async function startFavoriteActivities(
         case "sent":
           break;
         case "deferred":
-          await release(env, race.id, keyId);
+          await release(env, claimed);
           return;
         case "unregistered":
-          await release(env, race.id, keyId);
+          await release(env, claimed);
           await deleteStartToken(env.DB, device.token);
           break;
         case "retry":
-          console.warn("APNs Live Activity start retry", race.id, outcome.reason);
-          await release(env, race.id, keyId);
+        case "expiredProviderToken":
+          // The APNs key or clock may be fixed by the next run.
+          console.warn("APNs Live Activity start retry", race.id, outcome);
+          await release(env, claimed);
           break;
         default:
           // Refused, the claim stays: sent again, it would be refused again.
@@ -207,20 +213,25 @@ export async function startFavoriteActivities(
   }
 }
 
-/** The athletes and nations on the race's start list; `undefined` until it is published or when it can't be read. */
+/**
+ * The athletes and nations on the race's start list, or in its results once it is live;
+ * `undefined` until the API marks the list as published, or when it can't be read.
+ */
 async function startList(
-  raceId: string,
+  race: RaceSnapshot,
   budget: SubrequestBudget,
 ): Promise<{ athletes: string[]; nations: string[] } | undefined> {
   try {
-    const rows = (await fetchIBU<IBUResults>("Results", { RaceId: raceId }, budget)).Results ?? [];
-    if (rows.length === 0) return undefined;
+    const results = await fetchIBU<IBUResults>("Results", { RaceId: race.id }, budget);
+    const rows = results.Results ?? [];
+    // Before the race, rows may be preliminary until they are the start list.
+    if (rows.length === 0 || (race.status === "scheduled" && !results.IsStartList)) return undefined;
     return {
       athletes: [...new Set(rows.flatMap((row) => (row.IBUId ? [row.IBUId] : [])))],
       nations: [...new Set(rows.flatMap((row) => (row.Nat ? [row.Nat] : [])))],
     };
   } catch (error) {
-    console.warn("Start list unavailable", raceId, String(error));
+    console.warn("Start list unavailable", race.id, String(error));
     return undefined;
   }
 }
@@ -251,17 +262,23 @@ function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, n
 }
 
 /**
- * Claims the start of the race for the device's install, while its stored token still has a
- * favorite among the entrants `lists`; its key, or `undefined` when there is nothing to claim.
+ * Claims the start of the race on `channelId` for the device's install, while its stored token
+ * still has a favorite among the entrants `lists`; its key, or `undefined` when there is nothing to claim.
  */
-async function claim(env: Env, raceId: string, device: PendingToken, lists: string[]): Promise<string | undefined> {
+async function claim(
+  env: Env,
+  raceId: string,
+  channelId: string,
+  device: PendingToken,
+  lists: string[],
+): Promise<string | undefined> {
   const row = await env.DB.prepare(
-    `INSERT INTO live_starts (race_id, app_attest_key_id, started)
-     SELECT ?1, t.app_attest_key_id, 1 FROM live_start_tokens t
+    `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id)
+     SELECT ?1, t.app_attest_key_id, ?6 FROM live_start_tokens t
      WHERE t.token = ?5 AND t.environment = ?2 AND ${ENTERED}
      ON CONFLICT DO NOTHING RETURNING app_attest_key_id AS keyId`,
   )
-    .bind(raceId, device.environment, ...lists, device.token)
+    .bind(raceId, device.environment, ...lists, device.token, channelId)
     .first<{ keyId: string }>();
   return row?.keyId;
 }
@@ -280,10 +297,13 @@ export async function pruneStarts(db: D1Database, now: number): Promise<void> {
     .run();
 }
 
-/** Gives a start that didn't go through back to a later run. */
-function release(env: Env, raceId: string, keyId: string) {
-  return env.DB.prepare("DELETE FROM live_starts WHERE race_id = ?1 AND app_attest_key_id = ?2 AND started = 1")
-    .bind(raceId, keyId)
+/**
+ * Gives a start that didn't go through back to a later run, unless the race was reinstated
+ * meanwhile (live.ts): the claim is then a newer run's, on the new channel.
+ */
+function release(env: Env, claimed: { raceId: string; keyId: string; channelId: string }) {
+  return env.DB.prepare("DELETE FROM live_starts WHERE race_id = ?1 AND app_attest_key_id = ?2 AND channel_id = ?3")
+    .bind(claimed.raceId, claimed.keyId, claimed.channelId)
     .run();
 }
 

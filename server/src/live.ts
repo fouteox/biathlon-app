@@ -14,6 +14,8 @@ import { SubrequestBudget } from "./subrequests";
 
 /** `Results?RaceId=`: the race and its rows. */
 export interface IBUResults {
+  /** Whether `Results` is the published start list, before the race. */
+  IsStartList?: boolean | null;
   Competition?: IBUCompetition | null;
   Results?: IBUResultRow[] | null;
 }

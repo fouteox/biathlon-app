@@ -16,8 +16,9 @@ final class LiveActivityStarts {
         didSet { defaults.set(isEnabled, forKey: Keys.isEnabled) }
     }
 
-    /// The push-to-start token, in hex like a device token. Kept in memory only, like the
-    /// device token (PushRegistration): ActivityKit gives it at every launch.
+    /// The push-to-start token, in hex like a device token. Kept in memory, like the device
+    /// token (PushRegistration): ActivityKit gives it at every launch. Only the one last sent
+    /// is stored, for the deletion.
     private(set) var token: String? = Activity<RaceActivityAttributes>.pushToStartToken.map(LiveActivityStarts.hex)
 
     @ObservationIgnored private let serverURL = Bundle.main.serverURL
@@ -54,11 +55,13 @@ final class LiveActivityStarts {
     /// Sends the favorites to the server, or deletes them from it once they are no longer
     /// wanted. A failed sync is retried at the next launch or change.
     func sync(_ registration: Registration) async {
-        guard let serverURL, let appAttest, let token = registration.token else { return }
+        guard let serverURL, let appAttest else { return }
         let favorites = registration.favorites
         let wanted = registration.isEnabled && !favorites.isEmpty
-        // Nothing to delete unless favorites may have reached the server.
-        guard wanted || defaults.bool(forKey: Keys.mayBeRegistered) else { return }
+        // A deletion names the token the favorites were sent with: ActivityKit gives none
+        // while Live Activities are turned off in Settings.
+        let token = wanted ? registration.token : defaults.string(forKey: Keys.registeredToken)
+        guard let token else { return }
         var request = URLRequest(url: serverURL.appending(path: "v1/live-activity-starts/\(token)"))
         request.httpMethod = wanted ? "PUT" : "DELETE"
         if wanted {
@@ -76,7 +79,7 @@ final class LiveActivityStarts {
             }
         }
         // Set before the PUT: the server may store it even if its answer is lost.
-        if wanted { defaults.set(true, forKey: Keys.mayBeRegistered) }
+        if wanted { defaults.set(token, forKey: Keys.registeredToken) }
         do {
             let response = try await appAttest.send(request)
             guard (200..<300).contains(response.statusCode) else {
@@ -84,7 +87,7 @@ final class LiveActivityStarts {
                     "Server answered \(response.statusCode) to the Live Activity favorites")
                 return
             }
-            if !wanted { defaults.set(false, forKey: Keys.mayBeRegistered) }
+            if !wanted { defaults.removeObject(forKey: Keys.registeredToken) }
         } catch AppAttest.Failure.unsupported {
             Logger.notifications.notice("App Attest is unavailable, Live Activities for favorites stay off")
         } catch {
@@ -106,7 +109,7 @@ final class LiveActivityStarts {
 
     private enum Keys {
         static let isEnabled = "liveActivities.favoriteStarts"
-        /// Whether the server may hold this install's favorites.
-        static let mayBeRegistered = "liveActivities.favoriteStartsMayBeRegistered"
+        /// The last token sent with favorites the server may hold, until they are deleted.
+        static let registeredToken = "liveActivities.favoriteStartsToken"
     }
 }

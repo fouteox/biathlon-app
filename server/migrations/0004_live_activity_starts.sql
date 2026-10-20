@@ -14,12 +14,15 @@ CREATE TABLE live_start_tokens (
 CREATE INDEX live_start_tokens_by_app_attest_key ON live_start_tokens (app_attest_key_id);
 
 -- The installs a race was checked for, by App Attest key rather than by token, which
--- ActivityKit can replace: started (or being started) when one of their favorites is on its
--- start list, so each install gets at most one start per race. Changed favorites check
--- again the races that started nothing; a race reinstated after its end, every install.
+-- ActivityKit can replace: started (or being started) on a channel when one of their
+-- favorites is on its start list, so each install gets at most one start per race. Changed
+-- favorites check again the races that started nothing; a race reinstated after its end,
+-- every install.
 CREATE TABLE live_starts (
   race_id TEXT NOT NULL REFERENCES races (id),
   app_attest_key_id TEXT NOT NULL REFERENCES app_attest_keys (key_id) ON DELETE CASCADE,
-  started INTEGER NOT NULL CHECK (started IN (0, 1)),
+  -- The channel the activity was started on, which a failed start releases only while it
+  -- is the one claimed; NULL when none of the favorites was on the start list.
+  channel_id TEXT,
   PRIMARY KEY (race_id, app_attest_key_id)
 );
