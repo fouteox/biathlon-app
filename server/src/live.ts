@@ -156,7 +156,7 @@ export async function syncLiveActivities(
     await updateOpenChannels(env, tokens, open, watched, now, budget);
   }
   // After the races followed in the budget, the ends least recently tried first, then the deletions.
-  for (const channel of ended) await resendEnd(env, tokens, channel, now);
+  for (const channel of ended) await sendEnd(env, tokens, channel, now);
   await deleteRetiredChannels(env, tokens, now);
 }
 
@@ -267,8 +267,15 @@ async function openChannels(
       // An overlapping run recorded its channel first: this one has no row to be deleted with.
       if (meta.changes === 0) await retire(env, environment, outcome.channelId).run();
     } catch (error) {
-      // Recorded nowhere, the channel would count against the limit forever: deleted before the run stops.
-      await tokens.send(environment, (token) => deleteChannel(environment, env.APNS_TOPIC, outcome.channelId, token));
+      // Recorded nowhere, the channel would count against the limit forever: deleted before the run
+      // stops, or queued for a later run, and logged in case D1 can't take it either.
+      const deletion = await tokens.send(environment, (token) =>
+        deleteChannel(environment, env.APNS_TOPIC, outcome.channelId, token),
+      );
+      if (deletion.kind !== "sent" && deletion.kind !== "unregistered") {
+        console.error("APNs channel left to delete", environment, outcome.channelId, deletion);
+        await retire(env, environment, outcome.channelId).run();
+      }
       throw error;
     }
   }
@@ -306,37 +313,28 @@ const OPEN_CHANNEL = "race_id = ?2 AND environment = ?3 AND channel_id = ?4 AND 
 const UNCHANGED_OPEN_CHANNEL = `${OPEN_CHANNEL} AND state = ?5`;
 
 /**
- * Ends the channel with the final state, whether its broadcast goes through or not, for
- * the app to learn it: an end not sent goes again at the next runs (`resendEnd`), and a
- * channel APNs no longer knows, dropped already or now, is marked deleted.
+ * Ends the channel with the final state, recorded before the end event is sent: an
+ * overlapping run that stored a newer state since, like a race reinstated, keeps the
+ * channel open. The app learns the final state from the row whether the broadcast goes
+ * through or not.
  */
 async function end(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
-  const outcome = isDropped(channel) ? "unregistered" : await send(env, tokens, channel, "end", state, now);
-  await env.DB.prepare(
-    `UPDATE live_channels SET state = ?1, ended_at = ?6, end_sent_at = ?7, deleted_at = COALESCE(deleted_at, ?8)
-     WHERE ${UNCHANGED_OPEN_CHANNEL}`,
-  )
-    .bind(
-      JSON.stringify(state),
-      channel.raceId,
-      channel.environment,
-      channel.channelId,
-      channel.state,
-      now,
-      outcome === "sent" ? now : null,
-      outcome === "unregistered" ? now : null,
-    )
+  const { meta } = await env.DB.prepare(`UPDATE live_channels SET state = ?1, ended_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`)
+    .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state, now)
     .run();
+  // A dropped channel, already unknown to APNs, has no subscriber left to tell.
+  if (meta.changes === 0 || isDropped(channel)) return;
+  await sendEnd(env, tokens, { ...channel, state: JSON.stringify(state), endedAt: now, endSentAt: null }, now);
 }
 
 /** The ended row a run read, not the open one an overlapping run may have replaced it with. Binds ?2 to ?4. */
 const SAME_ENDED_CHANNEL = "race_id = ?2 AND environment = ?3 AND channel_id = ?4 AND ended_at IS NOT NULL";
 
 /**
- * Sends the end again for devices that were offline, then retires the channel once the
- * grace period is over. The row stays, marked deleted, for the app to learn the final state.
+ * Sends the end, then again for devices that were offline, and retires the channel once
+ * the grace period is over. The row stays, marked deleted, for the app to learn the final state.
  */
-async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, now: number) {
+async function sendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, now: number) {
   const markDeleted = () =>
     env.DB.prepare(`UPDATE live_channels SET deleted_at = ?1 WHERE ${SAME_ENDED_CHANNEL}`).bind(
       now,

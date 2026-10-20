@@ -629,6 +629,44 @@ describe("Live Activity channels", () => {
     ]);
   });
 
+  it("sends no end once an overlapping run stored a newer state, like a race reinstated", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    const sent: string[] = [];
+    vi.stubGlobal("fetch", async (input: string) => {
+      const url = String(input);
+      sent.push(url);
+      if (!url.includes("biathlonresults.com")) return new Response(null, { status: 200 });
+      await env.DB.prepare("UPDATE live_channels SET state = ?1").bind(JSON.stringify(live.state)).run();
+      return Response.json(relay.results);
+    });
+
+    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW);
+
+    expect(sent.filter((url) => url.includes("/4/broadcasts/"))).toEqual([]);
+    const { results } = await env.DB.prepare("SELECT ended_at AS endedAt FROM live_channels").all();
+    expect(results).toEqual([{ endedAt: null }, { endedAt: null }]);
+  });
+
+  it("queues a channel it can't record for deletion when deleting it at once fails too", async () => {
+    const env = await makeEnv();
+    const prepare = env.DB.prepare.bind(env.DB);
+    env.DB.prepare = (sql: string) => {
+      if (sql.startsWith("INSERT INTO live_channels")) throw new Error("D1 unavailable");
+      return prepare(sql);
+    };
+    vi.stubGlobal("fetch", async (_input: string, init: RequestInit = {}) =>
+      init.method === "POST"
+        ? new Response(null, { status: 201, headers: { "apns-channel-id": "channel-1" } })
+        : new Response(null, { status: 500 }),
+    );
+
+    await expect(syncLiveActivities(env, [race()], NOW)).rejects.toThrow("D1 unavailable");
+
+    expect(await retired(env)).toEqual(["channel-1"]);
+  });
+
   it("keeps a race's lookup for a run that can broadcast its result", async () => {
     const env = await makeEnv();
     stubNetwork();
