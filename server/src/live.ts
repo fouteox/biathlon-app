@@ -173,7 +173,8 @@ async function updateOpenChannels(
   // The races least recently looked up first: a budget too short for all of them takes turns among them.
   for (const [raceId, channels] of Map.groupBy(open, (row) => row.raceId)) {
     const race = watched.get(raceId);
-    const isReached = !budget.isSpent;
+    // A lookup waits for a run that can also broadcast its result to every channel.
+    if (needsResults(race) && !budget.has(1 + channels.length)) continue;
     const known = await currentState(raceId, race, budget);
     for (const channel of channels) {
       const state: LiveState = { ...(JSON.parse(channel.state) as LiveState), ...known };
@@ -184,7 +185,7 @@ async function updateOpenChannels(
         await publish(env, tokens, channel, state, now);
       }
     }
-    if (isReached && needsResults(race)) {
+    if (needsResults(race)) {
       await env.DB.prepare("UPDATE live_channels SET attempted_at = ?1 WHERE race_id = ?2 AND ended_at IS NULL")
         .bind(now, raceId)
         .run();
@@ -225,11 +226,13 @@ async function currentState(
 }
 
 async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapshot[], rows: ChannelRow[], now: number) {
-  const open = new Set(rows.filter((row) => !isDropped(row)).map((row) => `${row.raceId} ${row.environment}`));
+  const key = (raceId: string, environment: APNsEnvironment) => `${raceId} ${environment}`;
+  const open = new Set(rows.filter((row) => !isDropped(row)).map((row) => key(row.raceId, row.environment)));
+  const dropped = new Map(rows.filter(isDropped).map((row) => [key(row.raceId, row.environment), row]));
   const followable = races.filter(isFollowable);
   const missing = ENVIRONMENTS.flatMap((environment) =>
     followable
-      .filter((race) => !open.has(`${race.id} ${environment}`))
+      .filter((race) => !open.has(key(race.id, environment)))
       .slice(0, MAX_CHANNEL_CREATIONS_PER_ENVIRONMENT)
       .map((race) => ({ race, environment })),
   );
@@ -242,14 +245,16 @@ async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapsho
       continue;
     }
     // A live race starts from the calendar too: its first results are published at the next run.
-    // The new channel replaces a dropped one.
+    // The new channel replaces a dropped one, with the leaders last published on it.
+    const stored = dropped.get(key(race.id, environment))?.state;
+    const state: LiveState = { leaders: [], ...(stored && (JSON.parse(stored) as LiveState)), ...calendarFields(race) };
     const { meta } = await env.DB.prepare(
       `INSERT INTO live_channels (race_id, environment, channel_id, state, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
        ON CONFLICT (race_id, environment) DO UPDATE
        SET channel_id = excluded.channel_id, state = excluded.state, created_at = excluded.created_at, deleted_at = NULL
        WHERE ended_at IS NULL AND deleted_at IS NOT NULL`,
     )
-      .bind(race.id, environment, outcome.channelId, JSON.stringify({ ...calendarFields(race), leaders: [] }), now)
+      .bind(race.id, environment, outcome.channelId, JSON.stringify(state), now)
       .run();
     // An overlapping run recorded its channel first: this one has no row to be deleted with.
     if (meta.changes === 0) await retire(env, environment, outcome.channelId).run();

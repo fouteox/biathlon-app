@@ -540,6 +540,36 @@ describe("Live Activity channels", () => {
     expect(broadcasts(sent).map((request) => request.headers["apns-channel-id"])).toEqual(["channel-1", "channel-2"]);
   });
 
+  it("keeps a race's lookup for a run that can broadcast its result", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+
+    for (const run of [1, 2]) {
+      const sent = stubNetwork();
+      await syncLiveActivities(env, [race({ IsLive: true })], NOW + run * 60_000, new SubrequestBudget(2));
+      expect(sent).toEqual([]);
+    }
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 3 * 60_000, new SubrequestBudget(3));
+    expect(broadcasts(sent).length).toBe(2);
+  });
+
+  it("keeps the leaders of a dropped channel in its replacement", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW);
+    stubNetwork({ broadcastReason: "ChannelNotRegistered", results: relay.results });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
+
+    stubNetwork({ resultsStatus: 503 });
+    await syncLiveActivities(env, [race({ IsLive: true })], NOW + 2 * 60_000);
+
+    expect((await channels(env)).map(({ state }) => JSON.parse(state))).toEqual([live.state, live.state]);
+  });
+
   it("takes turns among the races under way when the budget can't cover them all", async () => {
     const env = await makeEnv();
     const races = ["A", "B"].map((suffix) => race({ RaceId: RACE_ID + suffix, IsLive: true }));
@@ -556,7 +586,7 @@ describe("Live Activity channels", () => {
     const lookups: string[] = [];
     for (const run of [1, 2]) {
       const sent = stubNetwork();
-      await syncLiveActivities(env, races, NOW + run * 60_000, new SubrequestBudget(1));
+      await syncLiveActivities(env, races, NOW + run * 60_000, new SubrequestBudget(3));
       lookups.push(...sent.filter((request) => request.url.includes("biathlonresults.com")).map((request) => request.url));
     }
 
@@ -633,6 +663,16 @@ describe("GET /v1/races/:id/channels/:environment", () => {
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ channelId: "channel-2", state: live.state });
+  });
+
+  it("keeps its answers out of HTTP caches, since the channel can change at every run", async () => {
+    const env = await makeEnv();
+    for (const status of [404, 200]) {
+      const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
+      expect([response.status, response.headers.get("cache-control")]).toEqual([status, "no-store"]);
+      stubNetwork();
+      await syncLiveActivities(env, [race()], NOW);
+    }
   });
 
   it("answers 410 with the final state once the race's activity has ended, even after its channel is deleted", async () => {

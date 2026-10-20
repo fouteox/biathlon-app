@@ -42,9 +42,10 @@ export default {
     if (channel && request.method === "GET") {
       const [, raceId = "", environment = ""] = channel.map(decodeURIComponent);
       if (!isEnvironment(environment)) return json({ error: "invalid environment" }, 400);
+      // The channel can change at every cron run: no cache may answer for it, 404 and 410 included.
       const live = await channelFor(env.DB, raceId, environment);
-      if (!live) return json({ error: "no channel for this race" }, 404);
-      return "ended" in live ? json({ state: live.ended }, 410) : json(live);
+      if (!live) return json({ error: "no channel for this race" }, 404, NO_STORE);
+      return "ended" in live ? json({ state: live.ended }, 410, NO_STORE) : json(live, 200, NO_STORE);
     }
 
     if (url.pathname === "/v1/health" && request.method === "GET") {
@@ -114,6 +115,8 @@ function parseJSON(bytes: Uint8Array): unknown {
   }
 }
 
-function json(body: unknown, status = 200): Response {
-  return Response.json(body, { status });
+const NO_STORE = { "cache-control": "no-store" };
+
+function json(body: unknown, status = 200, headers?: HeadersInit): Response {
+  return Response.json(body, { status, headers });
 }
