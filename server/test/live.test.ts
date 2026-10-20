@@ -130,13 +130,13 @@ async function makeEnv(): Promise<Env> {
   return env;
 }
 
-/** Counts the D1 calls made from now on: each `run`, `all`, `first` or `batch`. */
-function countD1Calls(env: Env): () => number {
-  let calls = 0;
+/** Counts the D1 queries made from now on: each `run`, `all` or `first`, and each statement of a `batch`. */
+function countD1Queries(env: Env): () => number {
+  let queries = 0;
   const db = env.DB;
   const counted = <T extends (...args: never[]) => unknown>(method: T) =>
     ((...args: Parameters<T>) => {
-      calls += 1;
+      queries += 1;
       return method(...args);
     }) as T;
   const statement = (prepared: D1PreparedStatement): D1PreparedStatement =>
@@ -149,11 +149,13 @@ function countD1Calls(env: Env): () => number {
     }) as unknown as D1PreparedStatement;
   env.DB = {
     prepare: (sql: string) => statement(db.prepare(sql)),
-    batch: counted((statements: D1PreparedStatement[]) =>
-      db.batch(statements.map((item) => (item as unknown as { raw: D1PreparedStatement }).raw)),
-    ),
+    // D1's limits apply to each statement of a batch (https://developers.cloudflare.com/d1/platform/limits/).
+    batch: (statements: D1PreparedStatement[]) => {
+      queries += statements.length;
+      return db.batch(statements.map((item) => (item as unknown as { raw: D1PreparedStatement }).raw));
+    },
   } as unknown as D1Database;
-  return () => calls;
+  return () => queries;
 }
 
 /** The pushes of one run, with room for `capacity` of them. */
@@ -1079,15 +1081,15 @@ describe("alerts", () => {
     expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([{ token: "b", attempts: 0 }]);
   });
 
-  it("forgets the devices APNs no longer knows in one D1 call", async () => {
+  it("forgets the devices APNs no longer knows in a few D1 queries", async () => {
     const env = await makeEnv();
     await queue(env, Array.from({ length: 60 }, (_, index) => `t${index}`));
-    const calls = countD1Calls(env);
+    const calls = countD1Queries(env);
     stubNetwork({ deviceStatus: 410 });
 
     await drainOutbox(env, NOW);
 
-    expect(calls()).toBeLessThanOrEqual(5);
+    expect(calls()).toBeLessThanOrEqual(10);
     expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([]);
   });
 
@@ -1207,18 +1209,19 @@ describe("Live Activities started for favorites", () => {
     expect(lots.reduce((sum, size) => sum + size, 0)).toBe(122);
   });
 
-  it("claims and settles a race's starts in a few D1 calls, whatever their number", async () => {
+  it("claims and settles a race's starts in a few D1 queries, whatever their number", async () => {
     const env = await setUp();
     for (const index of Array.from({ length: 120 }, (_, value) => value)) {
       await save(env, index.toString(16).padStart(64, "0"), { athletes: [PERROT] });
     }
-    // Each D1 call is one of the run's 1,000 subrequests to Cloudflare services.
-    const calls = countD1Calls(env);
+    // The Workers Free plan allows 50 D1 queries per invocation.
+    const calls = countD1Queries(env);
     stub({ deviceStatus: 503 });
 
     await startFavoriteActivities(env, [race()], DUE);
 
-    expect(calls()).toBeLessThanOrEqual(10);
+    // The race's reads, its two provider tokens, a claim and a settle.
+    expect(calls()).toBeLessThanOrEqual(12);
     const sent = stub();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
     expect(starts(sent).length).toBe(122);
@@ -1229,7 +1232,7 @@ describe("Live Activities started for favorites", () => {
     const batch = env.DB.batch.bind(env.DB);
     let failing = true;
     env.DB.batch = (async (statements: D1PreparedStatement[]) => {
-      if (failing && statements.length > 2) {
+      if (failing) {
         failing = false;
         throw new Error("D1 unavailable");
       }

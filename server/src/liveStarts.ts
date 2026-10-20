@@ -114,6 +114,7 @@ export async function deleteOwnedStartToken(db: D1Database, _token: string, keyI
 interface PendingToken {
   token: string;
   environment: APNsEnvironment;
+  keyId: string;
 }
 
 /**
@@ -188,7 +189,8 @@ export async function startFavoriteActivities(
       .bind(race.id, environments, ...lists, checked)
       .run();
     const { results: pending } = await env.DB.prepare(
-      `SELECT token, environment FROM live_start_tokens t WHERE ${UNCHECKED} AND ${ENTERED} ORDER BY updated_at, token`,
+      `SELECT token, environment, app_attest_key_id AS keyId FROM live_start_tokens t
+       WHERE ${UNCHECKED} AND ${ENTERED} ORDER BY updated_at, token`,
     )
       .bind(race.id, environments, ...lists, checked)
       .all<PendingToken>();
@@ -215,30 +217,43 @@ function startPush(env: Env, race: RaceSnapshot, claimed: Claim, now: number): L
 
 /**
  * Gives the starts that didn't go through back to a later run, and forgets the tokens APNs no
- * longer knows, in one D1 call: each is one of the run's subrequests to Cloudflare services.
+ * longer knows, in at most three D1 queries, whatever the number of starts.
  */
 async function settle(env: Env, raceId: string, claims: Claim[], outcomes: (PushOutcome | Deferred)[]): Promise<void> {
-  const statements = claims.flatMap((claimed, index) => {
+  const unsent: Claim[] = [];
+  const failed: Claim[] = [];
+  const unregistered: string[] = [];
+  claims.forEach((claimed, index) => {
     const outcome = outcomes[index]!;
     switch (outcome.kind) {
       case "sent":
-        return [];
+        break;
       case "unregistered":
-        return [release(env, claimed, 0), deleteStartToken(env.DB, claimed.token)];
+        unsent.push(claimed);
+        unregistered.push(claimed.token);
+        break;
       case "deferred":
         // Not sent: the run had no provider token to send it with.
-        return [release(env, claimed, 0)];
+        unsent.push(claimed);
+        break;
       case "retry":
       case "expiredProviderToken":
         // The APNs key or clock may be fixed by the next run.
         console.warn("APNs Live Activity start retry", raceId, outcome);
-        return [release(env, claimed, 1)];
+        failed.push(claimed);
+        break;
       default:
         // Refused, the claim stays: sent again, it would be refused again.
         console.error("APNs Live Activity start failed", raceId, outcome);
-        return [];
     }
   });
+  const statements = [
+    ...(unsent.length > 0 ? [release(env, raceId, unsent, 0)] : []),
+    ...(failed.length > 0 ? [release(env, raceId, failed, 1)] : []),
+    ...(unregistered.length > 0
+      ? [env.DB.prepare("DELETE FROM live_start_tokens WHERE token IN (SELECT value FROM json_each(?1))").bind(JSON.stringify(unregistered))]
+      : []),
+  ];
   if (statements.length > 0) await env.DB.batch(statements);
 }
 
@@ -299,7 +314,6 @@ function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, n
 
 interface Claim extends PendingToken {
   raceId: string;
-  keyId: string;
   channelId: string;
   /** The state last published on the channel, which the new activity starts from: it gets only the broadcasts sent after. */
   state: LiveState;
@@ -308,7 +322,9 @@ interface Claim extends PendingToken {
 /**
  * Claims the start of the race on its channel for each device's install, while the channel is
  * open and the stored token still has a favorite among the entrants `lists`, over a check the
- * previous entrants started nothing for. One transaction, and one D1 call, for all of them.
+ * previous entrants started nothing for. One transaction of two queries, whatever the number
+ * of devices: the Workers Free plan allows 50 D1 queries per invocation, each statement of a
+ * batch counting (https://developers.cloudflare.com/d1/platform/limits/).
  */
 async function claim(
   env: Env,
@@ -318,39 +334,31 @@ async function claim(
   lists: string[],
 ): Promise<Claim[]> {
   if (devices.length === 0) return [];
-  const channelOf = (environment: APNsEnvironment) => channels.find((row) => row.environment === environment)!.channelId;
-  const inserts = devices.map((device) =>
+  const channelIds = JSON.stringify(channels.map((channel) => channel.channelId));
+  const [claimed, read] = await env.DB.batch([
     env.DB.prepare(
       `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
-       SELECT ?1, t.app_attest_key_id, ?6, NULL FROM live_start_tokens t
-       WHERE t.token = ?5 AND t.environment = ?2 AND ${ENTERED} AND EXISTS (
-         SELECT 1 FROM live_channels
-         WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?6 AND ended_at IS NULL AND deleted_at IS NULL)
+       SELECT ?1, t.app_attest_key_id, c.channel_id, NULL FROM live_start_tokens t
+       JOIN live_channels c ON c.race_id = ?1 AND c.environment = t.environment
+         AND c.channel_id IN (SELECT value FROM json_each(?2)) AND c.ended_at IS NULL AND c.deleted_at IS NULL
+       WHERE t.token IN (SELECT value FROM json_each(?5)) AND ${ENTERED}
        ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL
          WHERE live_starts.channel_id IS NOT excluded.channel_id
        RETURNING app_attest_key_id AS keyId`,
-    ).bind(raceId, device.environment, ...lists, device.token, channelOf(device.environment)),
-  );
-  // In the same transaction as the claims.
-  const reads = channels.map(({ environment, channelId }) =>
-    env.DB.prepare("SELECT state FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3").bind(
-      raceId,
-      environment,
-      channelId,
-    ),
-  );
-  const results = await env.DB.batch([...inserts, ...reads]);
-  const states = new Map(
-    channels.map(({ environment }, index) => [
-      environment,
-      (results[inserts.length + index]?.results[0] as { state: string } | undefined)?.state,
-    ]),
-  );
-  return devices.flatMap((device, index) => {
-    const keyId = (results[index]?.results[0] as { keyId: string } | undefined)?.keyId;
+    ).bind(raceId, channelIds, ...lists, JSON.stringify(devices.map((device) => device.token))),
+    // In the same transaction as the claims.
+    env.DB.prepare(
+      `SELECT environment, state FROM live_channels
+       WHERE race_id = ?1 AND channel_id IN (SELECT value FROM json_each(?2))`,
+    ).bind(raceId, channelIds),
+  ]);
+  const keys = new Set((claimed!.results as { keyId: string }[]).map((row) => row.keyId));
+  const states = new Map((read!.results as { environment: APNsEnvironment; state: string }[]).map((row) => [row.environment, row.state]));
+  return devices.flatMap((device) => {
     const state = states.get(device.environment);
-    if (!keyId || !state) return [];
-    return [{ ...device, raceId, keyId, channelId: channelOf(device.environment), state: JSON.parse(state) as LiveState }];
+    if (!keys.has(device.keyId) || !state) return [];
+    const channelId = channels.find((channel) => channel.environment === device.environment)!.channelId;
+    return [{ ...device, raceId, channelId, state: JSON.parse(state) as LiveState }];
   });
 }
 
@@ -380,18 +388,15 @@ export async function pruneStarts(db: D1Database, now: number): Promise<void> {
 }
 
 /**
- * Gives a start that didn't go through back to a later run, counting the `failed` send, unless
- * its channel was replaced meanwhile: the claim is then a newer run's, on the new channel. Its
- * row is kept, for one write rather than a delete and an insert at each retry.
+ * Gives the starts `claims` of the race that didn't go through back to a later run, counting
+ * the `failed` send, unless their channel was replaced meanwhile: the claim is then a newer
+ * run's, on the new channel. Their rows are kept, for one write rather than a delete and an
+ * insert at each retry.
  */
-function release(env: Env, claimed: Claim, failed: 0 | 1): D1PreparedStatement {
+function release(env: Env, raceId: string, claims: Claim[], failed: 0 | 1): D1PreparedStatement {
   return env.DB.prepare(
-    `UPDATE live_starts SET channel_id = NULL, attempts = attempts + ?4
-     WHERE race_id = ?1 AND app_attest_key_id = ?2 AND channel_id = ?3`,
-  ).bind(claimed.raceId, claimed.keyId, claimed.channelId, failed);
-}
-
-/** Deletes a token APNs reported as no longer valid. */
-function deleteStartToken(db: D1Database, token: string): D1PreparedStatement {
-  return db.prepare("DELETE FROM live_start_tokens WHERE token = ?1").bind(token);
+    `UPDATE live_starts SET channel_id = NULL, attempts = attempts + ?3
+     WHERE race_id = ?1 AND (app_attest_key_id, channel_id) IN (
+       SELECT value ->> '$[0]', value ->> '$[1]' FROM json_each(?2))`,
+  ).bind(raceId, JSON.stringify(claims.map((claimed) => [claimed.keyId, claimed.channelId])), failed);
 }
