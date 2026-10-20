@@ -1012,7 +1012,7 @@ describe("Live Activities started for favorites", () => {
   const PERROT = "BTFRA00000000001";
   const KEY = "key";
   /** The published start list of the scheduled race. */
-  const START_LIST = { ...(live.results as object), IsStartList: true };
+  const START_LIST: IBUResults = { ...live.results, IsStartList: true };
   const stub = (options: Parameters<typeof stubNetwork>[0] = {}) => stubNetwork({ results: START_LIST, ...options });
 
   /** Saves the favorites of the install `key`, by default one per token. */
@@ -1110,7 +1110,7 @@ describe("Live Activities started for favorites", () => {
     await save(env, "dd".repeat(32), { athletes: [PERROT] }, `${KEY}-${"aa".repeat(32)}`);
     const sent = stub();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
-    expect(sent).toEqual([]);
+    expect(starts(sent)).toEqual([]);
   });
 
   it("matches the favorites a device saved while the start list was read", async () => {
@@ -1126,6 +1126,30 @@ describe("Live Activities started for favorites", () => {
       duringResults: async () => {
         await save(env, "aa".repeat(32), { athletes: ["BTSUI00000000009"] });
         await env.DB.prepare("DELETE FROM live_start_tokens WHERE environment = 'sandbox'").run();
+      },
+    });
+    await startFavoriteActivities(env, [race()], DUE);
+    expect(starts(sent)).toEqual([]);
+  });
+
+  it("checks again the devices none of whose favorites raced when the start list changes before the race", async () => {
+    const env = await setUp();
+    stub();
+    await startFavoriteActivities(env, [race()], DUE);
+
+    // An Italian added to the start list.
+    const entrant = { IBUId: "BTITA00000000006", Name: "GIACOMEL Tommaso", Nat: "ITA" };
+    const amended = { ...START_LIST, Results: [...(START_LIST.Results ?? []), entrant] };
+    const sent = stub({ results: amended });
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
+  });
+
+  it("starts nothing on a channel that ended while the start list was read", async () => {
+    const env = await setUp();
+    const sent = stub({
+      duringResults: async () => {
+        await env.DB.prepare("UPDATE live_channels SET ended_at = 1").run();
       },
     });
     await startFavoriteActivities(env, [race()], DUE);
@@ -1259,6 +1283,6 @@ describe("Live Activities started for favorites", () => {
     await startFavoriteActivities(other, [race()], DUE);
     const sent = stub();
     await startFavoriteActivities(other, [race()], DUE + 60_000);
-    expect(sent).toEqual([]);
+    expect(starts(sent)).toEqual([]);
   });
 });

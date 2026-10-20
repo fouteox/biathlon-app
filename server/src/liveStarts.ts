@@ -114,9 +114,13 @@ interface PendingToken {
   environment: APNsEnvironment;
 }
 
-/** The tokens `t` of the environments ?2 (a JSON array) whose install race ?1 wasn't checked for. */
+/**
+ * The tokens `t` of the environments ?2 (a JSON array) whose install race ?1 started nothing
+ * for, unless it was checked against the entrants ?5 (their `digest`).
+ */
 const UNCHECKED = `t.environment IN (SELECT value FROM json_each(?2))
-  AND t.app_attest_key_id NOT IN (SELECT app_attest_key_id FROM live_starts WHERE race_id = ?1)`;
+  AND t.app_attest_key_id NOT IN (
+    SELECT app_attest_key_id FROM live_starts WHERE race_id = ?1 AND (channel_id IS NOT NULL OR entrants = ?5))`;
 
 /** Whether one of the favorites of `t` is among the athletes ?3 or the nations ?4 (JSON arrays). */
 const ENTERED = `(EXISTS (SELECT 1 FROM json_each(t.athletes) WHERE value IN (SELECT value FROM json_each(?3)))
@@ -143,8 +147,15 @@ export async function startFavoriteActivities(
       .bind(race.id)
       .all<{ environment: APNsEnvironment; channelId: string; state: string }>();
     const environments = JSON.stringify(channels.map((channel) => channel.environment));
-    const unchecked = await env.DB.prepare(`SELECT 1 FROM live_start_tokens t WHERE ${UNCHECKED} LIMIT 1`)
-      .bind(race.id, environments)
+    // Until the race starts, its start list can change: the installs it started nothing for
+    // are checked again against each new one. Its entrants are then known.
+    const unchecked = await env.DB.prepare(
+      `SELECT 1 FROM live_start_tokens t WHERE t.environment IN (SELECT value FROM json_each(?2))
+         AND t.app_attest_key_id NOT IN (
+           SELECT app_attest_key_id FROM live_starts WHERE race_id = ?1 AND (channel_id IS NOT NULL OR ?3))
+       LIMIT 1`,
+    )
+      .bind(race.id, environments, race.status === "scheduled" ? 0 : 1)
       .first();
     if (!unchecked) continue;
     // The start list, then at least one start.
@@ -155,17 +166,18 @@ export async function startFavoriteActivities(
     // Matched in D1 against the favorites stored when each statement runs: one write for all
     // the installs none of whose favorites races, then each start claimed only if it still matches.
     const lists = [JSON.stringify(entrants.athletes), JSON.stringify(entrants.nations)];
+    const checked = await digest(lists);
     await env.DB.prepare(
-      `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id)
-       SELECT ?1, t.app_attest_key_id, NULL FROM live_start_tokens t WHERE ${UNCHECKED} AND NOT ${ENTERED}
-       ON CONFLICT DO NOTHING`,
+      `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
+       SELECT ?1, t.app_attest_key_id, NULL, ?5 FROM live_start_tokens t WHERE ${UNCHECKED} AND NOT ${ENTERED}
+       ON CONFLICT DO UPDATE SET entrants = excluded.entrants WHERE live_starts.channel_id IS NULL`,
     )
-      .bind(race.id, environments, ...lists)
+      .bind(race.id, environments, ...lists, checked)
       .run();
     const { results: pending } = await env.DB.prepare(
       `SELECT token, environment FROM live_start_tokens t WHERE ${UNCHECKED} AND ${ENTERED} ORDER BY updated_at, token`,
     )
-      .bind(race.id, environments, ...lists)
+      .bind(race.id, environments, ...lists, checked)
       .all<PendingToken>();
 
     for (const device of pending) {
@@ -227,13 +239,20 @@ async function startList(
     // Before the race, rows may be preliminary until they are the start list.
     if (rows.length === 0 || (race.status === "scheduled" && !results.IsStartList)) return undefined;
     return {
-      athletes: [...new Set(rows.flatMap((row) => (row.IBUId ? [row.IBUId] : [])))],
-      nations: [...new Set(rows.flatMap((row) => (row.Nat ? [row.Nat] : [])))],
+      // Sorted, for their `digest`.
+      athletes: [...new Set(rows.flatMap((row) => (row.IBUId ? [row.IBUId] : [])))].sort(),
+      nations: [...new Set(rows.flatMap((row) => (row.Nat ? [row.Nat] : [])))].sort(),
     };
   } catch (error) {
     console.warn("Start list unavailable", race.id, String(error));
     return undefined;
   }
+}
+
+/** Identifies the entrants `lists` a check was made against, in hex. */
+async function digest(lists: string[]): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(lists)));
+  return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 /**
@@ -262,8 +281,9 @@ function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, n
 }
 
 /**
- * Claims the start of the race on `channelId` for the device's install, while its stored token
- * still has a favorite among the entrants `lists`; its key, or `undefined` when there is nothing to claim.
+ * Claims the start of the race on `channelId` for the device's install, while the channel is
+ * open and the stored token still has a favorite among the entrants `lists`, over a check the
+ * previous entrants started nothing for; its key, or `undefined` when there is nothing to claim.
  */
 async function claim(
   env: Env,
@@ -273,10 +293,13 @@ async function claim(
   lists: string[],
 ): Promise<string | undefined> {
   const row = await env.DB.prepare(
-    `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id)
-     SELECT ?1, t.app_attest_key_id, ?6 FROM live_start_tokens t
-     WHERE t.token = ?5 AND t.environment = ?2 AND ${ENTERED}
-     ON CONFLICT DO NOTHING RETURNING app_attest_key_id AS keyId`,
+    `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
+     SELECT ?1, t.app_attest_key_id, ?6, NULL FROM live_start_tokens t
+     WHERE t.token = ?5 AND t.environment = ?2 AND ${ENTERED} AND EXISTS (
+       SELECT 1 FROM live_channels
+       WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?6 AND ended_at IS NULL AND deleted_at IS NULL)
+     ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL WHERE live_starts.channel_id IS NULL
+     RETURNING app_attest_key_id AS keyId`,
   )
     .bind(raceId, device.environment, ...lists, device.token, channelId)
     .first<{ keyId: string }>();
