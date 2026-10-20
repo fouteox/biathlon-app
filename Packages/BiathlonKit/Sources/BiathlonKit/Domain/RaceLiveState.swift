@@ -60,3 +60,31 @@ extension Competition.State {
     /// A Live Activity follows a race until it ends.
     public var canBeFollowedLive: Bool { self == .scheduled || self == .live }
 }
+
+#if DEBUG
+    extension RaceLiveState {
+        /// A race starting at `startTime`, from its start list to its result, then cancelled
+        /// instead: every state its Live Activity shows, for trying it without a race in Xcode
+        /// previews and the app's developer settings.
+        public static func demo(startTime: Date) -> [RaceLiveState] {
+            let firstPodium = [
+                Leader(rank: "1", name: "PERROT E.", nation: "FRA", result: "12:41.6"),
+                Leader(rank: "2", name: "LAEGREID S.", nation: "NOR", result: "+4.2"),
+                Leader(rank: "3", name: "SAMUELSSON S.", nation: "SWE", result: "+9.8"),
+            ]
+            let finalPodium = [
+                Leader(rank: "1", name: "JACQUELIN E.", nation: "FRA", result: "24:58.3"),
+                Leader(rank: "2", name: "PERROT E.", nation: "FRA", result: "+2.1"),
+                Leader(rank: "3", name: "LAEGREID S.", nation: "NOR", result: "+6.4"),
+            ]
+            return [
+                RaceLiveState(phase: .scheduled, startTime: startTime, leaders: []),
+                RaceLiveState(phase: .live, startTime: startTime, leaders: []),
+                RaceLiveState(phase: .live, startTime: startTime, leaders: firstPodium),
+                RaceLiveState(phase: .live, startTime: startTime, leaders: finalPodium),
+                RaceLiveState(phase: .finished, startTime: startTime, leaders: finalPodium),
+                RaceLiveState(phase: .cancelled, startTime: startTime, leaders: []),
+            ]
+        }
+    }
+#endif

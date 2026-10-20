@@ -19,3 +19,11 @@ nonisolated struct RaceActivityAttributes: ActivityAttributes {
     /// it can't move: the app schedules it again when the race moves. `nil` once started.
     let scheduledStart: Date?
 }
+
+#if DEBUG
+    extension RaceActivityAttributes {
+        /// The race `RaceLiveState.demo` plays, in Xcode previews and the app's developer settings.
+        static let demoRaceID = "demo"
+        static let demoName = "Men's 10km Sprint"
+    }
+#endif

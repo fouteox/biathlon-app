@@ -75,6 +75,19 @@ struct RaceLiveStateTests {
         #expect(!cancelled.needsNewActivity(scheduledStart: date("2026-11-26T12:30:00Z"), isPending: true, now: now))
     }
 
+    #if DEBUG
+        @Test func theDemoShowsEveryStateOfARaceInOrder() {
+            let start = date("2026-11-26T15:15:00Z")
+            let demo = RaceLiveState.demo(startTime: start)
+            #expect(demo.map(\.phase) == [.scheduled, .live, .live, .live, .finished, .cancelled])
+            #expect(Set(demo.map(\.startTime)) == [start])
+            #expect(demo.map(\.leaders.count) == [0, 0, 3, 3, 3, 0])
+            // The podium changes as a broadcast would, and the result keeps the last one.
+            #expect(demo[2].leaders != demo[3].leaders)
+            #expect(demo[4].leaders == demo[3].leaders)
+        }
+    #endif
+
     @Test func onlyLiveAndUpcomingRacesCanBeFollowed() {
         #expect(Competition.State.allCases.filter(\.canBeFollowedLive) == [.scheduled, .live])
     }
