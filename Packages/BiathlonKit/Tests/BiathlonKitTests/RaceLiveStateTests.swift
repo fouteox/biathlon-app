@@ -4,13 +4,12 @@ import Testing
 @testable import BiathlonKit
 
 /// `Fixtures/live-activity.json` is shared with the server (`server/test`): the server
-/// builds the same state from the same results and sends it as the Live Activity's
+/// builds each state from its results and sends it as the Live Activity's
 /// `content-state`, which ActivityKit decodes with a plain `JSONDecoder`.
 struct RaceLiveStateTests {
     struct Case: CustomTestStringConvertible {
         let name: String
-        let results: RaceResults
-        let state: RaceLiveState?
+        let state: Data
         var testDescription: String { name }
     }
 
@@ -21,28 +20,24 @@ struct RaceLiveStateTests {
             let json = { (key: String) in
                 try! JSONSerialization.data(withJSONObject: object[key]!, options: .fragmentsAllowed)
             }
-            return Case(
-                name: object["name"] as! String,
-                results: try! JSONDecoder.ibu.decode(RaceResults.self, from: json("results")),
-                // As ActivityKit reads it: default decoding strategies.
-                state: try! JSONDecoder().decode(RaceLiveState?.self, from: json("state")))
+            return Case(name: object["name"] as! String, state: json("state"))
         }
     }()
 
+    /// As ActivityKit reads it: default decoding strategies.
+    private static func decode(_ state: Data) throws -> RaceLiveState? {
+        try JSONDecoder().decode(RaceLiveState?.self, from: state)
+    }
+
     @Test(arguments: cases)
-    func sharedState(_ example: Case) {
-        #expect(RaceLiveState(example.results) == example.state)
+    func decodesTheServersState(_ example: Case) {
+        #expect(throws: Never.self) { try Self.decode(example.state) }
     }
 
     @Test func roundTripsThroughDefaultCoding() throws {
-        let state = try #require(Self.cases.compactMap(\.state).first)
+        let state = try #require(Self.cases.compactMap { try? Self.decode($0.state) }.first)
         let data = try JSONEncoder().encode(state)
         #expect(try JSONDecoder().decode(RaceLiveState.self, from: data) == state)
-    }
-
-    @Test func aRaceWithoutResultsStartsFromTheCalendar() throws {
-        let race: Competition = try decode(BiathlonKitTests.race("R1", start: "2026-11-26T15:15:00Z"))
-        #expect(RaceLiveState(race: race) == RaceLiveState(phase: .scheduled, startTime: race.startTime, leaders: []))
     }
 
     @Test func activitiesOfLaterRacesWaitUntilShortlyBeforeTheStart() {

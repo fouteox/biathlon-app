@@ -8,8 +8,8 @@ import { SubrequestBudget } from "../src/subrequests";
 import { drainOutbox } from "../src/watcher";
 import { makeD1 } from "./d1";
 
-// Shared with the app's BiathlonKit tests: the app decodes this `content-state` with
-// ActivityKit's default strategies, so both sides must build the same state.
+// Shared with the app's BiathlonKit tests, which decode each `content-state` with
+// ActivityKit's default strategies.
 const cases: { name: string; results: IBUResults; state: unknown }[] = JSON.parse(
   readFileSync(
     new URL("../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/live-activity.json", import.meta.url),
