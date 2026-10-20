@@ -5,11 +5,13 @@ import Testing
 
 /// `Fixtures/live-activity.json` is shared with the server (`server/test`): the server
 /// builds each state from its results and sends it as the Live Activity's
-/// `content-state`, which ActivityKit decodes with a plain `JSONDecoder`.
+/// `content-state`, which ActivityKit decodes with a plain `JSONDecoder`, with its
+/// `relevance-score`, which the app's local updates give as well.
 struct RaceLiveStateTests {
     struct Case: CustomTestStringConvertible {
         let name: String
         let state: Data
+        let relevanceScore: Double?
         var testDescription: String { name }
     }
 
@@ -20,7 +22,9 @@ struct RaceLiveStateTests {
             let json = { (key: String) in
                 try! JSONSerialization.data(withJSONObject: object[key]!, options: .fragmentsAllowed)
             }
-            return Case(name: object["name"] as! String, state: json("state"))
+            return Case(
+                name: object["name"] as! String, state: json("state"),
+                relevanceScore: object["relevanceScore"] as? Double)
         }
     }()
 
@@ -30,8 +34,9 @@ struct RaceLiveStateTests {
     }
 
     @Test(arguments: cases)
-    func decodesTheServersState(_ example: Case) {
-        #expect(throws: Never.self) { try Self.decode(example.state) }
+    func decodesTheServersState(_ example: Case) throws {
+        let state = try Self.decode(example.state)
+        #expect(state?.relevanceScore == example.relevanceScore)
     }
 
     @Test func roundTripsThroughDefaultCoding() throws {

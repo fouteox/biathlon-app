@@ -104,7 +104,8 @@ final class LiveActivities {
     /// a new one, or the race moved since the activity was scheduled
     /// (`RaceLiveState.needsNewActivity`). The replacement is requested first, so the race
     /// stays followed if it can't be, and only when no activity matches already, like one
-    /// requested by a reconciliation the app was quit during. The current ones get the
+    /// requested by a reconciliation the app was quit during; at the app's or the device's
+    /// limit of activities, once the outdated ones have made room. The current ones get the
     /// channel's state, for a broadcast they missed while the device was offline: the
     /// channel stores none. The update carries that broadcast's timestamp, for ActivityKit to
     /// ignore it once a newer broadcast arrived during the lookup. `true` when it requested a replacement.
@@ -115,6 +116,7 @@ final class LiveActivities {
         var missed: [String] = []
         var latest: Channel?
         var requested = false
+        var full: Channel?
         let checked = try await withChannel(raceID: raceID) { channel in
             let shown = Self.activities(of: raceID).filter { Self.shownStates.contains($0.activityState) }
             let isCurrent = { (activity: Activity<RaceActivityAttributes>) in
@@ -127,8 +129,14 @@ final class LiveActivities {
             missed = shown.filter { isCurrent($0) && $0.content.state != channel.state }.map(\.id)
             latest = channel
             if !outdated.isEmpty && !shown.contains(where: isCurrent) {
-                try Self.request(raceID: raceID, name: name, on: channel)
-                requested = true
+                do {
+                    try Self.request(raceID: raceID, name: name, on: channel)
+                    requested = true
+                } catch ActivityAuthorizationError.targetMaximumExceeded,
+                    ActivityAuthorizationError.globalMaximumExceeded
+                {
+                    full = channel
+                }
             }
         }
         guard checked else { return false }
@@ -136,6 +144,15 @@ final class LiveActivities {
             await Self.update(
                 raceID: raceID, activityIDs: missed, state: latest.state,
                 timestamp: Date(timeIntervalSince1970: latest.timestamp))
+        }
+        if let full {
+            // Still requested while they end, the race stays followed.
+            return try await whileRequested(raceID: raceID) { isCurrent in
+                for activityID in outdated { await Self.end(raceID: raceID, activityID: activityID) }
+                guard isCurrent() else { return false }
+                try Self.request(raceID: raceID, name: name, on: full)
+                return true
+            }
         }
         for activityID in outdated { await Self.end(raceID: raceID, activityID: activityID) }
         refresh()
@@ -146,16 +163,26 @@ final class LiveActivities {
     /// during the lookup; `false` then.
     @discardableResult
     private func withChannel(raceID: String, _ body: (Channel) throws -> Void) async throws -> Bool {
+        try await whileRequested(raceID: raceID) { isCurrent in
+            let channel = try await self.channel(raceID: raceID)
+            guard isCurrent() else { return false }
+            try body(channel)
+            return true
+        }
+    }
+
+    /// Runs `work` as the race's request in flight, which `stopFollowing` cancels: `work`
+    /// checks `isCurrent` after each suspension, before it requests an activity.
+    private func whileRequested(
+        raceID: String, _ work: (_ isCurrent: () -> Bool) async throws -> Bool
+    ) async throws -> Bool {
         let request = UUID()
         requests[raceID] = request
         defer {
             if requests[raceID] == request { requests[raceID] = nil }
             refresh()
         }
-        let channel = try await channel(raceID: raceID)
-        guard requests[raceID] == request else { return false }
-        try body(channel)
-        return true
+        return try await work { self.requests[raceID] == request }
     }
 
     /// Requests the race's activity on `channel`, from the state last published on it:
@@ -164,7 +191,7 @@ final class LiveActivities {
         let start = RaceLiveState.activityStart(raceStart: channel.state.startTime, now: .now)
         let attributes = RaceActivityAttributes(
             raceID: raceID, name: name, channelID: channel.channelId, scheduledStart: start)
-        let content = ActivityContent(state: channel.state, staleDate: nil)
+        let content = Self.content(channel.state)
         if let start {
             let minutes = Int(RaceLiveState.activityLead / 60)
             _ = try Activity.request(
@@ -184,7 +211,7 @@ final class LiveActivities {
     @concurrent private static func update(
         raceID: String, activityIDs: [String], state: RaceLiveState, timestamp: Date
     ) async {
-        let content = ActivityContent(state: state, staleDate: nil)
+        let content = Self.content(state)
         for activity in activities(of: raceID) where activityIDs.contains(activity.id) {
             await activity.update(content, timestamp: timestamp)
         }
@@ -195,10 +222,15 @@ final class LiveActivities {
     @concurrent private static func end(
         raceID: String, activityID: String? = nil, finalState: RaceLiveState? = nil
     ) async {
-        let content = finalState.map { ActivityContent(state: $0, staleDate: nil) }
+        let content = finalState.map(Self.content)
         for activity in activities(of: raceID) where activityID == nil || activity.id == activityID {
             await activity.end(content, dismissalPolicy: content == nil ? .immediate : .default)
         }
+    }
+
+    /// Ranked like the server's broadcasts.
+    private nonisolated static func content(_ state: RaceLiveState) -> ActivityContent<RaceLiveState> {
+        ActivityContent(state: state, staleDate: nil, relevanceScore: state.relevanceScore)
     }
 
     private nonisolated static func activities(of raceID: String) -> [Activity<RaceActivityAttributes>] {

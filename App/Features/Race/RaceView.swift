@@ -50,12 +50,8 @@ struct RaceView: View {
         .navigationTitle(race.shortDescription)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            // The calendar decides whether a race can be followed, like on the server, which opens
-            // its channels: the results can lag behind it, as for a cancellation called off. A
-            // followed race keeps its toggle to stop following.
-            if liveActivities.isAvailable,
-                race.state.canBeFollowedLive || liveActivities.followedRaceIDs.contains(race.id)
-            {
+            // A followed race keeps its toggle to stop following.
+            if liveActivities.isAvailable, canBeFollowed || liveActivities.followedRaceIDs.contains(race.id) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Toggle("Live Activity", systemImage: "dot.radiowaves.left.and.right", isOn: following)
                 }
@@ -82,6 +78,13 @@ struct RaceView: View {
 
     private func isFavorite(_ row: ResultRow) -> Bool {
         FavoriteSet(favorites).contains(row)
+    }
+
+    /// While the calendar lists the race as upcoming or live, as on the server, which opens its
+    /// channels: the results can lag behind the calendar, as for a cancellation called off.
+    /// The results, which the screen reloads, show a race reinstated while it is open.
+    private var canBeFollowed: Bool {
+        [race, loader.state.value?.competition].contains { $0?.state.canBeFollowedLive == true }
     }
 
     private var following: Binding<Bool> {

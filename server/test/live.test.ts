@@ -2,15 +2,15 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { snapshot, type IBUCompetition, type RaceSnapshot } from "../src/ibu";
-import { liveState, syncLiveActivities, type IBUResults } from "../src/live";
+import { liveState, relevanceScore, syncLiveActivities, type IBUResults, type LiveState } from "../src/live";
 import { ProviderTokens } from "../src/providerTokens";
 import { SubrequestBudget } from "../src/subrequests";
 import { drainOutbox } from "../src/watcher";
 import { makeD1 } from "./d1";
 
 // Shared with the app's BiathlonKit tests, which decode each `content-state` with
-// ActivityKit's default strategies.
-const cases: { name: string; results: IBUResults; state: unknown }[] = JSON.parse(
+// ActivityKit's default strategies and give its local updates the same relevance score.
+const cases: { name: string; results: IBUResults; state: unknown; relevanceScore?: number }[] = JSON.parse(
   readFileSync(
     new URL("../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/live-activity.json", import.meta.url),
     "utf8",
@@ -18,9 +18,10 @@ const cases: { name: string; results: IBUResults; state: unknown }[] = JSON.pars
 );
 
 describe("Live Activity state shared with the app", () => {
-  for (const { name, results, state } of cases) {
+  for (const { name, results, state, relevanceScore: score } of cases) {
     it(name, () => {
       expect(liveState(results) ?? null).toEqual(state);
+      if (state) expect(relevanceScore(state as LiveState)).toBe(score);
     });
   }
 });
@@ -156,7 +157,7 @@ describe("Live Activity channels", () => {
     ]);
     expect(updates[0]?.headers).toMatchObject({ "apns-push-type": "liveactivity", "apns-priority": "10", "apns-expiration": "0" });
     expect(updates[0]?.body).toEqual({
-      aps: { timestamp: NOW / 1000, event: "update", "content-state": live.state },
+      aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 100, "content-state": live.state },
     });
   });
 
@@ -185,8 +186,8 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork({ results: relay.results });
     await syncLiveActivities(env, finished, NOW);
     expect(broadcasts(sent).map((request) => request.body)).toEqual([
-      { aps: { timestamp: NOW / 1000, event: "end", "content-state": relayFinal } },
-      { aps: { timestamp: NOW / 1000, event: "end", "content-state": relayFinal } },
+      { aps: { timestamp: NOW / 1000, event: "end", "relevance-score": 0, "content-state": relayFinal } },
+      { aps: { timestamp: NOW / 1000, event: "end", "relevance-score": 0, "content-state": relayFinal } },
     ]);
 
     // No message storage: devices offline at the end only get a later send.
@@ -235,8 +236,8 @@ describe("Live Activity channels", () => {
     await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 60_000);
 
     expect(broadcasts(sent).map((request) => request.body)).toEqual([
-      { aps: { timestamp: NOW / 1000 + 60, event: "end", "content-state": { ...(live.state as object), phase: "finished" } } },
-      { aps: { timestamp: NOW / 1000 + 60, event: "end", "content-state": { ...(live.state as object), phase: "finished" } } },
+      { aps: { timestamp: NOW / 1000 + 60, event: "end", "relevance-score": 0, "content-state": { ...(live.state as object), phase: "finished" } } },
+      { aps: { timestamp: NOW / 1000 + 60, event: "end", "relevance-score": 0, "content-state": { ...(live.state as object), phase: "finished" } } },
     ]);
   });
 
@@ -284,8 +285,8 @@ describe("Live Activity channels", () => {
     await syncLiveActivities(env, [race({ IsLive: true })], NOW);
     await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
     expect(broadcasts(sent).map((request) => request.body)).toEqual([
-      { aps: { timestamp: NOW / 1000, event: "update", "content-state": ahead } },
-      { aps: { timestamp: NOW / 1000, event: "update", "content-state": ahead } },
+      { aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 100, "content-state": ahead } },
+      { aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 100, "content-state": ahead } },
     ]);
     expect(sent.filter((request) => request.method !== "GET" && !request.url.includes("/4/broadcasts/"))).toEqual([]);
 

@@ -42,6 +42,19 @@ extension RaceLiveState {
     }
 }
 
+extension RaceLiveState {
+    /// The `relevance-score` of the server's broadcasts (`relevanceScore` in `server/src/live.ts`),
+    /// for the app's own updates: with several races followed, the Dynamic Island shows the
+    /// live one, then the next to start, rather than the first activity started.
+    public var relevanceScore: Double {
+        switch phase {
+        case .live: 100
+        case .scheduled: 50
+        case .finished, .cancelled: 0
+        }
+    }
+}
+
 extension Competition.State {
     /// A Live Activity follows a race until it ends.
     public var canBeFollowedLive: Bool { self == .scheduled || self == .live }

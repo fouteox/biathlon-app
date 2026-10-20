@@ -49,6 +49,18 @@ export interface Leader {
 }
 
 const LEADER_COUNT = 3;
+
+/**
+ * The broadcast's `relevance-score`, which `RaceLiveState.relevanceScore` (BiathlonKit) gives
+ * the app's own updates: with several races followed, the Dynamic Island shows the live
+ * one, then the next to start, rather than the first activity started. Checked against
+ * the shared `live-activity.json` fixture.
+ */
+export function relevanceScore(state: LiveState): number {
+  return RELEVANCE_SCORES[state.phase];
+}
+
+const RELEVANCE_SCORES: Record<RaceStatus, number> = { live: 100, scheduled: 50, finished: 0, cancelled: 0 };
 /** Seconds between the UNIX epoch and the reference date of Foundation's `Date`. */
 const REFERENCE_DATE_S = 978_307_200;
 /**
@@ -443,7 +455,9 @@ async function send(
   state: LiveState,
   now: number,
 ): Promise<"sent" | "unregistered" | "deferred" | "failed"> {
-  const payload = { aps: { timestamp: broadcastTimestamp(now), event, "content-state": state } };
+  const payload = {
+    aps: { timestamp: broadcastTimestamp(now), event, "relevance-score": relevanceScore(state), "content-state": state },
+  };
   const outcome = await tokens.send(channel.environment, (token) =>
     broadcast({ environment: channel.environment, bundleId: env.APNS_TOPIC, channelId: channel.channelId, payload }, token),
   );
