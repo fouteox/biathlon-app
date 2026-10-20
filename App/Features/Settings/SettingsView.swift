@@ -14,6 +14,22 @@ struct SettingsView: View {
                 }
             }
 
+            #if DEBUG
+                Section {
+                    NavigationLink {
+                        LiveActivityDemoView()
+                    } label: {
+                        Label {
+                            Text(verbatim: "Live Activity demo")
+                        } icon: {
+                            Image(systemName: "hammer")
+                        }
+                    }
+                } header: {
+                    Text(verbatim: "Developer")
+                }
+            #endif
+
             Section {
                 Link(destination: URL(string: "https://www.biathlonresults.com")!) {
                     LabeledContent("Data", value: "IBU Datacenter")

@@ -140,3 +140,33 @@ private struct LeaderMark: View {
         }
     }
 }
+
+#if DEBUG
+    private let previewAttributes = RaceActivityAttributes(
+        raceID: RaceActivityAttributes.demoRaceID, name: RaceActivityAttributes.demoName,
+        channelID: "preview", scheduledStart: nil)
+
+    #Preview("Lock Screen", as: .content, using: previewAttributes) {
+        RaceLiveActivity()
+    } contentStates: {
+        for state in RaceLiveState.demo(startTime: .now + 10 * 60) { state }
+    }
+
+    #Preview("Expanded", as: .dynamicIsland(.expanded), using: previewAttributes) {
+        RaceLiveActivity()
+    } contentStates: {
+        for state in RaceLiveState.demo(startTime: .now + 10 * 60) { state }
+    }
+
+    #Preview("Compact", as: .dynamicIsland(.compact), using: previewAttributes) {
+        RaceLiveActivity()
+    } contentStates: {
+        for state in RaceLiveState.demo(startTime: .now + 10 * 60) { state }
+    }
+
+    #Preview("Minimal", as: .dynamicIsland(.minimal), using: previewAttributes) {
+        RaceLiveActivity()
+    } contentStates: {
+        for state in RaceLiveState.demo(startTime: .now + 10 * 60) { state }
+    }
+#endif

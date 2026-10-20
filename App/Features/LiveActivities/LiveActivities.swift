@@ -188,49 +188,49 @@ final class LiveActivities {
     /// Requests the race's activity on `channel`, from the state last published on it:
     /// the channel stores no messages, and the app's cached results could lag behind.
     private static func request(raceID: String, name: String, on channel: Channel) throws {
-        let start = RaceLiveState.activityStart(raceStart: channel.state.startTime, now: .now)
+        try request(raceID: raceID, name: name, channelID: channel.channelId, state: channel.state)
+    }
+
+    /// Requests the race's activity on the channel `channelID`, showing `state`.
+    static func request(raceID: String, name: String, channelID: String, state: RaceLiveState) throws {
+        let start = RaceLiveState.activityStart(raceStart: state.startTime, now: .now)
         let attributes = RaceActivityAttributes(
-            raceID: raceID, name: name, channelID: channel.channelId, scheduledStart: start)
-        let content = Self.content(channel.state)
+            raceID: raceID, name: name, channelID: channelID, scheduledStart: start)
+        let content = state.activityContent
         if let start {
             let minutes = Int(RaceLiveState.activityLead / 60)
             _ = try Activity.request(
-                attributes: attributes, content: content, pushType: .channel(channel.channelId), style: .standard,
+                attributes: attributes, content: content, pushType: .channel(channelID), style: .standard,
                 alertConfiguration: AlertConfiguration(
                     title: "Live Activity", body: "Starts in \(minutes) minutes", sound: .default),
                 start: start)
         } else {
-            _ = try Activity.request(attributes: attributes, content: content, pushType: .channel(channel.channelId))
+            _ = try Activity.request(attributes: attributes, content: content, pushType: .channel(channelID))
         }
     }
 
     // `Activity` isn't `Sendable` and its `update` and `end` run off the main actor: the
     // activities are looked up, updated and ended off the main actor as well.
 
-    /// Shows `state`, published at `timestamp`, on the race's activities `activityIDs`.
-    @concurrent private static func update(
-        raceID: String, activityIDs: [String], state: RaceLiveState, timestamp: Date
+    /// Shows `state`, published at `timestamp`, on the race's activities, or only `activityIDs`.
+    @concurrent static func update(
+        raceID: String, activityIDs: [String]? = nil, state: RaceLiveState, timestamp: Date
     ) async {
-        let content = Self.content(state)
-        for activity in activities(of: raceID) where activityIDs.contains(activity.id) {
+        let content = state.activityContent
+        for activity in activities(of: raceID) where activityIDs?.contains(activity.id) ?? true {
             await activity.update(content, timestamp: timestamp)
         }
     }
 
     /// Ends the race's activities, or only `activityID`: showing `finalState` until the system
     /// dismisses them, like the server's end event, or removing them at once without it.
-    @concurrent private static func end(
+    @concurrent static func end(
         raceID: String, activityID: String? = nil, finalState: RaceLiveState? = nil
     ) async {
-        let content = finalState.map(Self.content)
+        let content = finalState?.activityContent
         for activity in activities(of: raceID) where activityID == nil || activity.id == activityID {
             await activity.end(content, dismissalPolicy: content == nil ? .immediate : .default)
         }
-    }
-
-    /// Ranked like the server's broadcasts.
-    private nonisolated static func content(_ state: RaceLiveState) -> ActivityContent<RaceLiveState> {
-        ActivityContent(state: state, staleDate: nil, relevanceScore: state.relevanceScore)
     }
 
     private nonisolated static func activities(of raceID: String) -> [Activity<RaceActivityAttributes>] {
@@ -241,7 +241,7 @@ final class LiveActivities {
     private static let channelLookupInterval = Duration.seconds(60)
 
     /// Activities on screen or scheduled to show.
-    private static let shownStates: [ActivityState] = [.pending, .active, .stale]
+    static let shownStates: [ActivityState] = [.pending, .active, .stale]
 
     private func refresh() {
         startedRaceIDs = Set(
@@ -293,5 +293,12 @@ final class LiveActivities {
 
     private struct Ended: Decodable {
         let state: RaceLiveState
+    }
+}
+
+extension RaceLiveState {
+    /// The activity's content, ranked like the server's broadcasts.
+    nonisolated var activityContent: ActivityContent<RaceLiveState> {
+        ActivityContent(state: self, staleDate: nil, relevanceScore: relevanceScore)
     }
 }
