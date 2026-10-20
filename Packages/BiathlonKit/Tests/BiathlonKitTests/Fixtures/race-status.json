@@ -25,6 +25,11 @@
     "race": {"RaceId": "BT2627SWRLCP01SMSP", "catId": "SM", "ShortDescription": "Men's 10km Sprint", "StartTime": "2026-11-28T15:30:00Z", "StatusId": 6}
   },
   {
+    "name": "results from status id 10, as on biathlonresults.com",
+    "status": "finished",
+    "race": {"RaceId": "BT2627SWRLCP01SWIN", "catId": "SW", "ShortDescription": "Women's 15km Individual", "StartTime": "2026-11-27T13:15:00Z", "StatusId": 10}
+  },
+  {
     "name": "live wins over the schedule",
     "status": "live",
     "race": {"RaceId": "BT2627SWRLCP01SMIN", "catId": "SM", "ShortDescription": "Men's 20km Individual", "StartTime": "2026-11-26T15:15:00Z", "StatusId": 1, "StatusText": "Scheduled", "ScheduleStatus": "SCHEDULED", "IsLive": true}

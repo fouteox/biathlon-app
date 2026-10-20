@@ -28,4 +28,7 @@ public struct BiathlonEvent: Decodable, Identifiable, Hashable, Sendable {
     /// World Championships IDs end in `SWRLCH__` (`BT2425SWRLCH__`), World Cup
     /// stages in `SWRLCP` and a number.
     public var isWorldChampionships: Bool { id.hasSuffix("SWRLCH__") }
+
+    /// The Olympics, in the World Cup calendar too, end in `SWRLOG__` (`BT2526SWRLOG__`).
+    public var isOlympics: Bool { id.hasSuffix("SWRLOG__") }
 }
