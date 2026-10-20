@@ -47,7 +47,7 @@ struct HomeView: View {
                         TopResults(rows: results.standings.prefix(3), of: results, favorites: favoriteSet)
                         NavigationLink("All results", value: Route.race(race))
                     } header: {
-                        Text("Latest result · \(race.shortDescription)")
+                        Text("Latest result · \(race.title)")
                     }
                 }
 
@@ -98,7 +98,7 @@ struct HomeView: View {
     private func favoritesSection(_ results: RaceResults, of race: Competition) -> some View {
         let favoriteRows = results.favoriteStandings(in: favoriteSet)
         if !favoriteRows.isEmpty {
-            Section("Favorites · \(race.shortDescription)") {
+            Section("Favorites · \(race.title)") {
                 TopResults(rows: favoriteRows[...], of: results, favorites: favoriteSet)
             }
         }
@@ -110,7 +110,7 @@ private struct LiveHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(race.shortDescription).font(.title3.bold())
+            Text(race.title).font(.title3.bold())
             Text("Start \(race.startTime, format: .dateTime.hour().minute())")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)

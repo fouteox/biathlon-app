@@ -60,5 +60,7 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
 
     public var category: RaceCategory? { categoryID.flatMap(RaceCategory.init(rawValue:)) }
 
+    public var kind: RaceKind? { RaceKind(raceID: id) }
+
     public var isRelay: Bool { (legCount ?? 0) > 1 }
 }

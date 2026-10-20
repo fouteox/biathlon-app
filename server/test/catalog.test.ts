@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { LOC_KEYS } from "../src/payload";
+import { LOC_KEYS, RACE_KINDS, raceTitleKey } from "../src/payload";
 
 type StringUnit = { state?: string; value?: string };
 type Localization = { stringUnit?: StringUnit; variations?: { plural?: Record<string, { stringUnit?: StringUnit }> } };
@@ -38,9 +38,16 @@ describe("app String Catalog", () => {
   }
 
   // APNs resolves loc-keys from the app's Localizable table.
-  for (const key of Object.values(LOC_KEYS).flatMap((pair) => Object.values(pair))) {
+  for (const key of [...Object.values(LOC_KEYS), ...RACE_KINDS.map((kind) => raceTitleKey(`BT2627SWRLCP01${kind}`))]) {
     it(`holds the push key ${key}`, () => {
-      expect(catalog.strings[key]?.extractionState).toBe("manual");
+      expect(catalog.strings[key!]?.extractionState).toBe("manual");
     });
   }
+
+  // The app's BiathlonKit tests check its RaceKind against the same list.
+  it("names every race kind the app knows", () => {
+    const kinds: string[] = JSON.parse(read("../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/race-kinds.json"));
+    expect([...RACE_KINDS].sort()).toEqual(kinds);
+    expect(Object.keys(catalog.strings).filter((key) => key.startsWith("race.")).sort()).toEqual(kinds.map((kind) => `race.${kind}`));
+  });
 });

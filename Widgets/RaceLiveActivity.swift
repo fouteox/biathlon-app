@@ -12,7 +12,7 @@ struct RaceLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Text(context.attributes.name).font(.headline).lineLimit(1)
+                    Text(context.attributes.title).font(.headline).lineLimit(1)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
                     PhaseText(phase: context.state.phase)
@@ -43,7 +43,7 @@ private struct RaceActivityView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(context.attributes.name).font(.headline).lineLimit(1)
+                Text(context.attributes.title).font(.headline).lineLimit(1)
                 Spacer()
                 PhaseText(phase: context.state.phase)
             }

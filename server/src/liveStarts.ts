@@ -2,7 +2,7 @@ import { isEnvironment, type APNsEnvironment, type PushOutcome } from "./apns";
 import { isDeviceToken } from "./devices";
 import { fetchIBU, parseIBUDate, type RaceSnapshot } from "./ibu";
 import { isFollowable, relevanceScore, type IBUResults, type LiveState } from "./live";
-import { LOC_KEYS } from "./payload";
+import { LOC_KEYS, raceTitleKey } from "./payload";
 import { ProviderTokens, type Deferred } from "./providerTokens";
 import { MAX_SEND_ATTEMPTS, PushLots } from "./pushLots";
 import type { LotPush } from "./pushSender";
@@ -294,6 +294,7 @@ async function digest(lists: string[]): Promise<string> {
  * `Codable` strategies; `scheduledStart` stays absent, the activity showing at once.
  */
 function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, now: number) {
+  const titleKey = raceTitleKey(race.id);
   return {
     aps: {
       timestamp: Math.floor(now / 1000),
@@ -304,8 +305,8 @@ function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, n
       attributes: { raceID: race.id, name: race.name, channelID: channelId },
       "input-push-channel": channelId,
       alert: {
-        title: { "loc-key": LOC_KEYS.liveActivityStart.title },
-        body: { "loc-key": LOC_KEYS.liveActivityStart.body, "loc-args": [race.name] },
+        title: titleKey ? { "loc-key": titleKey } : race.name,
+        body: { "loc-key": LOC_KEYS.liveActivityStart },
         sound: "default",
       },
     },
