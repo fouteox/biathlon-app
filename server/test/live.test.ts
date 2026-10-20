@@ -157,7 +157,7 @@ describe("Live Activity channels", () => {
     ]);
     expect(updates[0]?.headers).toMatchObject({ "apns-push-type": "liveactivity", "apns-priority": "10", "apns-expiration": "0" });
     expect(updates[0]?.body).toEqual({
-      aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 100, "content-state": live.state },
+      aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 1, "content-state": live.state },
     });
   });
 
@@ -285,8 +285,8 @@ describe("Live Activity channels", () => {
     await syncLiveActivities(env, [race({ IsLive: true })], NOW);
     await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
     expect(broadcasts(sent).map((request) => request.body)).toEqual([
-      { aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 100, "content-state": ahead } },
-      { aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 100, "content-state": ahead } },
+      { aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 1, "content-state": ahead } },
+      { aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 1, "content-state": ahead } },
     ]);
     expect(sent.filter((request) => request.method !== "GET" && !request.url.includes("/4/broadcasts/"))).toEqual([]);
 

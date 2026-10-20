@@ -54,14 +54,16 @@ const LEADER_COUNT = 3;
  * The broadcast's `relevance-score`, which `RaceLiveState.relevanceScore` (BiathlonKit) gives
  * the app's own updates: with several races followed, the Dynamic Island shows the live
  * one rather than the first activity started. Upcoming races rank alike: their activities
- * only show from 30 minutes before the start, and races are farther apart. Checked against
- * the shared `live-activity.json` fixture.
+ * only show from 30 minutes before the start, and races are farther apart. Between 0 and 1:
+ * Apple takes any value for a Live Activity, only their order counts, but the Push
+ * Notifications Console rejects one above 1, the range of other notifications. Checked
+ * against the shared `live-activity.json` fixture.
  */
 export function relevanceScore(state: LiveState): number {
   return RELEVANCE_SCORES[state.phase];
 }
 
-const RELEVANCE_SCORES: Record<RaceStatus, number> = { live: 100, scheduled: 50, finished: 0, cancelled: 0 };
+const RELEVANCE_SCORES: Record<RaceStatus, number> = { live: 1, scheduled: 0.5, finished: 0, cancelled: 0 };
 /** Seconds between the UNIX epoch and the reference date of Foundation's `Date`. */
 const REFERENCE_DATE_S = 978_307_200;
 /**

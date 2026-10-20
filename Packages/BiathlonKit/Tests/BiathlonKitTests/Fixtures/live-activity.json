@@ -15,7 +15,7 @@
       {"rank":"2","name":"LAEGREID S.","nation":"NOR","result":"+7.8"},
       {"rank":"3","name":"SAMUELSSON S.","nation":"SWE","result":"+18.7"}
     ]},
-    "relevanceScore": 100
+    "relevanceScore": 1
   },
   {
     "name": "relay: team rows only",
@@ -40,7 +40,7 @@
         {"IBUId":"BTFRA00000000010","IsTeam":false,"Name":"JEANMONNOT Lou","ShortName":"JEANMONNOT L.","Nat":"FRA","Rank":null,"IRM":null}
       ]},
     "state": {"phase":"scheduled","startTime":817561800,"leaders":[]},
-    "relevanceScore": 50
+    "relevanceScore": 0.5
   },
   {
     "name": "cancelled race",

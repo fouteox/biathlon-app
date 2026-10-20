@@ -47,10 +47,11 @@ extension RaceLiveState {
     /// for the app's own updates: with several races followed, the Dynamic Island shows the
     /// live one rather than the first activity started. Upcoming races rank alike: their
     /// activities only show from `activityLead` before the start, and races are farther apart.
+    /// Between 0 and 1, as the server explains.
     public var relevanceScore: Double {
         switch phase {
-        case .live: 100
-        case .scheduled: 50
+        case .live: 1
+        case .scheduled: 0.5
         case .finished, .cancelled: 0
         }
     }
