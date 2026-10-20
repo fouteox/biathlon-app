@@ -317,8 +317,8 @@ async function openChannels(
 }
 
 /**
- * Broadcasts the new state and records it. A dropped channel, which APNs no longer knows,
- * only records it: its replacement, opened later in the run, starts from it.
+ * Broadcasts the new state and records it. A channel APNs no longer knows only records it,
+ * dropped: its replacement starts from it.
  */
 async function publish(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
   if (!isDropped(channel)) {
@@ -330,8 +330,9 @@ async function publish(env: Env, tokens: ProviderTokens, channel: ChannelRow, st
       await env.DB.prepare(`UPDATE live_channels SET deleted_at = ?1 WHERE ${OPEN_CHANNEL}`)
         .bind(now, channel.raceId, channel.environment, channel.channelId)
         .run();
+    } else if (outcome !== "sent") {
+      return;
     }
-    if (outcome !== "sent") return;
   }
   const stored = JSON.stringify(state);
   const { meta } = await env.DB.prepare(`UPDATE live_channels SET state = ?1, published_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`)

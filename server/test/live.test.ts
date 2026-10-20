@@ -731,7 +731,7 @@ describe("Live Activity channels", () => {
     expect(broadcasts(sent).length).toBe(2);
   });
 
-  it("keeps the leaders of a dropped channel in its replacement", async () => {
+  it("keeps in a dropped channel's replacement the leaders looked up when APNs dropped it", async () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
@@ -743,7 +743,8 @@ describe("Live Activity channels", () => {
     stubNetwork({ resultsStatus: 503 });
     await syncLiveActivities(env, [race({ IsLive: true })], NOW + 2 * 60_000);
 
-    expect((await channels(env)).map(({ state }) => JSON.parse(state))).toEqual([live.state, live.state]);
+    const ahead = { ...relayFinal, phase: "live" };
+    expect((await channels(env)).map(({ state }) => JSON.parse(state))).toEqual([ahead, ahead]);
   });
 
   it("seeds a dropped channel's replacement with the leaders the same run looked up", async () => {
