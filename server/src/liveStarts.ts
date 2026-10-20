@@ -149,11 +149,11 @@ export async function startFavoriteActivities(
   const due = races.filter((race) => isFollowable(race) && now >= parseIBUDate(race.startTime) - START_LEAD_MS);
   for (const race of due) {
     const { results: channels } = await env.DB.prepare(
-      `SELECT environment, channel_id AS channelId, state FROM live_channels
+      `SELECT environment, channel_id AS channelId FROM live_channels
        WHERE race_id = ?1 AND ended_at IS NULL AND deleted_at IS NULL`,
     )
       .bind(race.id)
-      .all<{ environment: APNsEnvironment; channelId: string; state: string }>();
+      .all<{ environment: APNsEnvironment; channelId: string }>();
     const environments = JSON.stringify(channels.map((channel) => channel.environment));
     // Until the race starts, its start list can change: the installs it started nothing for
     // are checked again against each new one. Its entrants are then known.
@@ -192,10 +192,9 @@ export async function startFavoriteActivities(
       const channel = channels.find((row) => row.environment === device.environment)!;
       // Claimed before the push: an overlapping run that read the same token skips it, and so
       // does a device whose favorites or opt-out were saved meanwhile.
-      const keyId = await claim(env, race.id, channel.channelId, device, lists);
-      if (!keyId) continue;
-      const claimed = { raceId: race.id, keyId, channelId: channel.channelId };
-      const state = JSON.parse(channel.state) as LiveState;
+      const claimed = await claim(env, race.id, channel.channelId, device, lists);
+      if (!claimed) continue;
+      const { state } = claimed;
       const outcome = await tokens.send(device.environment, (token) =>
         sendPush(
           {
@@ -288,10 +287,18 @@ function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, n
   };
 }
 
+interface Claim {
+  raceId: string;
+  keyId: string;
+  channelId: string;
+  /** The state last published on the channel, which the new activity starts from: it gets only the broadcasts sent after. */
+  state: LiveState;
+}
+
 /**
  * Claims the start of the race on `channelId` for the device's install, while the channel is
  * open and the stored token still has a favorite among the entrants `lists`, over a check the
- * previous entrants started nothing for; its key, or `undefined` when there is nothing to claim.
+ * previous entrants started nothing for; `undefined` when there is nothing to claim.
  */
 async function claim(
   env: Env,
@@ -299,8 +306,8 @@ async function claim(
   channelId: string,
   device: PendingToken,
   lists: string[],
-): Promise<string | undefined> {
-  const row = await env.DB.prepare(
+): Promise<Claim | undefined> {
+  const insert = env.DB.prepare(
     `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
      SELECT ?1, t.app_attest_key_id, ?6, NULL FROM live_start_tokens t
      WHERE t.token = ?5 AND t.environment = ?2 AND ${ENTERED} AND EXISTS (
@@ -309,10 +316,16 @@ async function claim(
      ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL
        WHERE live_starts.channel_id IS NOT excluded.channel_id
      RETURNING app_attest_key_id AS keyId`,
-  )
-    .bind(raceId, device.environment, ...lists, device.token, channelId)
-    .first<{ keyId: string }>();
-  return row?.keyId;
+  ).bind(raceId, device.environment, ...lists, device.token, channelId);
+  // In the same transaction as the claim.
+  const read = env.DB.prepare(
+    "SELECT state FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3",
+  ).bind(raceId, device.environment, channelId);
+  const [claimed, channel] = await env.DB.batch([insert, read]);
+  const keyId = (claimed?.results[0] as { keyId: string } | undefined)?.keyId;
+  const state = (channel?.results[0] as { state: string } | undefined)?.state;
+  if (!keyId || !state) return undefined;
+  return { raceId, keyId, channelId, state: JSON.parse(state) as LiveState };
 }
 
 /**
@@ -344,7 +357,7 @@ export async function pruneStarts(db: D1Database, now: number): Promise<void> {
  * Gives a start that didn't go through back to a later run, unless its channel was replaced
  * meanwhile: the claim is then a newer run's, on the new channel.
  */
-function release(env: Env, claimed: { raceId: string; keyId: string; channelId: string }) {
+function release(env: Env, claimed: Claim) {
   return env.DB.prepare("DELETE FROM live_starts WHERE race_id = ?1 AND app_attest_key_id = ?2 AND channel_id = ?3")
     .bind(claimed.raceId, claimed.keyId, claimed.channelId)
     .run();

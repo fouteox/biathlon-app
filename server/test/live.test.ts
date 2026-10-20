@@ -1177,6 +1177,20 @@ describe("Live Activities started for favorites", () => {
     expect(results.map(({ token }) => token)).toEqual(["bb".repeat(32), "cc".repeat(32)]);
   });
 
+  it("starts the activity with the state last published on its channel", async () => {
+    const env = await setUp();
+    const published = { ...(live.state as LiveState), phase: "live" };
+    const sent = stub({
+      duringResults: async () => {
+        await env.DB.prepare("UPDATE live_channels SET state = ?1 WHERE environment = 'production'")
+          .bind(JSON.stringify(published))
+          .run();
+      },
+    });
+    await startFavoriteActivities(env, [race()], DUE);
+    expect((starts(sent)[0]?.body as { aps: { "content-state": unknown } }).aps["content-state"]).toEqual(published);
+  });
+
   it("forgets the checks of races two days after their start", async () => {
     const env = await setUp();
     stub();

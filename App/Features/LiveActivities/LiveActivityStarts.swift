@@ -25,6 +25,8 @@ final class LiveActivityStarts {
     @ObservationIgnored private let appAttest: AppAttest?
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var tokenUpdates: Task<Void, Never>?
+    /// The last sync, which the next one waits for: the server and the stored token see them in order.
+    @ObservationIgnored private var lastSync: Task<Void, Never>?
 
     init(appAttest: AppAttest?, defaults: UserDefaults = .standard) {
         self.appAttest = appAttest
@@ -53,8 +55,18 @@ final class LiveActivityStarts {
     }
 
     /// Sends the favorites to the server, or deletes them from it once they are no longer
-    /// wanted. A failed sync is retried at the next launch or change.
+    /// wanted, after the previous sync. A failed sync is retried at the next launch or change.
     func sync(_ registration: Registration) async {
+        let previous = lastSync
+        let current = Task {
+            await previous?.value
+            await send(registration)
+        }
+        lastSync = current
+        await current.value
+    }
+
+    private func send(_ registration: Registration) async {
         guard let serverURL, let appAttest else { return }
         let favorites = registration.favorites
         let wanted = registration.isEnabled && !favorites.isEmpty

@@ -10,7 +10,12 @@ export function makeD1(): D1Database {
 
   const statement = (sql: string, params: SQLInputValue[] = []) => ({
     bind: (...values: unknown[]) => statement(sql, values as SQLInputValue[]),
-    run: async () => ({ meta: { changes: Number(sqlite.prepare(sql).run(...params).changes) } }),
+    // Like D1, with the rows of a RETURNING clause.
+    run: async () => {
+      const results = sqlite.prepare(sql).all(...params);
+      const { changes } = sqlite.prepare("SELECT changes() AS changes").get() as { changes: number };
+      return { results, meta: { changes } };
+    },
     first: async () => sqlite.prepare(sql).get(...params) ?? null,
     all: async () => ({ results: sqlite.prepare(sql).all(...params) }),
   });
