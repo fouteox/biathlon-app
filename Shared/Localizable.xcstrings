@@ -101,6 +101,17 @@
         }
       }
     },
+    "Deceased": {
+      "comment": "Under the name of an athlete the IBU records as deceased.",
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Décédé"
+          }
+        }
+      }
+    },
     "Discipline": {
       "localizations": {
         "fr": {
@@ -347,6 +358,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Me prévenir"
+          }
+        }
+      }
+    },
+    "Olympic Games": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jeux olympiques"
           }
         }
       }
@@ -774,19 +795,19 @@
       }
     },
     "push.rescheduled.body": {
-      "comment": "Body of the start time push. First %@ is the race name, second the new start time.",
+      "comment": "Body of the start time push: the race name, then the new start's weekday and time.",
       "extractionState": "manual",
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ now starts at %@."
+            "value": "%1$@ now starts on %2$@ at %3$@."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ : nouveau départ à %@."
+            "value": "%1$@ : nouveau départ %2$@ à %3$@."
           }
         }
       }

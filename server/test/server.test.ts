@@ -3,7 +3,7 @@ import { classify, makeProviderToken } from "../src/apns";
 import { detectChange } from "../src/changes";
 import { parseRegistration } from "../src/devices";
 import { activeEvents, seasonId, snapshot, type RaceSnapshot } from "../src/ibu";
-import { buildPayload, formatTime } from "../src/payload";
+import { buildPayload, formatStart } from "../src/payload";
 
 // Shape of a real `Competitions?EventId=BT2627SWRLCP01` row, fetched 2026-10-19.
 const scheduled = {
@@ -94,13 +94,25 @@ describe("APNs", () => {
     expect(payload.aps.alert).toEqual({
       "title-loc-key": "push.rescheduled.title",
       "loc-key": "push.rescheduled.body",
-      "loc-args": ["Men's 20km Individual", "16:45"],
+      "loc-args": ["Men's 20km Individual", "jeudi", "16:45"],
     });
+    // A whole event cancelled stacks as one group of alerts.
+    expect(payload.aps["thread-id"]).toBe("BT2627SWRLCP01");
     expect(new TextEncoder().encode(JSON.stringify(payload)).length).toBeLessThan(4096);
   });
 
   it("falls back to UTC on an unknown time zone", () => {
-    expect(formatTime({ startTime: "2026-11-26T15:45:00.000Z", locale: "en", timeZone: "Nowhere/City" })).toBe("3:45 PM UTC");
+    expect(formatStart({ startTime: "2026-11-26T15:45:00.000Z", locale: "en", timeZone: "Nowhere/City" })).toEqual({
+      day: "Thursday",
+      time: "3:45 PM UTC",
+    });
+  });
+
+  it("names the day in the device's time zone", () => {
+    expect(formatStart({ startTime: "2026-11-26T23:30:00.000Z", locale: "en", timeZone: "Europe/Paris" })).toEqual({
+      day: "Friday",
+      time: "12:30 AM",
+    });
   });
 
   it("signs a verifiable ES256 token", async () => {

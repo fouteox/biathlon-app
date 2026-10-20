@@ -1,10 +1,12 @@
 import BiathlonKit
 import SwiftData
 import SwiftUI
+import os
 
 struct FavoritesView: View {
     @Query(sort: \Favorite.addedAt) private var favorites: [Favorite]
     @Environment(\.modelContext) private var context
+    @Environment(\.ibu) private var ibu
     @Environment(LiveActivities.self) private var liveActivities
     @Environment(LiveActivityStarts.self) private var liveActivityStarts
 
@@ -38,6 +40,31 @@ struct FavoritesView: View {
             }
         }
         .navigationTitle("Favorites")
+        .task { await refreshAthletes() }
+    }
+
+    /// Updates the athletes from their IBU profiles; one that fails to load waits for the next visit.
+    private func refreshAthletes() async {
+        let ids = favorites.filter { $0.kind == .athlete }.map(\.key)
+        let ibu = ibu
+        await withTaskGroup { group in
+            for id in ids {
+                group.addTask { () -> AthleteBio? in
+                    do {
+                        return try await ibu.athlete(id: id)
+                    } catch {
+                        Logger.data.error(
+                            "Refreshing favorite \(id, privacy: .public) failed: \(String(describing: error), privacy: .public)"
+                        )
+                        return nil
+                    }
+                }
+            }
+            for await bio in group {
+                guard let bio else { continue }
+                favorites.first { $0.kind == .athlete && $0.key == bio.id }?.update(from: bio)
+            }
+        }
     }
 
     @ViewBuilder
@@ -58,7 +85,12 @@ struct FavoritesView: View {
     @ViewBuilder
     private func row(_ favorite: Favorite) -> some View {
         let label = Label {
-            Text(favorite.name)
+            VStack(alignment: .leading) {
+                Text(favorite.name)
+                if favorite.isDeceased {
+                    Text("Deceased").font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
         } icon: {
             NationMark(code: favorite.nation ?? favorite.key)
         }

@@ -39,18 +39,24 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
 
     /// Same rules as the server (`server/src/ibu.ts`), checked against the
     /// shared `race-status.json` fixture. Observed values: StatusId 1
-    /// "Scheduled", 6 "Cancelled", 11 "Final".
+    /// "Scheduled", 6 "Cancelled", 11 "Final". biathlonresults.com shows
+    /// results from StatusId 10, which covers results not yet official.
     public var state: State {
         if isLive { return .live }
         let text = "\(scheduleStatus ?? "") \(statusText ?? "")".uppercased()
         if text.contains("CANCEL") || statusID == 6 { return .cancelled }
-        if text.contains("FINISHED") || statusID == 11 { return .finished }
+        if text.contains("FINISHED") || statusID >= Self.firstResultStatusID { return .finished }
         return .scheduled
     }
+
+    private static let firstResultStatusID = 10
 
     public enum State: String, CaseIterable, Codable, Sendable, Hashable {
         case scheduled, live, cancelled, finished
     }
+
+    /// A `RaceId` starts with its 14-character `EventId`, as biathlonresults.com reads it.
+    public var eventID: String { String(id.prefix(14)) }
 
     public var category: RaceCategory? { categoryID.flatMap(RaceCategory.init(rawValue:)) }
 

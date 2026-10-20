@@ -12,6 +12,8 @@ final class Favorite {
     var name: String
     var nation: String?
     var addedAt: Date
+    /// From the IBU profile (`update(from:)`).
+    var isDeceased = false
 
     init(kind: Kind, key: String, name: String, nation: String? = nil) {
         kindRaw = kind.rawValue
@@ -37,6 +39,16 @@ extension ModelContext {
         } else {
             insert(Favorite(kind: kind, key: key, name: name, nation: nation))
         }
+    }
+}
+
+extension Favorite {
+    /// Follows the athlete's IBU profile, what was saved with the favorite going stale: an
+    /// athlete can change nation (Jakov Fak, from CRO to SLO) or name, or pass away.
+    func update(from bio: AthleteBio) {
+        if name != bio.fullName { name = bio.fullName }
+        if nation != bio.nation { nation = bio.nation }
+        if isDeceased != bio.isDeceased { isDeceased = bio.isDeceased }
     }
 }
 

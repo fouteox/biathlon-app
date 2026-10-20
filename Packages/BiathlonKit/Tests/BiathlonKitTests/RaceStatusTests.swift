@@ -23,6 +23,13 @@ struct RaceStatusTests {
         #expect(example.race.state.rawValue == example.status)
     }
 
+    /// Real IDs: `BT2526SWRLCP03SMMS` (Le Grand-Bornand), `BT2526SWRLOG__SMIN` (Antholz-Anterselva Olympics).
+    @Test(arguments: [("BT2526SWRLCP03SMMS", "BT2526SWRLCP03"), ("BT2526SWRLOG__SMIN", "BT2526SWRLOG__")])
+    func eventID(raceID: String, eventID: String) throws {
+        let race: Competition = try decode(race(raceID, start: "2026-02-10T12:30:00Z"))
+        #expect(race.eventID == eventID)
+    }
+
     @Test func category() throws {
         let women: Competition = try decode(race("R1", start: "2026-11-26T15:15:00Z", category: "SW"))
         #expect(women.category == .women)
