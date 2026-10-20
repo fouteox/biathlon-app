@@ -152,8 +152,9 @@ export async function syncLiveActivities(
     }
   }
   if (races) {
-    await openChannels(env, tokens, races, kept, now, budget);
+    // The races already followed first, then the new channels.
     await updateOpenChannels(env, tokens, open, watched, now, budget);
+    await openChannels(env, tokens, races, kept, now, budget);
   }
   // After the races followed in the budget, the ends least recently tried first, then the deletions.
   for (const channel of ended) await sendEnd(env, tokens, channel, now);

@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { snapshot, type IBUCompetition, type RaceSnapshot } from "../src/ibu";
 import { liveState, syncLiveActivities, type IBUResults } from "../src/live";
+import { ProviderTokens } from "../src/providerTokens";
 import { SubrequestBudget } from "../src/subrequests";
 import { drainOutbox } from "../src/watcher";
 import { makeD1 } from "./d1";
@@ -665,6 +666,39 @@ describe("Live Activity channels", () => {
     await expect(syncLiveActivities(env, [race()], NOW)).rejects.toThrow("D1 unavailable");
 
     expect(await retired(env)).toEqual(["channel-1"]);
+  });
+
+  it("updates the races followed before opening channels for new ones", async () => {
+    const env = await makeEnv();
+    const upcoming = race({ RaceId: `${RACE_ID}B` });
+    await env.DB.prepare(
+      "INSERT INTO races (id, category, name, start_time, status, updated_at) VALUES (?1, 'SM', 'x', 'x', 'scheduled', 0)",
+    )
+      .bind(upcoming.id)
+      .run();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race({ IsLive: true }), upcoming], NOW, new SubrequestBudget(3));
+
+    expect(broadcasts(sent).length).toBe(2);
+    expect(sent.filter((request) => request.url.includes("api-manage-broadcast"))).toEqual([]);
+  });
+
+  it("signs a new provider token when APNs rejects one, even with no subrequest left to retry", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    const later = NOW + 30 * 60_000;
+
+    const outcome = await new ProviderTokens(env, later, new SubrequestBudget(1)).send("sandbox", async () => ({
+      kind: "expiredProviderToken",
+    }));
+
+    expect(outcome).toEqual({ kind: "deferred" });
+    const cached = await env.DB.prepare("SELECT updated_at AS updatedAt FROM settings WHERE key = 'apns_token_sandbox'").first();
+    expect(cached).toEqual({ updatedAt: later });
   });
 
   it("keeps a race's lookup for a run that can broadcast its result", async () => {

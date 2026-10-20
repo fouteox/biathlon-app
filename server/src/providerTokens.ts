@@ -33,8 +33,10 @@ export class ProviderTokens {
     const outcome = await request(await this.token(environment));
     if (outcome.kind !== "expiredProviderToken" || this.refreshed.has(environment)) return outcome;
     this.refreshed.add(environment);
+    // Signed and cached before the retry, which may wait for the next run.
+    const token = await this.token(environment, true);
     if (!this.budget.take()) return DEFERRED;
-    return request(await this.token(environment, true));
+    return request(token);
   }
 
   private async token(environment: APNsEnvironment, forceRefresh = false): Promise<string> {
