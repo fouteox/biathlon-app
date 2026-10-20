@@ -414,22 +414,13 @@ async function sendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, no
     .run();
 }
 
-/**
- * Drops an ended channel's row, for a new channel to open, and retires the channel if APNs still
- * has it. The activities started for favorites ended with it: the race is checked again for them.
- */
+/** Drops an ended channel's row, for a new channel to open, and retires the channel if APNs still has it. */
 async function replace(env: Env, channel: ChannelRow) {
   const deleteRow = env.DB.prepare(
     "DELETE FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3",
   ).bind(channel.raceId, channel.environment, channel.channelId);
-  // Before the row goes, and only while it is there: an overlapping run that replaced it
-  // already, then started activities on the new channel, keeps their checks.
-  const recheck = env.DB.prepare(
-    `DELETE FROM live_starts WHERE race_id = ?1 AND EXISTS (
-       SELECT 1 FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3)`,
-  ).bind(channel.raceId, channel.environment, channel.channelId);
   await env.DB.batch(
-    channel.deletedAt === null ? [recheck, retire(env, channel.environment, channel.channelId), deleteRow] : [recheck, deleteRow],
+    channel.deletedAt === null ? [retire(env, channel.environment, channel.channelId), deleteRow] : [deleteRow],
   );
 }
 

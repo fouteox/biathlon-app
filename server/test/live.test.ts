@@ -1156,6 +1156,27 @@ describe("Live Activities started for favorites", () => {
     expect(starts(sent)).toEqual([]);
   });
 
+  it("starts the activity again on the channel that replaces a dropped one", async () => {
+    const env = await setUp();
+    stub();
+    await startFavoriteActivities(env, [race()], DUE);
+
+    // The activities on the dropped channel get none of its replacement's broadcasts.
+    await env.DB.prepare("UPDATE live_channels SET channel_id = 'replacement' WHERE environment = 'production'").run();
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
+    expect((starts(sent)[0]?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe("replacement");
+  });
+
+  it("forgets the favorites no launch of the app sent again for a year", async () => {
+    const env = await setUp();
+    await env.DB.prepare("UPDATE live_start_tokens SET updated_at = ?1 WHERE token <> ?2").bind(START, "aa".repeat(32)).run();
+    await pruneStarts(env.DB, START + 365 * 24 * 60 * 60_000);
+    const { results } = await env.DB.prepare("SELECT token FROM live_start_tokens ORDER BY token").all<{ token: string }>();
+    expect(results.map(({ token }) => token)).toEqual(["bb".repeat(32), "cc".repeat(32)]);
+  });
+
   it("forgets the checks of races two days after their start", async () => {
     const env = await setUp();
     stub();
@@ -1183,7 +1204,7 @@ describe("Live Activities started for favorites", () => {
     await startFavoriteActivities(env, [race()], DUE);
     await syncLiveActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], DUE + 60_000);
 
-    const sent = stub();
+    const sent = stub({ channelPrefix: "reinstated" });
     await syncLiveActivities(env, [race()], DUE + 2 * 60_000);
     await startFavoriteActivities(env, [race()], DUE + 2 * 60_000);
     const [production] = await channels(env);

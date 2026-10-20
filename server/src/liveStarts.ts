@@ -115,12 +115,20 @@ interface PendingToken {
 }
 
 /**
+ * Whether the check `s` of race ?1 started the activity of the install of `t` on the race's
+ * current channel: one replacing a dropped or ended channel starts it again, the activity
+ * getting none of the new channel's broadcasts.
+ */
+const STARTED = `s.channel_id IN (SELECT channel_id FROM live_channels
+  WHERE race_id = ?1 AND environment = t.environment AND ended_at IS NULL AND deleted_at IS NULL)`;
+
+/**
  * The tokens `t` of the environments ?2 (a JSON array) whose install race ?1 started nothing
  * for, unless it was checked against the entrants ?5 (their `digest`).
  */
 const UNCHECKED = `t.environment IN (SELECT value FROM json_each(?2))
   AND t.app_attest_key_id NOT IN (
-    SELECT app_attest_key_id FROM live_starts WHERE race_id = ?1 AND (channel_id IS NOT NULL OR entrants = ?5))`;
+    SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR s.entrants = ?5))`;
 
 /** Whether one of the favorites of `t` is among the athletes ?3 or the nations ?4 (JSON arrays). */
 const ENTERED = `(EXISTS (SELECT 1 FROM json_each(t.athletes) WHERE value IN (SELECT value FROM json_each(?3)))
@@ -152,7 +160,7 @@ export async function startFavoriteActivities(
     const unchecked = await env.DB.prepare(
       `SELECT 1 FROM live_start_tokens t WHERE t.environment IN (SELECT value FROM json_each(?2))
          AND t.app_attest_key_id NOT IN (
-           SELECT app_attest_key_id FROM live_starts WHERE race_id = ?1 AND (channel_id IS NOT NULL OR ?3))
+           SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR (s.entrants IS NOT NULL AND ?3)))
        LIMIT 1`,
     )
       .bind(race.id, environments, race.status === "scheduled" ? 0 : 1)
@@ -170,7 +178,7 @@ export async function startFavoriteActivities(
     await env.DB.prepare(
       `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
        SELECT ?1, t.app_attest_key_id, NULL, ?5 FROM live_start_tokens t WHERE ${UNCHECKED} AND NOT ${ENTERED}
-       ON CONFLICT DO UPDATE SET entrants = excluded.entrants WHERE live_starts.channel_id IS NULL`,
+       ON CONFLICT DO UPDATE SET channel_id = NULL, entrants = excluded.entrants`,
     )
       .bind(race.id, environments, ...lists, checked)
       .run();
@@ -298,7 +306,8 @@ async function claim(
      WHERE t.token = ?5 AND t.environment = ?2 AND ${ENTERED} AND EXISTS (
        SELECT 1 FROM live_channels
        WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?6 AND ended_at IS NULL AND deleted_at IS NULL)
-     ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL WHERE live_starts.channel_id IS NULL
+     ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL
+       WHERE live_starts.channel_id IS NOT excluded.channel_id
      RETURNING app_attest_key_id AS keyId`,
   )
     .bind(raceId, device.environment, ...lists, device.token, channelId)
@@ -312,17 +321,28 @@ async function claim(
  */
 const START_RETENTION_MS = 48 * 60 * 60_000;
 
-/** Deletes the checks of the races that started more than two days ago. */
+/**
+ * How long the favorites of an app that isn't launched any more are kept, an uninstall telling
+ * the server nothing: a season and its break, for those who follow it on the Lock Screen only.
+ */
+const START_TOKEN_LIFETIME_MS = 365 * 24 * 60 * 60_000;
+
+/**
+ * Deletes the checks of the races that started more than two days ago, and the favorites no
+ * launch of the app sent again for a year (the app sends them at every launch).
+ */
 export async function pruneStarts(db: D1Database, now: number): Promise<void> {
-  await db
-    .prepare("DELETE FROM live_starts WHERE race_id IN (SELECT id FROM races WHERE start_time < ?1)")
-    .bind(new Date(now - START_RETENTION_MS).toISOString())
-    .run();
+  await db.batch([
+    db
+      .prepare("DELETE FROM live_starts WHERE race_id IN (SELECT id FROM races WHERE start_time < ?1)")
+      .bind(new Date(now - START_RETENTION_MS).toISOString()),
+    db.prepare("DELETE FROM live_start_tokens WHERE updated_at < ?1").bind(now - START_TOKEN_LIFETIME_MS),
+  ]);
 }
 
 /**
- * Gives a start that didn't go through back to a later run, unless the race was reinstated
- * meanwhile (live.ts): the claim is then a newer run's, on the new channel.
+ * Gives a start that didn't go through back to a later run, unless its channel was replaced
+ * meanwhile: the claim is then a newer run's, on the new channel.
  */
 function release(env: Env, claimed: { raceId: string; keyId: string; channelId: string }) {
   return env.DB.prepare("DELETE FROM live_starts WHERE race_id = ?1 AND app_attest_key_id = ?2 AND channel_id = ?3")
