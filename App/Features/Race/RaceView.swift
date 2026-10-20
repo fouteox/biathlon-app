@@ -30,18 +30,20 @@ struct RaceView: View {
                     }
                 }
                 if !results.rows.isEmpty {
-                    Section(Self.listTitle(of: results)) {
+                    Section {
                         ForEach(results.standings) { row in
                             if competition.isRelay {
                                 DisclosureGroup {
-                                    ForEach(results.legs(of: row)) { leg in athleteLink(leg) }
+                                    ForEach(results.legs(of: row)) { leg in athleteLink(leg, in: results) }
                                 } label: {
-                                    ResultLine(row: row, highlighted: isFavorite(row))
+                                    ResultLine(row: row, highlighted: isFavorite(row, in: results))
                                 }
                             } else {
-                                athleteLink(row)
+                                athleteLink(row, in: results)
                             }
                         }
+                    } header: {
+                        Self.listTitle(of: results)
                     }
                 }
             }
@@ -75,22 +77,30 @@ struct RaceView: View {
     }
 
     @ViewBuilder
-    private func athleteLink(_ row: ResultRow) -> some View {
+    private func athleteLink(_ row: ResultRow, in results: RaceResults) -> some View {
         if let id = row.athleteID {
             NavigationLink(value: Route.athlete(id: id, name: row.name)) {
-                ResultLine(row: row, highlighted: isFavorite(row))
+                ResultLine(row: row, highlighted: isFavorite(row, in: results))
             }
         } else {
-            ResultLine(row: row, highlighted: isFavorite(row))
+            ResultLine(row: row, highlighted: isFavorite(row, in: results))
         }
     }
 
-    private static func listTitle(of results: RaceResults) -> LocalizedStringKey {
-        results.isStartList && !results.isResult ? "Start list" : "Results"
+    /// Only what the response says the rows are: before the start list is out, the API can
+    /// return provisional rows that are neither.
+    private static func listTitle(of results: RaceResults) -> Text? {
+        if results.isResult {
+            Text("Results")
+        } else if results.isStartList {
+            Text("Start list")
+        } else {
+            nil
+        }
     }
 
-    private func isFavorite(_ row: ResultRow) -> Bool {
-        FavoriteSet(favorites).contains(row)
+    private func isFavorite(_ row: ResultRow, in results: RaceResults) -> Bool {
+        results.isFavorite(row, in: FavoriteSet(favorites))
     }
 
     /// While the calendar lists the race as upcoming or live, as on the server, which opens its

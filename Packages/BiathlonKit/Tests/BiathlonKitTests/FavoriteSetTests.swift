@@ -24,4 +24,27 @@ struct FavoriteSetTests {
         #expect(!FavoriteSet(athleteIDs: [], nations: ["NOR"]).isEmpty)
         #expect(!FavoriteSet(athleteIDs: ["BTFRA1"], nations: []).isEmpty)
     }
+
+    @Test func aRelayTeamIsAFavoriteThroughItsLegs() throws {
+        let results: RaceResults = try decode(
+            #"""
+            {"IsResult":true,"Results":[
+            {"IsTeam":true,"Name":"FRANCE","Nat":"FRA","TeamId":"FRA1"},
+            {"IBUId":"BTFRA1","Name":"A","Nat":"FRA","TeamId":"FRA1","Leg":1},
+            {"IsTeam":true,"Name":"SWEDEN","Nat":"SWE","TeamId":"SWE1"},
+            {"IBUId":"BTSWE1","Name":"C","Nat":"SWE","TeamId":"SWE1","Leg":1},
+            {"IsTeam":true,"Name":"NORWAY","Nat":"NOR","TeamId":"NOR1"}]}
+            """#)
+        #expect(results.favoriteStandings(in: favorites).map(\.name) == ["FRANCE", "NORWAY"])
+    }
+
+    @Test func anIndividualRaceKeepsItsFavoriteRows() throws {
+        let results: RaceResults = try decode(
+            #"""
+            {"IsResult":true,"Results":[
+            {"IBUId":"BTFRA1","Name":"A","Nat":"FRA"},
+            {"IBUId":"BTFRA2","Name":"B","Nat":"FRA"}]}
+            """#)
+        #expect(results.favoriteStandings(in: favorites).map(\.name) == ["A"])
+    }
 }
