@@ -123,13 +123,18 @@
                 }
             }
             .navigationTitle(Text(verbatim: "Live Activity demo"))
-            .onAppear {
+            .task {
                 startTime =
                     Activity<RaceActivityAttributes>.activities
                     .first {
                         $0.attributes.raceID == Self.raceID && LiveActivities.shownStates.contains($0.activityState)
                     }?
                     .content.state.startTime
+                // Including one the console starts while the screen is open.
+                for await activity in Activity<RaceActivityAttributes>.activityUpdates
+                where activity.attributes.raceID == Self.raceID {
+                    startTime = activity.content.state.startTime
+                }
             }
         }
 
