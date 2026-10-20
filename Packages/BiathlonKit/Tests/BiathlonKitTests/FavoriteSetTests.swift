@@ -18,4 +18,10 @@ struct FavoriteSetTests {
         let row: ResultRow = try decode(#"{"IBUId":"NOR","Name":"Odd","Nat":"SWE"}"#)
         #expect(!favorites.contains(row))
     }
+
+    @Test func isEmptyWithoutAthletesOrNations() {
+        #expect(FavoriteSet(athleteIDs: [], nations: []).isEmpty)
+        #expect(!FavoriteSet(athleteIDs: [], nations: ["NOR"]).isEmpty)
+        #expect(!FavoriteSet(athleteIDs: ["BTFRA1"], nations: []).isEmpty)
+    }
 }

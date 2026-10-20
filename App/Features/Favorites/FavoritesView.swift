@@ -5,9 +5,25 @@ import SwiftUI
 struct FavoritesView: View {
     @Query(sort: \Favorite.addedAt) private var favorites: [Favorite]
     @Environment(\.modelContext) private var context
+    @Environment(LiveActivities.self) private var liveActivities
+    @Environment(LiveActivityStarts.self) private var liveActivityStarts
 
     var body: some View {
+        @Bindable var liveActivityStarts = liveActivityStarts
         List {
+            // Kept while on, even with Live Activities turned off in Settings: it is how the
+            // favorites leave the server.
+            if liveActivities.isAvailable || liveActivityStarts.isEnabled, !favorites.isEmpty {
+                Section {
+                    Toggle(
+                        "Live Activity when a favorite races", systemImage: "dot.radiowaves.left.and.right",
+                        isOn: $liveActivityStarts.isEnabled)
+                } footer: {
+                    Text(
+                        "Shows a race on the Lock Screen 30 minutes before the start when one of your favorites is on the start list. Your favorites are sent to the app's server for this."
+                    )
+                }
+            }
             section(.athlete, title: "Biathletes")
             section(.nation, title: "Teams")
         }

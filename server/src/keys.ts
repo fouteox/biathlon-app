@@ -19,15 +19,16 @@ export const HEADERS = {
 const UNUSED_KEY_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
 /**
- * Deletes keys that no device row references and that signed nothing for 30
- * days: reinstalls, device migrations and restores leave such keys behind.
+ * Deletes keys that no device or push-to-start token references and that signed nothing
+ * for 30 days: reinstalls, device migrations and restores leave such keys behind.
  */
 export async function pruneKeys(db: D1Database, now: number): Promise<void> {
   await db
     .prepare(
       `DELETE FROM app_attest_keys
        WHERE COALESCE(used_at, created_at) < ?1
-         AND key_id NOT IN (SELECT app_attest_key_id FROM devices WHERE app_attest_key_id IS NOT NULL)`,
+         AND key_id NOT IN (SELECT app_attest_key_id FROM devices WHERE app_attest_key_id IS NOT NULL)
+         AND key_id NOT IN (SELECT app_attest_key_id FROM live_start_tokens)`,
     )
     .bind(now - UNUSED_KEY_LIFETIME_MS)
     .run();

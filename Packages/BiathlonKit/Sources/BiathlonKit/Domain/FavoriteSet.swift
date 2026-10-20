@@ -1,5 +1,5 @@
 /// The athletes and nations a user follows, to pick out their result rows.
-public struct FavoriteSet: Sendable {
+public struct FavoriteSet: Equatable, Sendable {
     public let athleteIDs: Set<String>
     public let nations: Set<String>
 
@@ -7,6 +7,8 @@ public struct FavoriteSet: Sendable {
         self.athleteIDs = athleteIDs
         self.nations = nations
     }
+
+    public var isEmpty: Bool { athleteIDs.isEmpty && nations.isEmpty }
 
     public func contains(_ row: ResultRow) -> Bool {
         if let id = row.athleteID, athleteIDs.contains(id) { return true }

@@ -185,34 +185,40 @@ describe("assertion", () => {
   });
 });
 
+/**
+ * An attested device calling the worker, with its requests to `prefix` + token signed
+ * the way the app signs them (AppAttest.swift), and the tokens stored in `table`.
+ */
+async function setUp(
+  env = { DB: makeD1(), APP_ATTEST_APP_ID: appId, APP_ATTEST_SECRET: "test secret" } as unknown as Env,
+  { prefix = "/v1/devices/", table = "devices" } = {},
+) {
+  const device = await makeDevice();
+  await env.DB.prepare(
+    "INSERT INTO app_attest_keys (key_id, public_key, environment, counter, receipt, created_at) VALUES (?1, ?2, 'development', 0, '', 0)",
+  )
+    .bind(device.keyId, toBase64(device.publicKey))
+    .run();
+  const call = (request: Request) => worker.fetch!(request as never, env, {} as ExecutionContext);
+  const challenge = async () => {
+    const response = await call(new Request("https://server.test/v1/app-attest/challenges?purpose=assert", { method: "POST" }));
+    return ((await response.json()) as { challenge: string }).challenge;
+  };
+  const signed = async (method: string, deviceToken: string, body?: unknown, tamper?: (body: string) => string) => {
+    const value = await challenge();
+    const text = body === undefined ? "" : JSON.stringify(body);
+    const path = `${prefix}${deviceToken}`;
+    const assertion = await device.assert(clientData(value, method, path, new TextEncoder().encode(text)));
+    const headers = { [HEADERS.keyId]: device.keyId, [HEADERS.assertion]: toBase64(assertion), [HEADERS.challenge]: value };
+    return new Request(`https://server.test${path}`, { method, headers, body: tamper ? tamper(text) : text || undefined });
+  };
+  const tokens = async () => (await env.DB.prepare(`SELECT token FROM ${table}`).all<{ token: string }>()).results.map((row) => row.token);
+  return { env, call, signed, tokens };
+}
+
 describe("device registration endpoint", () => {
   const token = "ab".repeat(32);
   const registration = { environment: "sandbox", categories: ["SW"], cancellation: true, rescheduling: true, locale: "fr-FR", timeZone: "Europe/Paris" };
-
-  async function setUp(env = { DB: makeD1(), APP_ATTEST_APP_ID: appId, APP_ATTEST_SECRET: "test secret" } as unknown as Env) {
-    const device = await makeDevice();
-    await env.DB.prepare(
-      "INSERT INTO app_attest_keys (key_id, public_key, environment, counter, receipt, created_at) VALUES (?1, ?2, 'development', 0, '', 0)",
-    )
-      .bind(device.keyId, toBase64(device.publicKey))
-      .run();
-    const call = (request: Request) => worker.fetch!(request as never, env, {} as ExecutionContext);
-    const challenge = async () => {
-      const response = await call(new Request("https://server.test/v1/app-attest/challenges?purpose=assert", { method: "POST" }));
-      return ((await response.json()) as { challenge: string }).challenge;
-    };
-    /** Signs the request the way the app does (PushRegistration.swift). */
-    const signed = async (method: string, deviceToken: string, body?: unknown, tamper?: (body: string) => string) => {
-      const value = await challenge();
-      const text = body === undefined ? "" : JSON.stringify(body);
-      const path = `/v1/devices/${deviceToken}`;
-      const assertion = await device.assert(clientData(value, method, path, new TextEncoder().encode(text)));
-      const headers = { [HEADERS.keyId]: device.keyId, [HEADERS.assertion]: toBase64(assertion), [HEADERS.challenge]: value };
-      return new Request(`https://server.test${path}`, { method, headers, body: tamper ? tamper(text) : text || undefined });
-    };
-    const tokens = async () => (await env.DB.prepare("SELECT token FROM devices").all<{ token: string }>()).results.map((row) => row.token);
-    return { env, call, signed, tokens };
-  }
 
   it("registers and unregisters with a valid assertion", async () => {
     const { call, signed, tokens } = await setUp();
@@ -294,6 +300,69 @@ describe("device registration endpoint", () => {
     await call(await signed("PUT", token, registration));
     await call(await signed("PUT", "cd".repeat(32), registration));
     expect(await tokens()).toEqual(["cd".repeat(32)]);
+  });
+});
+
+describe("Live Activity start endpoint", () => {
+  const token = "ef".repeat(32);
+  const favorites = { environment: "production", athletes: ["BTFRA00000000001"], nations: ["NOR"] };
+  const live = (env?: Env) => setUp(env, { prefix: "/v1/live-activity-starts/", table: "live_start_tokens" });
+
+  it("saves and forgets the favorites with a valid assertion", async () => {
+    const { env, call, signed, tokens } = await live();
+    expect((await call(await signed("PUT", token, favorites))).status).toBe(204);
+    const row = await env.DB.prepare("SELECT environment, athletes, nations FROM live_start_tokens").first();
+    expect(row).toEqual({ environment: "production", athletes: '["BTFRA00000000001"]', nations: '["NOR"]' });
+    expect((await call(await signed("DELETE", token))).status).toBe(204);
+    expect(await tokens()).toEqual([]);
+  });
+
+  it("rejects unsigned requests and invalid favorites", async () => {
+    const { call, signed, tokens } = await live();
+    const unsigned = new Request(`https://server.test/v1/live-activity-starts/${token}`, { method: "PUT", body: JSON.stringify(favorites) });
+    expect((await call(unsigned)).status).toBe(401);
+    for (const body of [
+      { ...favorites, environment: "staging" },
+      { ...favorites, athletes: [42] },
+      { ...favorites, nations: ["France"] },
+      { ...favorites, athletes: [], nations: [] },
+      { ...favorites, athletes: Array.from({ length: 501 }, (_, index) => `BT${index}`) },
+    ]) {
+      expect((await call(await signed("PUT", token, body))).status).toBe(400);
+    }
+    expect((await call(await signed("PUT", "not-a-token", favorites))).status).toBe(400);
+    expect(await tokens()).toEqual([]);
+  });
+
+  it("lets only the key that saved a token change it, and keeps one token per key", async () => {
+    const owner = await live();
+    const other = await live(owner.env);
+    await owner.call(await owner.signed("PUT", token, favorites));
+    expect((await other.call(await other.signed("PUT", token, favorites))).status).toBe(403);
+    expect((await other.call(await other.signed("DELETE", token))).status).toBe(403);
+    expect(await owner.tokens()).toEqual([token]);
+    await owner.call(await owner.signed("PUT", "cd".repeat(32), favorites));
+    expect(await owner.tokens()).toEqual(["cd".repeat(32)]);
+  });
+
+  it("forgets the key's favorites whatever token the app deletes with", async () => {
+    const { call, signed, tokens } = await live();
+    await call(await signed("PUT", token, favorites));
+    // ActivityKit replaced the token before the app could send the new one.
+    expect((await call(await signed("DELETE", "cd".repeat(32)))).status).toBe(204);
+    expect(await tokens()).toEqual([]);
+  });
+
+  it("keeps the keys of saved favorites", async () => {
+    const { env, call, signed } = await live();
+    const keys = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;
+    await call(await signed("PUT", token, favorites));
+    const later = Date.now() + 31 * 24 * 60 * 60 * 1000;
+    await pruneKeys(env.DB, later);
+    expect(await keys()).toBe(1);
+    await call(await signed("DELETE", token));
+    await pruneKeys(env.DB, later);
+    expect(await keys()).toBe(0);
   });
 });
 

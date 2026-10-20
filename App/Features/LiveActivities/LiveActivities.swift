@@ -45,6 +45,9 @@ final class LiveActivities {
                 for await activity in Activity<RaceActivityAttributes>.activityUpdates {
                     self?.refresh()
                     self?.observeState(of: activity)
+                    // One the server started for a favorite (LiveActivityStarts) may join one the
+                    // app requested, and may have missed a broadcast during its start.
+                    await self?.reconcile(raceID: activity.attributes.raceID)
                 }
             },
         ]
@@ -102,11 +105,13 @@ final class LiveActivities {
 
     /// Replaces the race's activities that no longer match its channel: the server opened
     /// a new one, or the race moved since the activity was scheduled
-    /// (`RaceLiveState.needsNewActivity`). The replacement is requested first, so the race
+    /// (`RaceLiveState.needsNewActivity`), and ends all but one of those that match, the one
+    /// on screen if any: the server can start one for a favorite's race the app requested
+    /// an activity for. The replacement is requested first, so the race
     /// stays followed if it can't be, and only when no activity matches already, like one
     /// requested by a reconciliation the app was quit during; at the app's or the device's
-    /// limit of activities, once the outdated ones have made room. The current ones get the
-    /// channel's state, for a broadcast they missed while the device was offline: the
+    /// limit of activities, once the outdated ones have made room. The one kept gets the
+    /// channel's state, for a broadcast it missed while the device was offline: the
     /// channel stores none. The update carries that broadcast's timestamp, for ActivityKit to
     /// ignore it once a newer broadcast arrived during the lookup. `true` when it requested a replacement.
     @discardableResult
@@ -125,10 +130,12 @@ final class LiveActivities {
                         scheduledStart: activity.attributes.scheduledStart,
                         isPending: activity.activityState == .pending, now: .now)
             }
-            outdated = shown.filter { !isCurrent($0) }.map(\.id)
-            missed = shown.filter { isCurrent($0) && $0.content.state != channel.state }.map(\.id)
+            let current = shown.filter(isCurrent)
+            let kept = current.first { $0.activityState == .active } ?? current.first
+            outdated = shown.filter { $0.id != kept?.id }.map(\.id)
+            if let kept, kept.content.state != channel.state { missed = [kept.id] }
             latest = channel
-            if !outdated.isEmpty && !shown.contains(where: isCurrent) {
+            if !outdated.isEmpty && kept == nil {
                 do {
                     try Self.request(raceID: raceID, name: name, on: channel)
                     requested = true

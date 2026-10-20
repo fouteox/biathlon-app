@@ -14,11 +14,15 @@ import { SubrequestBudget } from "./subrequests";
 
 /** `Results?RaceId=`: the race and its rows. */
 export interface IBUResults {
+  /** Whether `Results` is the published start list, before the race. */
+  IsStartList?: boolean | null;
   Competition?: IBUCompetition | null;
   Results?: IBUResultRow[] | null;
 }
 
 export interface IBUResultRow {
+  /** An athlete's row, not a team's. */
+  IBUId?: string | null;
   IsTeam?: boolean | null;
   Name?: string | null;
   ShortName?: string | null;
@@ -226,7 +230,7 @@ function mayStillBeShown(channels: ChannelRow[], now: number): boolean {
   );
 }
 
-function isFollowable(race: RaceSnapshot | undefined): race is RaceSnapshot {
+export function isFollowable(race: RaceSnapshot | undefined): race is RaceSnapshot {
   return race?.status === "scheduled" || race?.status === "live";
 }
 

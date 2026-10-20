@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../src/index";
 import { snapshot, type IBUCompetition, type RaceSnapshot } from "../src/ibu";
 import { liveState, relevanceScore, syncLiveActivities, type IBUResults, type LiveState } from "../src/live";
+import { parseStartRegistration, pruneStarts, saveStartToken, startFavoriteActivities } from "../src/liveStarts";
 import { ProviderTokens } from "../src/providerTokens";
 import { SubrequestBudget } from "../src/subrequests";
 import { drainOutbox } from "../src/watcher";
@@ -52,7 +53,20 @@ interface Sent {
 
 /** Answers like APNs and the IBU API, and records every request. */
 function stubNetwork(
-  options: { results?: unknown; resultsStatus?: number; broadcastReason?: string; failingHost?: string } = {},
+  options: {
+    results?: unknown;
+    resultsStatus?: number;
+    broadcastReason?: string;
+    failingHost?: string;
+    deviceStatus?: number;
+    deviceReason?: string;
+    /** Names the channels APNs creates, unique across stubs. */
+    channelPrefix?: string;
+    /** Runs while APNs answers a device push; its status, if any, replaces the answer. */
+    duringDevice?: () => Promise<number | undefined>;
+    /** Runs while the IBU API answers, like a request served meanwhile. */
+    duringResults?: () => Promise<void>;
+  } = {},
 ): Sent[] {
   const sent: Sent[] = [];
   let channels = 0;
@@ -61,14 +75,19 @@ function stubNetwork(
     const headers = Object.fromEntries(new Headers(init.headers).entries());
     sent.push({ method: init.method ?? "GET", url, headers, body: init.body ? JSON.parse(String(init.body)) : undefined });
     if (url.includes("biathlonresults.com")) {
+      await options.duringResults?.();
       return Response.json(options.results ?? live.results, { status: options.resultsStatus ?? 200 });
     }
     if (options.failingHost && url.includes(options.failingHost)) return new Response(null, { status: 500 });
     if (url.includes("api-manage-broadcast") && init.method === "POST") {
       channels += 1;
-      return new Response(null, { status: 201, headers: { "apns-channel-id": `channel-${channels}` } });
+      return new Response(null, { status: 201, headers: { "apns-channel-id": `${options.channelPrefix ?? "channel"}-${channels}` } });
     }
     if (url.includes("api-manage-broadcast") && init.method === "DELETE") return new Response(null, { status: 204 });
+    if (url.includes("/3/device/")) {
+      const status = (await options.duringDevice?.()) ?? options.deviceStatus;
+      if (status) return options.deviceReason ? Response.json({ reason: options.deviceReason }, { status }) : new Response(null, { status });
+    }
     if (url.includes("/4/broadcasts/") && options.broadcastReason) {
       return Response.json({ reason: options.broadcastReason }, { status: 400 });
     }
@@ -984,5 +1003,321 @@ describe("alerts", () => {
     expect(sent.length).toBe(1);
     const { results } = await env.DB.prepare("SELECT token, attempts FROM outbox").all();
     expect(results).toEqual([{ token: "b", attempts: 0 }]);
+  });
+});
+
+describe("Live Activities started for favorites", () => {
+  const START = Date.parse("2026-11-26T15:15:00Z");
+  const DUE = START - 30 * 60_000;
+  const PERROT = "BTFRA00000000001";
+  const KEY = "key";
+  /** The published start list of the scheduled race. */
+  const START_LIST: IBUResults = { ...live.results, IsStartList: true };
+  const stub = (options: Parameters<typeof stubNetwork>[0] = {}) => stubNetwork({ results: START_LIST, ...options });
+
+  /** Saves the favorites of the install `key`, by default one per token. */
+  async function save(env: Env, token: string, body: object, key = `${KEY}-${token}`) {
+    await env.DB.prepare(
+      "INSERT INTO app_attest_keys (key_id, public_key, environment, counter, receipt, created_at) VALUES (?1, '', 'development', 0, '', 0) ON CONFLICT DO NOTHING",
+    )
+      .bind(key)
+      .run();
+    const registration = parseStartRegistration(token, { environment: "production", athletes: [], nations: [], ...body });
+    if (typeof registration === "string") throw new Error(registration);
+    await saveStartToken(env.DB, registration, key, 0);
+  }
+
+  /** A race with its channels, and tokens: Perrot's fan, an Italy fan who has nobody racing, and a sandbox France fan. */
+  async function setUp() {
+    const env = await makeEnv();
+    stub();
+    await syncLiveActivities(env, [race()], DUE - 60 * 60_000);
+    await save(env, "aa".repeat(32), { athletes: [PERROT] });
+    await save(env, "bb".repeat(32), { nations: ["ITA"] });
+    await save(env, "cc".repeat(32), { environment: "sandbox", nations: ["FRA"] });
+    return env;
+  }
+
+  const starts = (sent: Sent[]) => sent.filter((request) => request.url.includes("/3/device/"));
+  const ibu = (sent: Sent[]) => sent.filter((request) => request.url.includes("biathlonresults.com"));
+
+  it("starts the race's activity on its channel for the devices whose favorites are on the start list, 30 minutes before", async () => {
+    const env = await setUp();
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE - 60_000);
+    expect(sent).toEqual([]);
+
+    await startFavoriteActivities(env, [race()], DUE);
+    expect(ibu(sent).map((request) => request.url)).toEqual([
+      `https://biathlonresults.com/modules/sportapi/api/Results?RaceId=${RACE_ID}`,
+    ]);
+    const [production, sandbox] = await channels(env);
+    expect(starts(sent).map((request) => request.url)).toEqual([
+      `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
+      `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
+    ]);
+    // Apple: push type liveactivity, its own topic, an alert, and iOS 18's input-push-channel.
+    expect(starts(sent)[0]?.headers).toMatchObject({
+      "apns-push-type": "liveactivity",
+      "apns-topic": "com.fouteox.biathlon.push-type.liveactivity",
+      "apns-priority": "10",
+      // Kept by APNs until a while after the race starts, for a device offline meanwhile.
+      "apns-expiration": String(START / 1000 + 15 * 60),
+    });
+    expect(starts(sent)[0]?.body).toEqual({
+      aps: {
+        timestamp: DUE / 1000,
+        event: "start",
+        "relevance-score": 0.5,
+        "content-state": JSON.parse(production!.state),
+        "attributes-type": "RaceActivityAttributes",
+        attributes: { raceID: RACE_ID, name: "Men's 20km Individual", channelID: production!.channelId },
+        "input-push-channel": production!.channelId,
+        alert: {
+          title: { "loc-key": "push.liveActivity.title" },
+          body: { "loc-key": "push.liveActivity.body", "loc-args": ["Men's 20km Individual"] },
+          sound: "default",
+        },
+      },
+    });
+    expect((starts(sent)[1]?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe(sandbox!.channelId);
+
+    // Each device is checked once per race.
+    const later = stub();
+    await startFavoriteActivities(env, [race({ IsLive: true })], DUE + 20 * 60_000);
+    expect(later).toEqual([]);
+  });
+
+  it("checks the race again for a device whose favorites changed, but never starts it twice", async () => {
+    const env = await setUp();
+    stub();
+    await startFavoriteActivities(env, [race()], DUE);
+
+    await save(env, "aa".repeat(32), { athletes: [PERROT], nations: ["SWE"] });
+    await save(env, "bb".repeat(32), { nations: ["FRA"] });
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
+  });
+
+  it("checks again only for changed favorites, and keeps an install's starts when its token changes", async () => {
+    const env = await setUp();
+    stub();
+    await startFavoriteActivities(env, [race()], DUE);
+
+    // The app sends its favorites at every launch, and ActivityKit can replace the token.
+    await save(env, "bb".repeat(32), { nations: ["ITA"] });
+    await save(env, "dd".repeat(32), { athletes: [PERROT] }, `${KEY}-${"aa".repeat(32)}`);
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent)).toEqual([]);
+  });
+
+  it("matches the favorites a device saved while the start list was read", async () => {
+    const env = await setUp();
+    const sent = stub({ duringResults: () => save(env, "bb".repeat(32), { nations: ["FRA"] }) });
+    await startFavoriteActivities(env, [race()], DUE);
+    expect(starts(sent).map((request) => request.url)).toContain(`https://api.push.apple.com/3/device/${"bb".repeat(32)}`);
+  });
+
+  it("starts nothing for a device whose favorites changed or that opted out while the start list was read", async () => {
+    const env = await setUp();
+    const sent = stub({
+      duringResults: async () => {
+        await save(env, "aa".repeat(32), { athletes: ["BTSUI00000000009"] });
+        await env.DB.prepare("DELETE FROM live_start_tokens WHERE environment = 'sandbox'").run();
+      },
+    });
+    await startFavoriteActivities(env, [race()], DUE);
+    expect(starts(sent)).toEqual([]);
+  });
+
+  it("checks again the devices none of whose favorites raced when the start list changes before the race", async () => {
+    const env = await setUp();
+    stub();
+    await startFavoriteActivities(env, [race()], DUE);
+
+    // An Italian added to the start list.
+    const entrant = { IBUId: "BTITA00000000006", Name: "GIACOMEL Tommaso", Nat: "ITA" };
+    const amended = { ...START_LIST, Results: [...(START_LIST.Results ?? []), entrant] };
+    const sent = stub({ results: amended });
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
+  });
+
+  it("starts nothing on a channel that ended while the start list was read", async () => {
+    const env = await setUp();
+    const sent = stub({
+      duringResults: async () => {
+        await env.DB.prepare("UPDATE live_channels SET ended_at = 1").run();
+      },
+    });
+    await startFavoriteActivities(env, [race()], DUE);
+    expect(starts(sent)).toEqual([]);
+  });
+
+  it("starts the activity again on the channel that replaces a dropped one", async () => {
+    const env = await setUp();
+    stub();
+    await startFavoriteActivities(env, [race()], DUE);
+
+    // The activities on the dropped channel get none of its replacement's broadcasts.
+    await env.DB.prepare("UPDATE live_channels SET channel_id = 'replacement' WHERE environment = 'production'").run();
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
+    expect((starts(sent)[0]?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe("replacement");
+  });
+
+  it("forgets the favorites no launch of the app sent again for a year", async () => {
+    const env = await setUp();
+    await env.DB.prepare("UPDATE live_start_tokens SET updated_at = ?1 WHERE token <> ?2").bind(START, "aa".repeat(32)).run();
+    await pruneStarts(env.DB, START + 365 * 24 * 60 * 60_000);
+    const { results } = await env.DB.prepare("SELECT token FROM live_start_tokens ORDER BY token").all<{ token: string }>();
+    expect(results.map(({ token }) => token)).toEqual(["bb".repeat(32), "cc".repeat(32)]);
+  });
+
+  it("starts the activity with the state last published on its channel", async () => {
+    const env = await setUp();
+    const published = { ...(live.state as LiveState), phase: "live" };
+    const sent = stub({
+      duringResults: async () => {
+        await env.DB.prepare("UPDATE live_channels SET state = ?1 WHERE environment = 'production'")
+          .bind(JSON.stringify(published))
+          .run();
+      },
+    });
+    await startFavoriteActivities(env, [race()], DUE);
+    expect((starts(sent)[0]?.body as { aps: { "content-state": unknown } }).aps["content-state"]).toEqual(published);
+  });
+
+  it("forgets the checks of races two days after their start", async () => {
+    const env = await setUp();
+    stub();
+    await startFavoriteActivities(env, [race()], DUE);
+    const checks = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM live_starts").first<{ n: number }>())!.n;
+    await pruneStarts(env.DB, START + 47 * 60 * 60_000);
+    expect(await checks()).toBe(3);
+    await pruneStarts(env.DB, START + 49 * 60 * 60_000);
+    expect(await checks()).toBe(0);
+  });
+
+  it("sends each start once when cron runs overlap", async () => {
+    const env = await setUp();
+    const sent = stub();
+    await Promise.all([startFavoriteActivities(env, [race()], DUE), startFavoriteActivities(env, [race()], DUE)]);
+    expect(starts(sent).map((request) => request.url).sort()).toEqual([
+      `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
+      `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
+    ]);
+  });
+
+  it("starts the activity again when a race is reinstated after its end", async () => {
+    const env = await setUp();
+    stub();
+    await startFavoriteActivities(env, [race()], DUE);
+    await syncLiveActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], DUE + 60_000);
+
+    const sent = stub({ channelPrefix: "reinstated" });
+    await syncLiveActivities(env, [race()], DUE + 2 * 60_000);
+    await startFavoriteActivities(env, [race()], DUE + 2 * 60_000);
+    const [production] = await channels(env);
+    expect(starts(sent).map((request) => (request.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"])).toEqual([
+      production!.channelId,
+      expect.any(String),
+    ]);
+  });
+
+  it("waits for the start list, and for an open channel", async () => {
+    const env = await setUp();
+    await env.DB.prepare("UPDATE live_channels SET deleted_at = 1 WHERE environment = 'sandbox'").run();
+    const empty = stub({ results: { ...START_LIST, Results: [] } });
+    await startFavoriteActivities(env, [race()], DUE);
+    expect(starts(empty)).toEqual([]);
+
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
+  });
+
+  it("starts nothing for a race that is over, and leaves the rest to the next run when the budget runs out", async () => {
+    const env = await setUp();
+    const sent = stub();
+    await startFavoriteActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], DUE);
+    expect(sent).toEqual([]);
+
+    await startFavoriteActivities(env, [race()], DUE, new SubrequestBudget(2));
+    expect(starts(sent).length).toBe(1);
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).map((request) => request.url)).toEqual([
+      `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
+      `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
+    ]);
+  });
+
+  it("waits for the published start list before a scheduled race, and takes the results of a live one", async () => {
+    const env = await setUp();
+    // Rows the API returns before it marks them as the start list.
+    const preliminary = stub({ results: { ...START_LIST, IsStartList: false } });
+    await startFavoriteActivities(env, [race()], DUE);
+    expect(starts(preliminary)).toEqual([]);
+    expect(await env.DB.prepare("SELECT COUNT(*) AS n FROM live_starts").first<{ n: number }>()).toEqual({ n: 0 });
+
+    const sent = stubNetwork();
+    await startFavoriteActivities(env, [race({ IsLive: true })], START + 60_000);
+    expect(starts(sent).map((request) => request.url)).toEqual([
+      `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
+      `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
+    ]);
+  });
+
+  it("keeps the start of a reinstated race when an older run's push to the ended channel fails", async () => {
+    const env = await setUp();
+    let reinstating = false;
+    stub({
+      channelPrefix: "reinstated",
+      duringDevice: async () => {
+        if (reinstating) return undefined;
+        reinstating = true;
+        // Meanwhile, the race ends and is reinstated, and a newer run starts it on the new channels.
+        await syncLiveActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], DUE + 60_000);
+        await syncLiveActivities(env, [race()], DUE + 2 * 60_000);
+        await startFavoriteActivities(env, [race()], DUE + 2 * 60_000);
+        return 503;
+      },
+    });
+    await startFavoriteActivities(env, [race()], DUE);
+
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 3 * 60_000);
+    expect(starts(sent)).toEqual([]);
+  });
+
+  it("retries a start when APNs rejects the provider token", async () => {
+    const env = await setUp();
+    stub({ deviceStatus: 403, deviceReason: "ExpiredProviderToken" });
+    await startFavoriteActivities(env, [race()], DUE);
+
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).map((request) => request.url)).toEqual([
+      `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
+      `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
+    ]);
+  });
+
+  it("forgets a token APNs no longer knows, and doesn't retry a start APNs refused", async () => {
+    const env = await setUp();
+    stub({ deviceStatus: 410 });
+    await startFavoriteActivities(env, [race()], DUE);
+    const { results } = await env.DB.prepare("SELECT token FROM live_start_tokens ORDER BY token").all<{ token: string }>();
+    expect(results.map(({ token }) => token)).toEqual(["bb".repeat(32)]);
+
+    const other = await setUp();
+    stub({ deviceStatus: 400 });
+    await startFavoriteActivities(other, [race()], DUE);
+    const sent = stub();
+    await startFavoriteActivities(other, [race()], DUE + 60_000);
+    expect(starts(sent)).toEqual([]);
   });
 });
