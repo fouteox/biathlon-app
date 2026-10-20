@@ -691,6 +691,16 @@
         }
       }
     },
+    "Upcoming": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À venir"
+          }
+        }
+      }
+    },
     "Version": {
       "localizations": {
         "fr": {
