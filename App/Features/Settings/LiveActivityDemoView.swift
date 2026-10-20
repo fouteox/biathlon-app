@@ -123,12 +123,13 @@
             }
         }
 
-        /// Copies a broadcast showing `state` for the console: its `content-state` has ActivityKit's
-        /// default coding, as the server sends it.
+        /// Copies a broadcast showing `state` for the console, as the server sends it: an end event
+        /// once the race is over, and a `content-state` with ActivityKit's default coding.
         private func copyPayload(_ state: RaceLiveState) {
             let broadcast = Broadcast(
                 aps: .init(
-                    timestamp: Int(Date.now.timeIntervalSince1970), event: "update",
+                    timestamp: Int(Date.now.timeIntervalSince1970),
+                    event: state.phase.canBeFollowedLive ? "update" : "end",
                     relevanceScore: state.relevanceScore, contentState: state))
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
