@@ -11,6 +11,16 @@
         }
       }
     },
+    "Add %@ to favorites": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter %@ aux favoris"
+          }
+        }
+      }
+    },
     "Add to favorites": {
       "localizations": {
         "fr": {
@@ -111,6 +121,16 @@
         }
       }
     },
+    "Down": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En baisse"
+          }
+        }
+      }
+    },
     "Event": {
       "localizations": {
         "fr": {
@@ -141,22 +161,22 @@
         }
       }
     },
+    "Favorites · %@": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Favoris · %@"
+          }
+        }
+      }
+    },
     "Finished": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Terminée"
-          }
-        }
-      }
-    },
-    "Follow team %@": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Suivre l'équipe %@"
           }
         }
       }
@@ -271,16 +291,6 @@
         }
       }
     },
-    "My favorites · %@": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mes favoris · %@"
-          }
-        }
-      }
-    },
     "Nations": {
       "localizations": {
         "fr": {
@@ -311,6 +321,16 @@
         }
       }
     },
+    "No races": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune course"
+          }
+        }
+      }
+    },
     "No start list yet": {
       "localizations": {
         "fr": {
@@ -337,6 +357,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les notifications sont désactivées dans Réglages."
+          }
+        }
+      }
+    },
+    "Notify for": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifier pour"
           }
         }
       }
@@ -391,22 +421,22 @@
         }
       }
     },
-    "Races": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Courses"
-          }
-        }
-      }
-    },
     "Reminder before the start": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
             "value": "Rappel avant le départ"
+          }
+        }
+      }
+    },
+    "Remove %@ from favorites": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retirer %@ des favoris"
           }
         }
       }
@@ -421,6 +451,16 @@
         }
       }
     },
+    "Results": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Résultats"
+          }
+        }
+      }
+    },
     "Results are temporarily unavailable.": {
       "localizations": {
         "fr": {
@@ -431,22 +471,12 @@
         }
       }
     },
-    "Results, calendar and standings come from biathlonresults.com, the IBU Datacenter.": {
+    "Schedule not published": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Les résultats, le calendrier et les classements proviennent de biathlonresults.com, le centre de données de l'IBU."
-          }
-        }
-      }
-    },
-    "Scheduled on this iPhone for races in the coming week.": {
-      "localizations": {
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Programmé sur cet iPhone pour les courses de la semaine à venir."
+            "value": "Programme non publié"
           }
         }
       }
@@ -481,12 +511,12 @@
         }
       }
     },
-    "Shows a race on the Lock Screen 30 minutes before the start when one of your favorites is on the start list. Your favorites are sent to the app's server for this.": {
+    "Shows the race on the Lock Screen 30 minutes before the start when a favorite is on the start list.": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Affiche une course sur l'écran verrouillé 30 minutes avant le départ quand l'un de vos favoris est sur la liste de départ. Vos favoris sont alors envoyés au serveur de l'app."
+            "value": "Affiche la course sur l'écran verrouillé 30 minutes avant le départ quand un favori est sur la liste de départ."
           }
         }
       }
@@ -651,12 +681,12 @@
         }
       }
     },
-    "Upcoming": {
+    "Up": {
       "localizations": {
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "À venir"
+            "value": "En hausse"
           }
         }
       }

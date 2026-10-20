@@ -91,12 +91,14 @@ private struct StandingRow: View {
                 Image(systemName: change < 0 ? "arrow.up" : "arrow.down")
                     .font(.caption)
                     .foregroundStyle(change < 0 ? .green : .red)
+                    .accessibilityLabel(change < 0 ? Text("Up") : Text("Down"))
             }
             if let score = row.score {
                 Text(score).font(.subheadline.monospacedDigit().bold())
             }
             if row.isNation, let nation = row.nation {
                 FavoriteButton(kind: .nation, key: nation, name: row.name, nation: nation)
+                    .labelStyle(.iconOnly)
             }
         }
         if let id = row.athleteID {

@@ -42,11 +42,9 @@ struct AthleteView: View {
                 }
                 if let nation = bio.nation {
                     Section {
-                        HStack {
-                            Text("Follow team \(Nation.titled(nation, nation: nation))")
-                            Spacer()
-                            FavoriteButton(kind: .nation, key: nation, name: nation, nation: nation)
-                        }
+                        FavoriteButton(
+                            kind: .nation, key: nation, name: nation, nation: nation,
+                            subject: Nation.titled(nation, nation: nation))
                     }
                 }
                 if !results.isEmpty {

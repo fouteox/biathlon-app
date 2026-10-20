@@ -1,23 +1,15 @@
 import BiathlonKit
 import SwiftUI
 
-/// How a race's phase reads, in the app and in its Live Activity.
+/// How a race's state reads in race lists.
 extension Competition.State {
-    var label: LocalizedStringResource {
+    /// Upcoming is the usual state and goes without a badge: the start time says it.
+    var badge: Text? {
         switch self {
-        case .scheduled: "Upcoming"
-        case .live: "Live"
-        case .cancelled: "Cancelled"
-        case .finished: "Finished"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .live: .red
-        case .cancelled: .gray
-        case .finished: .secondary
-        case .scheduled: .blue
+        case .scheduled: nil
+        case .live: Text("Live").foregroundStyle(.red)
+        case .cancelled: Text("Cancelled").foregroundStyle(.gray)
+        case .finished: Text("Finished").foregroundStyle(.secondary)
         }
     }
 }

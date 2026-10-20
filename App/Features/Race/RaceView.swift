@@ -19,23 +19,28 @@ struct RaceView: View {
 
     var body: some View {
         LoadableView(state: loader.state, retry: load) { results in
+            let competition = results.competition ?? race
             List {
+                // The title already names the race.
                 Section {
-                    RaceRow(race: results.competition ?? race)
-                    if results.isStartList && !results.isResult {
-                        Text("Start list").font(.caption).foregroundStyle(.secondary)
+                    LabeledContent {
+                        competition.state.badge
+                    } label: {
+                        RaceStart(race: competition)
                     }
                 }
-                Section {
-                    ForEach(results.standings) { row in
-                        if results.competition?.isRelay ?? race.isRelay {
-                            DisclosureGroup {
-                                ForEach(results.legs(of: row)) { leg in athleteLink(leg) }
-                            } label: {
-                                ResultLine(row: row, highlighted: isFavorite(row))
+                if !results.rows.isEmpty {
+                    Section(Self.listTitle(of: results)) {
+                        ForEach(results.standings) { row in
+                            if competition.isRelay {
+                                DisclosureGroup {
+                                    ForEach(results.legs(of: row)) { leg in athleteLink(leg) }
+                                } label: {
+                                    ResultLine(row: row, highlighted: isFavorite(row))
+                                }
+                            } else {
+                                athleteLink(row)
                             }
-                        } else {
-                            athleteLink(row)
                         }
                     }
                 }
@@ -43,7 +48,11 @@ struct RaceView: View {
             .refreshable { await load() }
             .overlay {
                 if results.rows.isEmpty {
-                    ContentUnavailableView("No start list yet", systemImage: "clock")
+                    if competition.state == .cancelled {
+                        ContentUnavailableView("Race cancelled", systemImage: "xmark.circle")
+                    } else {
+                        ContentUnavailableView("No start list yet", systemImage: "clock")
+                    }
                 }
             }
         }
@@ -74,6 +83,10 @@ struct RaceView: View {
         } else {
             ResultLine(row: row, highlighted: isFavorite(row))
         }
+    }
+
+    private static func listTitle(of results: RaceResults) -> LocalizedStringKey {
+        results.isStartList && !results.isResult ? "Start list" : "Results"
     }
 
     private func isFavorite(_ row: ResultRow) -> Bool {

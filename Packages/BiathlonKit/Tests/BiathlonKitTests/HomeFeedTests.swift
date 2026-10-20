@@ -61,4 +61,13 @@ struct HomeFeedTests {
             ])
         #expect(feed.next?.id == "B")
     }
+
+    @Test func isEmptyWithoutAnyRaceOrEvent() throws {
+        let cancelled: Competition = try decode(
+            race("A", start: "2026-11-28T10:00:00Z", status: 6, scheduleStatus: "CANCELLED"))
+        let scheduled: Competition = try decode(race("B", start: "2026-11-28T14:00:00Z"))
+        #expect(HomeFeed(events: [], races: []).isEmpty)
+        #expect(HomeFeed(events: [], races: [cancelled]).isEmpty)
+        #expect(!HomeFeed(events: [], races: [scheduled]).isEmpty)
+    }
 }
