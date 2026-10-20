@@ -53,7 +53,8 @@ const LEADER_COUNT = 3;
 /**
  * The broadcast's `relevance-score`, which `RaceLiveState.relevanceScore` (BiathlonKit) gives
  * the app's own updates: with several races followed, the Dynamic Island shows the live
- * one, then the next to start, rather than the first activity started. Checked against
+ * one rather than the first activity started. Upcoming races rank alike: their activities
+ * only show from 30 minutes before the start, and races are farther apart. Checked against
  * the shared `live-activity.json` fixture.
  */
 export function relevanceScore(state: LiveState): number {

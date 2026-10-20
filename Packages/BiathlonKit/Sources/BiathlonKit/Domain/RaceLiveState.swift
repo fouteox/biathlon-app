@@ -45,7 +45,8 @@ extension RaceLiveState {
 extension RaceLiveState {
     /// The `relevance-score` of the server's broadcasts (`relevanceScore` in `server/src/live.ts`),
     /// for the app's own updates: with several races followed, the Dynamic Island shows the
-    /// live one, then the next to start, rather than the first activity started.
+    /// live one rather than the first activity started. Upcoming races rank alike: their
+    /// activities only show from `activityLead` before the start, and races are farther apart.
     public var relevanceScore: Double {
         switch phase {
         case .live: 100
