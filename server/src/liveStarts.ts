@@ -1,10 +1,11 @@
-import { isEnvironment, type APNsEnvironment } from "./apns";
+import { isEnvironment, type APNsEnvironment, type PushOutcome } from "./apns";
 import { isDeviceToken } from "./devices";
 import { fetchIBU, parseIBUDate, type RaceSnapshot } from "./ibu";
 import { isFollowable, relevanceScore, type IBUResults, type LiveState } from "./live";
 import { LOC_KEYS } from "./payload";
-import { ProviderTokens } from "./providerTokens";
+import { ProviderTokens, type Deferred } from "./providerTokens";
 import { PushLots } from "./pushLots";
+import type { LotPush } from "./pushSender";
 import { SubrequestBudget } from "./subrequests";
 
 /**
@@ -189,49 +190,51 @@ export async function startFavoriteActivities(
       .bind(race.id, environments, ...lists, checked)
       .all<PendingToken>();
 
-    const started: Promise<void>[] = [];
-    for (const device of pending) {
-      if (lots.room === 0) break;
-      const channel = channels.find((row) => row.environment === device.environment)!;
-      // Claimed before the push: an overlapping run that read the same token skips it, and so
-      // does a device whose favorites or opt-out were saved meanwhile.
-      const claimed = await claim(env, race.id, channel.channelId, device, lists);
-      if (!claimed) continue;
-      started.push(startOn(env, lots, race, device, claimed, now));
-    }
+    // Claimed before the pushes, in one transaction: an overlapping run that read the same
+    // tokens skips them, and so does a device whose favorites or opt-out were saved meanwhile.
+    const claims = await claim(env, race.id, channels, pending.slice(0, lots.room), lists);
+    const outcomes = claims.map((claimed) => lots.send(startPush(env, race, claimed, now)));
     await lots.flush();
-    await Promise.all(started);
+    await settle(env, race.id, claims, await Promise.all(outcomes));
   }
 }
 
-/** Queues the start of the claimed activity, then settles the claim with its outcome. */
-async function startOn(env: Env, lots: PushLots, race: RaceSnapshot, device: PendingToken, claimed: Claim, now: number) {
-  const outcome = await lots.send({
-    deviceToken: device.token,
-    environment: device.environment,
+function startPush(env: Env, race: RaceSnapshot, claimed: Claim, now: number): LotPush {
+  return {
+    deviceToken: claimed.token,
+    environment: claimed.environment,
     topic: `${env.APNS_TOPIC}.push-type.liveactivity`,
     pushType: "liveactivity",
     expiration: Math.floor(Math.max(now, parseIBUDate(race.startTime)) / 1000) + START_EXPIRATION_S,
     payload: startPayload(race, claimed.channelId, claimed.state, now),
+  };
+}
+
+/**
+ * Gives the starts that didn't go through back to a later run, and forgets the tokens APNs no
+ * longer knows, in one D1 call: each is one of the run's subrequests to Cloudflare services.
+ */
+async function settle(env: Env, raceId: string, claims: Claim[], outcomes: (PushOutcome | Deferred)[]): Promise<void> {
+  const statements = claims.flatMap((claimed, index) => {
+    const outcome = outcomes[index]!;
+    switch (outcome.kind) {
+      case "sent":
+        return [];
+      case "unregistered":
+        return [release(env, claimed), deleteStartToken(env.DB, claimed.token)];
+      case "deferred":
+      case "retry":
+      case "expiredProviderToken":
+        // The APNs key or clock may be fixed by the next run.
+        console.warn("APNs Live Activity start retry", raceId, outcome);
+        return [release(env, claimed)];
+      default:
+        // Refused, the claim stays: sent again, it would be refused again.
+        console.error("APNs Live Activity start failed", raceId, outcome);
+        return [];
+    }
   });
-  switch (outcome.kind) {
-    case "sent":
-      break;
-    case "unregistered":
-      await release(env, claimed);
-      await deleteStartToken(env.DB, device.token);
-      break;
-    case "deferred":
-    case "retry":
-    case "expiredProviderToken":
-      // The APNs key or clock may be fixed by the next run.
-      console.warn("APNs Live Activity start retry", race.id, outcome);
-      await release(env, claimed);
-      break;
-    default:
-      // Refused, the claim stays: sent again, it would be refused again.
-      console.error("APNs Live Activity start failed", race.id, outcome);
-  }
+  if (statements.length > 0) await env.DB.batch(statements);
 }
 
 /**
@@ -289,7 +292,7 @@ function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, n
   };
 }
 
-interface Claim {
+interface Claim extends PendingToken {
   raceId: string;
   keyId: string;
   channelId: string;
@@ -298,36 +301,52 @@ interface Claim {
 }
 
 /**
- * Claims the start of the race on `channelId` for the device's install, while the channel is
+ * Claims the start of the race on its channel for each device's install, while the channel is
  * open and the stored token still has a favorite among the entrants `lists`, over a check the
- * previous entrants started nothing for; `undefined` when there is nothing to claim.
+ * previous entrants started nothing for. One transaction, and one D1 call, for all of them.
  */
 async function claim(
   env: Env,
   raceId: string,
-  channelId: string,
-  device: PendingToken,
+  channels: { environment: APNsEnvironment; channelId: string }[],
+  devices: PendingToken[],
   lists: string[],
-): Promise<Claim | undefined> {
-  const insert = env.DB.prepare(
-    `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
-     SELECT ?1, t.app_attest_key_id, ?6, NULL FROM live_start_tokens t
-     WHERE t.token = ?5 AND t.environment = ?2 AND ${ENTERED} AND EXISTS (
-       SELECT 1 FROM live_channels
-       WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?6 AND ended_at IS NULL AND deleted_at IS NULL)
-     ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL
-       WHERE live_starts.channel_id IS NOT excluded.channel_id
-     RETURNING app_attest_key_id AS keyId`,
-  ).bind(raceId, device.environment, ...lists, device.token, channelId);
-  // In the same transaction as the claim.
-  const read = env.DB.prepare(
-    "SELECT state FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3",
-  ).bind(raceId, device.environment, channelId);
-  const [claimed, channel] = await env.DB.batch([insert, read]);
-  const keyId = (claimed?.results[0] as { keyId: string } | undefined)?.keyId;
-  const state = (channel?.results[0] as { state: string } | undefined)?.state;
-  if (!keyId || !state) return undefined;
-  return { raceId, keyId, channelId, state: JSON.parse(state) as LiveState };
+): Promise<Claim[]> {
+  if (devices.length === 0) return [];
+  const channelOf = (environment: APNsEnvironment) => channels.find((row) => row.environment === environment)!.channelId;
+  const inserts = devices.map((device) =>
+    env.DB.prepare(
+      `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
+       SELECT ?1, t.app_attest_key_id, ?6, NULL FROM live_start_tokens t
+       WHERE t.token = ?5 AND t.environment = ?2 AND ${ENTERED} AND EXISTS (
+         SELECT 1 FROM live_channels
+         WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?6 AND ended_at IS NULL AND deleted_at IS NULL)
+       ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL
+         WHERE live_starts.channel_id IS NOT excluded.channel_id
+       RETURNING app_attest_key_id AS keyId`,
+    ).bind(raceId, device.environment, ...lists, device.token, channelOf(device.environment)),
+  );
+  // In the same transaction as the claims.
+  const reads = channels.map(({ environment, channelId }) =>
+    env.DB.prepare("SELECT state FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3").bind(
+      raceId,
+      environment,
+      channelId,
+    ),
+  );
+  const results = await env.DB.batch([...inserts, ...reads]);
+  const states = new Map(
+    channels.map(({ environment }, index) => [
+      environment,
+      (results[inserts.length + index]?.results[0] as { state: string } | undefined)?.state,
+    ]),
+  );
+  return devices.flatMap((device, index) => {
+    const keyId = (results[index]?.results[0] as { keyId: string } | undefined)?.keyId;
+    const state = states.get(device.environment);
+    if (!keyId || !state) return [];
+    return [{ ...device, raceId, keyId, channelId: channelOf(device.environment), state: JSON.parse(state) as LiveState }];
+  });
 }
 
 /**
@@ -359,13 +378,15 @@ export async function pruneStarts(db: D1Database, now: number): Promise<void> {
  * Gives a start that didn't go through back to a later run, unless its channel was replaced
  * meanwhile: the claim is then a newer run's, on the new channel.
  */
-function release(env: Env, claimed: Claim) {
-  return env.DB.prepare("DELETE FROM live_starts WHERE race_id = ?1 AND app_attest_key_id = ?2 AND channel_id = ?3")
-    .bind(claimed.raceId, claimed.keyId, claimed.channelId)
-    .run();
+function release(env: Env, claimed: Claim): D1PreparedStatement {
+  return env.DB.prepare("DELETE FROM live_starts WHERE race_id = ?1 AND app_attest_key_id = ?2 AND channel_id = ?3").bind(
+    claimed.raceId,
+    claimed.keyId,
+    claimed.channelId,
+  );
 }
 
 /** Deletes a token APNs reported as no longer valid. */
-async function deleteStartToken(db: D1Database, token: string): Promise<void> {
-  await db.prepare("DELETE FROM live_start_tokens WHERE token = ?1").bind(token).run();
+function deleteStartToken(db: D1Database, token: string): D1PreparedStatement {
+  return db.prepare("DELETE FROM live_start_tokens WHERE token = ?1").bind(token);
 }

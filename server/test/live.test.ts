@@ -130,6 +130,32 @@ async function makeEnv(): Promise<Env> {
   return env;
 }
 
+/** Counts the D1 calls made from now on: each `run`, `all`, `first` or `batch`. */
+function countD1Calls(env: Env): () => number {
+  let calls = 0;
+  const db = env.DB;
+  const counted = <T extends (...args: never[]) => unknown>(method: T) =>
+    ((...args: Parameters<T>) => {
+      calls += 1;
+      return method(...args);
+    }) as T;
+  const statement = (prepared: D1PreparedStatement): D1PreparedStatement =>
+    ({
+      bind: (...values: unknown[]) => statement(prepared.bind(...values)),
+      run: counted(() => prepared.run()),
+      all: counted(() => prepared.all()),
+      first: counted(() => prepared.first()),
+      raw: prepared,
+    }) as unknown as D1PreparedStatement;
+  env.DB = {
+    prepare: (sql: string) => statement(db.prepare(sql)),
+    batch: counted((statements: D1PreparedStatement[]) =>
+      db.batch(statements.map((item) => (item as unknown as { raw: D1PreparedStatement }).raw)),
+    ),
+  } as unknown as D1Database;
+  return () => calls;
+}
+
 /** The pushes of one run, with room for `capacity` of them. */
 const pushLots = (env: Env, now: number, capacity: number) =>
   new PushLots(env, new ProviderTokens(env, now, new SubrequestBudget()), capacity);
@@ -1053,6 +1079,18 @@ describe("alerts", () => {
     expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([{ token: "b", attempts: 0 }]);
   });
 
+  it("forgets the devices APNs no longer knows in one D1 call", async () => {
+    const env = await makeEnv();
+    await queue(env, Array.from({ length: 60 }, (_, index) => `t${index}`));
+    const calls = countD1Calls(env);
+    stubNetwork({ deviceStatus: 410 });
+
+    await drainOutbox(env, NOW);
+
+    expect(calls()).toBeLessThanOrEqual(5);
+    expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([]);
+  });
+
   it("tries the alerts of a lot that failed again", async () => {
     const env = await makeEnv();
     env.PUSH_SENDER = pushSenders([], { failing: true });
@@ -1167,6 +1205,46 @@ describe("Live Activities started for favorites", () => {
     expect(starts(sent).length).toBe(122);
     expect(Math.max(...lots)).toBe(50);
     expect(lots.reduce((sum, size) => sum + size, 0)).toBe(122);
+  });
+
+  it("claims and settles a race's starts in a few D1 calls, whatever their number", async () => {
+    const env = await setUp();
+    for (const index of Array.from({ length: 120 }, (_, value) => value)) {
+      await save(env, index.toString(16).padStart(64, "0"), { athletes: [PERROT] });
+    }
+    // Each D1 call is one of the run's 1,000 subrequests to Cloudflare services.
+    const calls = countD1Calls(env);
+    stub({ deviceStatus: 503 });
+
+    await startFavoriteActivities(env, [race()], DUE);
+
+    expect(calls()).toBeLessThanOrEqual(10);
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).length).toBe(122);
+  });
+
+  it("claims nothing when D1 fails while claiming, for the next run to start them all", async () => {
+    const env = await setUp();
+    const batch = env.DB.batch.bind(env.DB);
+    let failing = true;
+    env.DB.batch = (async (statements: D1PreparedStatement[]) => {
+      if (failing && statements.length > 2) {
+        failing = false;
+        throw new Error("D1 unavailable");
+      }
+      return batch(statements);
+    }) as typeof env.DB.batch;
+    const failed = stub();
+    await expect(startFavoriteActivities(env, [race()], DUE)).rejects.toThrow("D1 unavailable");
+    expect(starts(failed)).toEqual([]);
+
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(startUrls(sent)).toEqual([
+      `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
+      `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
+    ]);
   });
 
   it("checks the race again for a device whose favorites changed, but never starts it twice", async () => {

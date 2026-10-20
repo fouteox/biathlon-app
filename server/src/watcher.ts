@@ -1,6 +1,6 @@
 import type { APNsEnvironment } from "./apns";
 import { detectChange, hasChanged, type RaceChange } from "./changes";
-import { deleteDevice } from "./devices";
+import { deleteDevices } from "./devices";
 import { activeEvents, fetchIBU, seasonId, snapshot, type IBUCompetition, type IBUEvent, type RaceSnapshot } from "./ibu";
 import { syncLiveActivities } from "./live";
 import { startFavoriteActivities } from "./liveStarts";
@@ -175,7 +175,7 @@ export async function drainOutbox(
     ),
   ];
   await env.DB.batch(statements);
-  for (const deviceToken of new Set(unregistered)) await deleteDevice(env.DB, deviceToken);
+  if (unregistered.length > 0) await deleteDevices(env.DB, [...new Set(unregistered)]);
 }
 
 /** World Cup events (Level=1) of the current season, cached in D1. */
