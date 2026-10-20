@@ -1,11 +1,16 @@
+import ActivityKit
 import BiathlonKit
 import SwiftData
 import SwiftUI
+import os
 
 struct RaceView: View {
     let race: Competition
     @Environment(\.ibu) private var ibu
+    @Environment(LiveActivities.self) private var liveActivities
     @State private var loader = Loader<RaceResults>()
+    @State private var liveActivityFailed = false
+    @State private var liveActivityFailure = ""
     @Query private var favorites: [Favorite]
 
     private var isLive: Bool {
@@ -44,6 +49,18 @@ struct RaceView: View {
         }
         .navigationTitle(race.shortDescription)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            // A followed race keeps its toggle to stop following.
+            if liveActivities.isAvailable, canBeFollowed || liveActivities.followedRaceIDs.contains(race.id) {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Toggle("Live Activity", systemImage: "dot.radiowaves.left.and.right", isOn: following)
+                }
+            }
+        }
+        .alert("Unable to start the Live Activity", isPresented: $liveActivityFailed) {
+        } message: {
+            Text(liveActivityFailure)
+        }
         .task { await load() }
         .refreshingWhileLive(isLive, action: load)
     }
@@ -61,6 +78,45 @@ struct RaceView: View {
 
     private func isFavorite(_ row: ResultRow) -> Bool {
         FavoriteSet(favorites).contains(row)
+    }
+
+    /// While the calendar lists the race as upcoming or live, as on the server, which opens its
+    /// channels: the results can lag behind the calendar, as for a cancellation called off.
+    /// The results, which the screen reloads, show a race reinstated while it is open.
+    private var canBeFollowed: Bool {
+        [race, loader.state.value?.competition].contains { $0?.state.canBeFollowedLive == true }
+    }
+
+    private var following: Binding<Bool> {
+        Binding {
+            liveActivities.followedRaceIDs.contains(race.id)
+        } set: { follow in
+            Task {
+                guard follow else { return await liveActivities.stopFollowing(raceID: race.id) }
+                do {
+                    try await liveActivities.follow(raceID: race.id, name: race.shortDescription)
+                } catch {
+                    Logger.notifications.error(
+                        "Starting the Live Activity failed: \(String(describing: error), privacy: .public)")
+                    liveActivityFailure = Self.message(for: error)
+                    liveActivityFailed = true
+                }
+            }
+        }
+    }
+
+    /// ActivityKit and network errors carry a plain system message; the others go to the log.
+    private static func message(for error: any Error) -> String {
+        switch error {
+        case LiveActivities.Failure.noChannel:
+            String(localized: "This race can't be followed live yet. Try again closer to the start.")
+        case LiveActivities.Failure.ended:
+            String(localized: "This race is over.")
+        case is ActivityAuthorizationError, is URLError:
+            error.localizedDescription
+        default:
+            String(localized: "Live Activities are temporarily unavailable.")
+        }
     }
 
     private func load() async {

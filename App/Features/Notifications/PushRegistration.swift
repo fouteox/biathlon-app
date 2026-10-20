@@ -14,15 +14,6 @@ final class PushRegistration {
     private let serverURL = Bundle.main.serverURL
     private let appAttest = Bundle.main.serverURL.map { AppAttest(serverURL: $0) }
 
-    /// APNs environment matching the `aps-environment` entitlement Xcode signs the build with.
-    private var environment: String {
-        #if DEBUG
-            "sandbox"
-        #else
-            "production"
-        #endif
-    }
-
     /// Registering doesn't prompt the user. It runs at every launch so the
     /// server also learns when alerts were turned off.
     func register() {
@@ -52,7 +43,7 @@ final class PushRegistration {
             do {
                 request.httpBody = try JSONEncoder().encode(
                     Body(
-                        environment: environment,
+                        environment: APNsEnvironment.current.rawValue,
                         categories: preferences.categories.map(\.rawValue).sorted(),
                         cancellation: preferences.cancellationAlerts,
                         rescheduling: preferences.reschedulingAlerts,

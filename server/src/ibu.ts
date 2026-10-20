@@ -1,5 +1,7 @@
 // Minimal client for the undocumented biathlonresults.com API.
 
+import type { SubrequestBudget } from "./subrequests";
+
 export const IBU_BASE_URL = "https://biathlonresults.com/modules/sportapi/api/";
 
 export interface IBUEvent {
@@ -16,6 +18,7 @@ export interface IBUCompetition {
   StatusId?: number | string | null;
   StatusText?: string | null;
   ScheduleStatus?: string | null;
+  IsLive?: boolean | null;
 }
 
 /** The fields of a race the watcher compares from one poll to the next. */
@@ -27,9 +30,11 @@ export interface RaceSnapshot {
   status: RaceStatus;
 }
 
-export type RaceStatus = "scheduled" | "cancelled" | "finished" | "other";
+export type RaceStatus = "scheduled" | "live" | "cancelled" | "finished";
 
-export async function fetchIBU<T>(path: string, query: Record<string, string>): Promise<T> {
+/** Spends one subrequest of the run's budget; throws once none is left. */
+export async function fetchIBU<T>(path: string, query: Record<string, string>, budget: SubrequestBudget): Promise<T> {
+  if (!budget.take()) throw new Error(`IBU ${path}: no subrequest left in this run`);
   const url = new URL(path, IBU_BASE_URL);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
   const response = await fetch(url);
@@ -68,7 +73,7 @@ export function snapshot(race: IBUCompetition): RaceSnapshot {
     category: race.catId ?? "",
     name: race.ShortDescription,
     startTime: new Date(parseIBUDate(race.StartTime)).toISOString(),
-    status: status(race),
+    status: raceStatus(race),
   };
 }
 
@@ -77,10 +82,10 @@ export function snapshot(race: IBUCompetition): RaceSnapshot {
  * CANCELLED and 11 / "Final" / FINISHED. Same rules as the app
  * (`Competition.state`), checked against the shared `race-status.json` fixture.
  */
-function status(race: IBUCompetition): RaceStatus {
+export function raceStatus(race: Omit<IBUCompetition, "RaceId" | "ShortDescription">): RaceStatus {
+  if (race.IsLive) return "live";
   const text = `${race.ScheduleStatus ?? ""} ${race.StatusText ?? ""}`.toUpperCase();
   if (text.includes("CANCEL") || Number(race.StatusId) === 6) return "cancelled";
   if (text.includes("FINISHED") || Number(race.StatusId) === 11) return "finished";
-  if (text.includes("SCHEDULED") || Number(race.StatusId) === 1) return "scheduled";
-  return "other";
+  return "scheduled";
 }

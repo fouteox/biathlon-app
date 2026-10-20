@@ -211,6 +211,26 @@
         }
       }
     },
+    "Live Activities are temporarily unavailable.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les activités en direct sont momentanément indisponibles."
+          }
+        }
+      }
+    },
+    "Live Activity": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Activité en direct"
+          }
+        }
+      }
+    },
     "Mass start": {
       "localizations": {
         "fr": {
@@ -561,6 +581,26 @@
         }
       }
     },
+    "This race can't be followed live yet. Try again closer to the start.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette course ne peut pas encore être suivie en direct. Réessayez plus près du départ."
+          }
+        }
+      }
+    },
+    "This race is over.": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cette course est terminée."
+          }
+        }
+      }
+    },
     "Try again": {
       "localizations": {
         "fr": {
@@ -577,6 +617,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chargement impossible"
+          }
+        }
+      }
+    },
+    "Unable to start the Live Activity": {
+      "localizations": {
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de lancer l'activité en direct"
           }
         }
       }

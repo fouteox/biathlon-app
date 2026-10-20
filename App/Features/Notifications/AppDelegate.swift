@@ -7,6 +7,7 @@ import os
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     let settings = NotificationSettings()
     let push = PushRegistration()
+    let liveActivities = LiveActivities()
     /// IBU data goes through the server's cache when there is a server, to spare the IBU API.
     let client = IBUClient(baseURL: Bundle.main.serverURL?.appending(path: "ibu/") ?? IBUClient.ibuBaseURL)
 

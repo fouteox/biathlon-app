@@ -48,7 +48,7 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
         return .scheduled
     }
 
-    public enum State: String, Sendable, Hashable {
+    public enum State: String, CaseIterable, Codable, Sendable, Hashable {
         case scheduled, live, cancelled, finished
     }
 

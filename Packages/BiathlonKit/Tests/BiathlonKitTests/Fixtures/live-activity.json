@@ -1,0 +1,58 @@
+[
+  {
+    "name": "live race: the first three ranked rows lead",
+    "results": {"RaceId":"BT2627SWRLCP01SMIN","IsStartList":false,"IsResult":false,
+      "Competition":{"RaceId":"BT2627SWRLCP01SMIN","StatusId":1,"StatusText":"Scheduled","ScheduleStatus":"SCHEDULED","IsLive":true,"StartTime":"2026-11-26T15:15:00Z","ShortDescription":"Men's 20km Individual","catId":"SM"},
+      "Results":[
+        {"IBUId":"BTFRA00000000001","IsTeam":false,"Name":"PERROT Eric","ShortName":"PERROT E.","Nat":"FRA","Rank":"1","IRM":null,"TotalTime":"48:12.3","Behind":"0.0"},
+        {"IBUId":"BTNOR00000000002","IsTeam":false,"Name":"LAEGREID Sturla Holm","ShortName":"LAEGREID S.","Nat":"NOR","Rank":2,"IRM":null,"TotalTime":"48:20.1","Behind":"+7.8"},
+        {"IBUId":"BTGER00000000003","IsTeam":false,"Name":"NAWRATH Philipp","ShortName":"NAWRATH P.","Nat":"GER","Rank":"DNF","IRM":"DNF","TotalTime":null,"Behind":null},
+        {"IBUId":"BTSWE00000000004","IsTeam":false,"Name":"SAMUELSSON Sebastian","ShortName":"SAMUELSSON S.","Nat":"SWE","Rank":"3","IRM":null,"TotalTime":"48:31.0","Behind":"+18.7"},
+        {"IBUId":"BTFRA00000000005","IsTeam":false,"Name":"JACQUELIN Emilien","ShortName":"JACQUELIN E.","Nat":"FRA","Rank":"4","IRM":null,"TotalTime":"48:40.4","Behind":"+28.1"}
+      ]},
+    "state": {"phase":"live","startTime":817398900,"leaders":[
+      {"rank":"1","name":"PERROT E.","nation":"FRA","result":"48:12.3"},
+      {"rank":"2","name":"LAEGREID S.","nation":"NOR","result":"+7.8"},
+      {"rank":"3","name":"SAMUELSSON S.","nation":"SWE","result":"+18.7"}
+    ]},
+    "relevanceScore": 100
+  },
+  {
+    "name": "relay: team rows only",
+    "results": {"RaceId":"BT2526SWRLCP01SMRL","IsStartList":false,"IsResult":true,
+      "Competition":{"RaceId":"BT2526SWRLCP01SMRL","StatusId":11,"StatusText":"Final","ScheduleStatus":"FINISHED","IsLive":false,"StartTime":"2025-11-29T15:55:00Z","ShortDescription":"Men's 4x7.5km Relay","NrLegs":4},
+      "Results":[
+        {"IBUId":null,"IsTeam":true,"Name":"NORWAY","ShortName":"NORWAY","Nat":"NOR","Leg":0,"Rank":"1","TotalTime":"1:11:10.1","Behind":"0.0","TeamId":"NOR1"},
+        {"IBUId":"BTNOR00000000001","IsTeam":false,"Name":"ULDAL Martin","ShortName":"ULDAL M.","Nat":"NOR","Leg":1,"Rank":"1","TotalTime":"17:25.7","Behind":"0.0","TeamId":"NOR1"},
+        {"IBUId":null,"IsTeam":true,"Name":"FRANCE","Nat":"FRA","Leg":0,"Rank":"2","TotalTime":"1:11:30.5","Behind":"+20.4","TeamId":"FRA1"}
+      ]},
+    "state": {"phase":"finished","startTime":786124500,"leaders":[
+      {"rank":"1","name":"NORWAY","nation":"NOR","result":"1:11:10.1"},
+      {"rank":"2","name":"FRANCE","nation":"FRA","result":"+20.4"}
+    ]},
+    "relevanceScore": 0
+  },
+  {
+    "name": "start list: nobody leads yet",
+    "results": {"RaceId":"BT2627SWRLCP01SWSP","IsStartList":true,"IsResult":false,
+      "Competition":{"RaceId":"BT2627SWRLCP01SWSP","StatusId":1,"StatusText":"Scheduled","ScheduleStatus":"SCHEDULED","IsLive":false,"StartTime":"2026-11-28T12:30:00Z","ShortDescription":"Women's 7.5km Sprint","catId":"SW"},
+      "Results":[
+        {"IBUId":"BTFRA00000000010","IsTeam":false,"Name":"JEANMONNOT Lou","ShortName":"JEANMONNOT L.","Nat":"FRA","Rank":null,"IRM":null}
+      ]},
+    "state": {"phase":"scheduled","startTime":817561800,"leaders":[]},
+    "relevanceScore": 50
+  },
+  {
+    "name": "cancelled race",
+    "results": {"RaceId":"BT2627SWRLCP01SWSP","IsStartList":false,"IsResult":false,
+      "Competition":{"RaceId":"BT2627SWRLCP01SWSP","StatusId":6,"StatusText":"Cancelled","ScheduleStatus":"CANCELLED","IsLive":false,"StartTime":"2026-11-28T12:30:00Z","ShortDescription":"Women's 7.5km Sprint"},
+      "Results":[]},
+    "state": {"phase":"cancelled","startTime":817561800,"leaders":[]},
+    "relevanceScore": 0
+  },
+  {
+    "name": "no competition block: no state",
+    "results": {"RaceId":"X","IsStartList":false,"IsResult":false,"Results":[]},
+    "state": null
+  }
+]

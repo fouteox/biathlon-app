@@ -8,7 +8,7 @@ App iOS gratuite de suivi de la Coupe du monde de biathlon : course en direct, c
 open Biathlon.xcodeproj
 ```
 
-Le projet Xcode est versionné et utilise des dossiers synchronisés : tout fichier ajouté sous `App/` fait partie de l'app sans modifier `project.pbxproj`. Les réglages de compilation sont dans `Configs/Project.xcconfig` (communs) et `Configs/Biathlon.xcconfig` (cible de l'app), avec `Configs/Info.plist` et `Configs/Biathlon.entitlements`. Modifier ces fichiers plutôt que les réglages dans l'éditeur de projet d'Xcode.
+Le projet Xcode est versionné et utilise des dossiers synchronisés : tout fichier ajouté sous `App/` fait partie de l'app, sous `Widgets/` de l'extension des Live Activities, et sous `Shared/` des deux, sans modifier `project.pbxproj`. Les réglages de compilation sont dans `Configs/Project.xcconfig` (communs), `Configs/Biathlon.xcconfig` (cible de l'app) et `Configs/BiathlonWidgets.xcconfig` (extension), avec `Configs/Info.plist`, `Configs/BiathlonWidgets-Info.plist` et `Configs/Biathlon.entitlements`. Modifier ces fichiers plutôt que les réglages dans l'éditeur de projet d'Xcode.
 
 Tests du client API (sans Xcode) :
 
@@ -19,7 +19,7 @@ cd Packages/BiathlonKit && swift test
 Mise en forme du code Swift (`swift format`, inclus dans la toolchain Swift 6 ; règles dans `.swift-format`) :
 
 ```sh
-swift format --in-place --recursive App Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
+swift format --in-place --recursive App Shared Widgets Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
 ```
 
 ## Xcode Cloud
@@ -44,7 +44,9 @@ La branche `main` est protégée par le ruleset `.github/rulesets/main.json` (à
 
 - `Packages/BiathlonKit` : modèles et client de l'API biathlonresults.com, testés avec Swift Testing.
 - `App` : l'app SwiftUI (iOS 26, Swift 6, isolation `MainActor` par défaut, Observation, SwiftData pour les favoris).
-- `server` : Cloudflare Worker qui envoie les alertes d'annulation et de départ décalé, et sert de cache à l'API IBU (voir `server/README.md`).
+- `Widgets` : l'extension WidgetKit qui affiche la Live Activity d'une course sur l'écran verrouillé et dans la Dynamic Island.
+- `Shared` : le code et le String Catalog communs à l'app et à l'extension.
+- `server` : Cloudflare Worker qui envoie les alertes d'annulation et de départ décalé, met à jour les Live Activities des courses par des canaux de diffusion APNs, et sert de cache à l'API IBU (voir `server/README.md`).
 
 ## Données
 

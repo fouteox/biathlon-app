@@ -1,4 +1,4 @@
-import type { APNsEnvironment } from "./apns";
+import { isEnvironment, type APNsEnvironment } from "./apns";
 
 export const CATEGORIES = ["SM", "SW", "MX"] as const;
 export type Category = (typeof CATEGORIES)[number];
@@ -26,7 +26,7 @@ export function parseRegistration(token: string, body: unknown): DeviceRegistrat
   if (!isDeviceToken(normalized)) return "invalid device token";
   if (typeof body !== "object" || body === null) return "body must be a JSON object";
   const input = body as Record<string, unknown>;
-  if (input.environment !== "sandbox" && input.environment !== "production") return "invalid environment";
+  if (!isEnvironment(input.environment)) return "invalid environment";
   if (!Array.isArray(input.categories) || !input.categories.every((c) => CATEGORIES.includes(c))) {
     return "invalid categories";
   }

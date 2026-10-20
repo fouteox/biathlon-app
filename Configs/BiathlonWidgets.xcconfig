@@ -1,0 +1,8 @@
+// Settings of the BiathlonWidgets extension target: the races' Live Activities.
+
+PRODUCT_BUNDLE_IDENTIFIER = com.fouteox.biathlon.widgets
+TARGETED_DEVICE_FAMILY = 1
+CODE_SIGN_STYLE = Automatic
+SKIP_INSTALL = YES
+
+INFOPLIST_FILE = Configs/BiathlonWidgets-Info.plist

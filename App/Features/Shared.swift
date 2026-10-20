@@ -67,26 +67,6 @@ struct LoadableView<Value, Content: View>: View {
     }
 }
 
-extension Competition.State {
-    var label: LocalizedStringResource {
-        switch self {
-        case .scheduled: "Upcoming"
-        case .live: "Live"
-        case .cancelled: "Cancelled"
-        case .finished: "Finished"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .live: .red
-        case .cancelled: .gray
-        case .finished: .secondary
-        case .scheduled: .blue
-        }
-    }
-}
-
 struct RaceRow: View {
     let race: Competition
 
