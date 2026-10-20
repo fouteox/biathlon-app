@@ -1467,6 +1467,20 @@ describe("Live Activities started for favorites", () => {
     ]);
   });
 
+  it("retries a start when the provider token can't be loaded", async () => {
+    const env = await setUp();
+    const key = env.APNS_PRODUCTION_KEY;
+    env.APNS_PRODUCTION_KEY = "not a key";
+    const failed = stub();
+    await startFavoriteActivities(env, [race()], DUE);
+    expect(startUrls(failed)).toEqual([`https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`]);
+
+    env.APNS_PRODUCTION_KEY = key;
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(startUrls(sent)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
+  });
+
   it("stops retrying a start after five failed sends", async () => {
     const env = await setUp();
     for (const minute of [0, 1, 2, 3, 4]) {

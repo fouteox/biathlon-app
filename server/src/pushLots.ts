@@ -60,12 +60,17 @@ export class PushLots {
 
   /**
    * Sends one environment's pushes. Those APNs answers with an expired provider token go
-   * again once, with a new one, as `ProviderTokens.send` does for a single request.
+   * again once, with a new one, as `ProviderTokens.send` does for a single request. Without a
+   * provider token, none is sent: each is a retry, or stays expired.
    */
   private async sendAll(environment: APNsEnvironment, items: Pending[]): Promise<void> {
-    const outcomes = await this.lots(environment, await this.tokens.token(environment), items.map(({ push }) => push));
+    const pushes = items.map(({ push }) => push);
+    const outcomes = await this.tokens.token(environment).then(
+      (providerToken) => this.lots(environment, providerToken, pushes),
+      (error: unknown) => pushes.map(() => retry(error)),
+    );
     const expired = outcomes.flatMap((outcome, index) => (outcome.kind === "expiredProviderToken" ? [index] : []));
-    const renewed = expired.length > 0 ? await this.tokens.renew(environment) : undefined;
+    const renewed = expired.length > 0 ? await this.tokens.renew(environment).catch(() => undefined) : undefined;
     if (renewed) {
       const retried = await this.lots(environment, renewed, expired.map((index) => items[index]!.push));
       expired.forEach((index, position) => (outcomes[index] = retried[position]!));
@@ -81,9 +86,14 @@ export class PushLots {
       lots.map((lot, index) =>
         this.env.PUSH_SENDER.getByName(`${environment}-${index}`)
           .send(lot, providerToken)
-          .catch((error: unknown) => lot.map((): PushOutcome => ({ kind: "retry", reason: String(error) }))),
+          .catch((error: unknown) => lot.map(() => retry(error))),
       ),
     );
     return outcomes.flat();
   }
+}
+
+/** The outcome of a push a lot couldn't send. */
+function retry(error: unknown): PushOutcome {
+  return { kind: "retry", reason: String(error) };
 }
