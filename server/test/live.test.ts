@@ -1101,14 +1101,23 @@ describe("Live Activities started for favorites", () => {
     expect(sent).toEqual([]);
   });
 
-  it("checks again a device whose favorites changed while the start list was read", async () => {
+  it("matches the favorites a device saved while the start list was read", async () => {
     const env = await setUp();
-    stubNetwork({ duringResults: () => save(env, "bb".repeat(32), { nations: ["FRA"] }) });
+    const sent = stubNetwork({ duringResults: () => save(env, "bb".repeat(32), { nations: ["FRA"] }) });
     await startFavoriteActivities(env, [race()], DUE);
+    expect(starts(sent).map((request) => request.url)).toContain(`https://api.push.apple.com/3/device/${"bb".repeat(32)}`);
+  });
 
-    const sent = stubNetwork();
-    await startFavoriteActivities(env, [race()], DUE + 60_000);
-    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
+  it("starts nothing for a device whose favorites changed or that opted out while the start list was read", async () => {
+    const env = await setUp();
+    const sent = stubNetwork({
+      duringResults: async () => {
+        await save(env, "aa".repeat(32), { athletes: ["BTSUI00000000009"] });
+        await env.DB.prepare("DELETE FROM live_start_tokens WHERE environment = 'sandbox'").run();
+      },
+    });
+    await startFavoriteActivities(env, [race()], DUE);
+    expect(starts(sent)).toEqual([]);
   });
 
   it("forgets the checks of races two days after their start", async () => {

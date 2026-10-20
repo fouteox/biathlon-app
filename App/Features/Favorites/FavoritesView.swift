@@ -11,7 +11,9 @@ struct FavoritesView: View {
     var body: some View {
         @Bindable var liveActivityStarts = liveActivityStarts
         List {
-            if liveActivities.isAvailable, !favorites.isEmpty {
+            // Kept while on, even with Live Activities turned off in Settings: it is how the
+            // favorites leave the server.
+            if liveActivities.isAvailable || liveActivityStarts.isEnabled, !favorites.isEmpty {
                 Section {
                     Toggle(
                         "Live Activity when a favorite races", systemImage: "dot.radiowaves.left.and.right",

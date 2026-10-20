@@ -108,11 +108,16 @@ export async function deleteOwnedStartToken(db: D1Database, _token: string, keyI
 
 interface PendingToken {
   token: string;
-  keyId: string;
   environment: APNsEnvironment;
-  athletes: string;
-  nations: string;
 }
+
+/** The tokens `t` of the environments ?2 (a JSON array) whose install race ?1 wasn't checked for. */
+const UNCHECKED = `t.environment IN (SELECT value FROM json_each(?2))
+  AND t.app_attest_key_id NOT IN (SELECT app_attest_key_id FROM live_starts WHERE race_id = ?1)`;
+
+/** Whether one of the favorites of `t` is among the athletes ?3 or the nations ?4 (JSON arrays). */
+const ENTERED = `(EXISTS (SELECT 1 FROM json_each(t.athletes) WHERE value IN (SELECT value FROM json_each(?3)))
+  OR EXISTS (SELECT 1 FROM json_each(t.nations) WHERE value IN (SELECT value FROM json_each(?4))))`;
 
 /**
  * Starts the activity of each race due within `START_LEAD_MS`, until it is over, on the
@@ -134,30 +139,37 @@ export async function startFavoriteActivities(
     )
       .bind(race.id)
       .all<{ environment: APNsEnvironment; channelId: string; state: string }>();
-    const { results: pending } = await env.DB.prepare(
-      `SELECT token, app_attest_key_id AS keyId, environment, athletes, nations FROM live_start_tokens
-       WHERE environment IN (SELECT value FROM json_each(?2))
-         AND app_attest_key_id NOT IN (SELECT app_attest_key_id FROM live_starts WHERE race_id = ?1)
-       ORDER BY updated_at, token`,
-    )
-      .bind(race.id, JSON.stringify(channels.map((channel) => channel.environment)))
-      .all<PendingToken>();
-    if (pending.length === 0) continue;
+    const environments = JSON.stringify(channels.map((channel) => channel.environment));
+    const unchecked = await env.DB.prepare(`SELECT 1 FROM live_start_tokens t WHERE ${UNCHECKED} LIMIT 1`)
+      .bind(race.id, environments)
+      .first();
+    if (!unchecked) continue;
     // The start list, then at least one start.
     if (!budget.has(2)) return;
     const entrants = await startList(race.id, budget);
     if (!entrants) continue;
 
+    // Matched in D1 against the favorites stored when each statement runs: one write for all
+    // the installs none of whose favorites races, then each start claimed only if it still matches.
+    const lists = [JSON.stringify(entrants.athletes), JSON.stringify(entrants.nations)];
+    await env.DB.prepare(
+      `INSERT INTO live_starts (race_id, app_attest_key_id, started)
+       SELECT ?1, t.app_attest_key_id, 0 FROM live_start_tokens t WHERE ${UNCHECKED} AND NOT ${ENTERED}
+       ON CONFLICT DO NOTHING`,
+    )
+      .bind(race.id, environments, ...lists)
+      .run();
+    const { results: pending } = await env.DB.prepare(
+      `SELECT token, environment FROM live_start_tokens t WHERE ${UNCHECKED} AND ${ENTERED} ORDER BY updated_at, token`,
+    )
+      .bind(race.id, environments, ...lists)
+      .all<PendingToken>();
+
     for (const device of pending) {
-      const isEntered =
-        (JSON.parse(device.athletes) as string[]).some((id) => entrants.athletes.has(id)) ||
-        (JSON.parse(device.nations) as string[]).some((nation) => entrants.nations.has(nation));
-      if (!isEntered) {
-        await recordMismatch(env, race.id, device);
-        continue;
-      }
-      // Claimed before the push: an overlapping run that read the same pending token skips it.
-      if (!(await claim(env, race.id, device.keyId, true))) continue;
+      // Claimed before the push: an overlapping run that read the same token skips it, and so
+      // does a device whose favorites or opt-out were saved meanwhile.
+      const keyId = await claim(env, race.id, device, lists);
+      if (!keyId) continue;
       const channel = channels.find((row) => row.environment === device.environment)!;
       const state = JSON.parse(channel.state) as LiveState;
       const outcome = await tokens.send(device.environment, (token) =>
@@ -177,15 +189,15 @@ export async function startFavoriteActivities(
         case "sent":
           break;
         case "deferred":
-          await release(env, race.id, device.keyId);
+          await release(env, race.id, keyId);
           return;
         case "unregistered":
-          await release(env, race.id, device.keyId);
+          await release(env, race.id, keyId);
           await deleteStartToken(env.DB, device.token);
           break;
         case "retry":
           console.warn("APNs Live Activity start retry", race.id, outcome.reason);
-          await release(env, race.id, device.keyId);
+          await release(env, race.id, keyId);
           break;
         default:
           // Refused, the claim stays: sent again, it would be refused again.
@@ -199,13 +211,13 @@ export async function startFavoriteActivities(
 async function startList(
   raceId: string,
   budget: SubrequestBudget,
-): Promise<{ athletes: Set<string>; nations: Set<string> } | undefined> {
+): Promise<{ athletes: string[]; nations: string[] } | undefined> {
   try {
     const rows = (await fetchIBU<IBUResults>("Results", { RaceId: raceId }, budget)).Results ?? [];
     if (rows.length === 0) return undefined;
     return {
-      athletes: new Set(rows.flatMap((row) => (row.IBUId ? [row.IBUId] : []))),
-      nations: new Set(rows.flatMap((row) => (row.Nat ? [row.Nat] : []))),
+      athletes: [...new Set(rows.flatMap((row) => (row.IBUId ? [row.IBUId] : [])))],
+      nations: [...new Set(rows.flatMap((row) => (row.Nat ? [row.Nat] : [])))],
     };
   } catch (error) {
     console.warn("Start list unavailable", raceId, String(error));
@@ -238,30 +250,20 @@ function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, n
   };
 }
 
-/** Claims the install's start of the race; `false` when another run already checked it. */
-async function claim(env: Env, raceId: string, keyId: string, started: boolean): Promise<boolean> {
-  const { meta } = await env.DB.prepare(
-    "INSERT INTO live_starts (race_id, app_attest_key_id, started) VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING",
-  )
-    .bind(raceId, keyId, started ? 1 : 0)
-    .run();
-  return meta.changes === 1;
-}
-
 /**
- * Records that none of the install's favorites races, unless they changed since they were
- * read: saved during the start list's lookup, they had no check to clear yet.
+ * Claims the start of the race for the device's install, while its stored token still has a
+ * favorite among the entrants `lists`; its key, or `undefined` when there is nothing to claim.
  */
-function recordMismatch(env: Env, raceId: string, device: PendingToken) {
-  return env.DB.prepare(
+async function claim(env: Env, raceId: string, device: PendingToken, lists: string[]): Promise<string | undefined> {
+  const row = await env.DB.prepare(
     `INSERT INTO live_starts (race_id, app_attest_key_id, started)
-     SELECT ?1, ?2, 0 WHERE EXISTS (
-       SELECT 1 FROM live_start_tokens
-       WHERE app_attest_key_id = ?2 AND environment = ?3 AND athletes = ?4 AND nations = ?5)
-     ON CONFLICT DO NOTHING`,
+     SELECT ?1, t.app_attest_key_id, 1 FROM live_start_tokens t
+     WHERE t.token = ?5 AND t.environment = ?2 AND ${ENTERED}
+     ON CONFLICT DO NOTHING RETURNING app_attest_key_id AS keyId`,
   )
-    .bind(raceId, device.keyId, device.environment, device.athletes, device.nations)
-    .run();
+    .bind(raceId, device.environment, ...lists, device.token)
+    .first<{ keyId: string }>();
+  return row?.keyId;
 }
 
 /**
