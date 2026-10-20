@@ -40,10 +40,10 @@
 		04C043EF7AEA82F7842EDA8E /* Project.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Project.xcconfig; sourceTree = "<group>"; };
 		04E44D7D253DB6C6132F1082 /* Biathlon.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Biathlon.xcconfig; sourceTree = "<group>"; };
 		0DF4B3ABD5A37131609C06AD /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		4F003F40EA5A3DE9F47CDCD5 /* Biathlon.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Biathlon.entitlements; sourceTree = "<group>"; };
 		63CBFBEE038D365C3C388791 /* BiathlonWidgets-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "BiathlonWidgets-Info.plist"; sourceTree = "<group>"; };
 		90D494117EFC5FD52B8B8CF3 /* BiathlonWidgets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = BiathlonWidgets.xcconfig; sourceTree = "<group>"; };
 		9B9B6B4BEF63DF380CE8B792 /* BiathlonWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BiathlonWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		4F003F40EA5A3DE9F47CDCD5 /* Biathlon.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Biathlon.entitlements; sourceTree = "<group>"; };
 		B6D0567317C60662CDA2C0B7 /* BiathlonKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = BiathlonKit; path = Packages/BiathlonKit; sourceTree = SOURCE_ROOT; };
 		ECF86E7BC7C9A2BB896BBC22 /* Biathlon.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Biathlon.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -131,6 +131,30 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		0B7D64816569403206EB3276 /* BiathlonWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 15727996C8CCC555D415DC20 /* Build configuration list for PBXNativeTarget "BiathlonWidgets" */;
+			buildPhases = (
+				67C60610E541C04545C8096A /* Sources */,
+				9E0546DFE072D561B4046CCF /* Resources */,
+				4CFA32BED727C540477C341E /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				20B06BCA3EA53D885B88ED00 /* Shared */,
+				79309C84574E64BD01BABCA4 /* Widgets */,
+			);
+			name = BiathlonWidgets;
+			packageProductDependencies = (
+				6D0F943C8382B17D8C3A3D42 /* BiathlonKit */,
+			);
+			productName = BiathlonWidgets;
+			productReference = 9B9B6B4BEF63DF380CE8B792 /* BiathlonWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		B929537D5C5472FBEA585959 /* Biathlon */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 7F0D3BCAA8360D8C60420F79 /* Build configuration list for PBXNativeTarget "Biathlon" */;
@@ -156,30 +180,6 @@
 			productName = Biathlon;
 			productReference = ECF86E7BC7C9A2BB896BBC22 /* Biathlon.app */;
 			productType = "com.apple.product-type.application";
-		};
-		0B7D64816569403206EB3276 /* BiathlonWidgets */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 15727996C8CCC555D415DC20 /* Build configuration list for PBXNativeTarget "BiathlonWidgets" */;
-			buildPhases = (
-				67C60610E541C04545C8096A /* Sources */,
-				9E0546DFE072D561B4046CCF /* Resources */,
-				4CFA32BED727C540477C341E /* Frameworks */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				20B06BCA3EA53D885B88ED00 /* Shared */,
-				79309C84574E64BD01BABCA4 /* Widgets */,
-			);
-			name = BiathlonWidgets;
-			packageProductDependencies = (
-				6D0F943C8382B17D8C3A3D42 /* BiathlonKit */,
-			);
-			productName = BiathlonWidgets;
-			productReference = 9B9B6B4BEF63DF380CE8B792 /* BiathlonWidgets.appex */;
-			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -222,14 +222,14 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		E2634EB8C33744C8EB519711 /* Resources */ = {
+		9E0546DFE072D561B4046CCF /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		9E0546DFE072D561B4046CCF /* Resources */ = {
+		E2634EB8C33744C8EB519711 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -358,19 +358,6 @@
 			};
 			name = Debug;
 		};
-		EB5695A1439841D669DD9942 /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 90D494117EFC5FD52B8B8CF3 /* BiathlonWidgets.xcconfig */;
-			buildSettings = {
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				SDKROOT = iphoneos;
-			};
-			name = Release;
-		};
 		B3F5425816512A878644AFC1 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 04C043EF7AEA82F7842EDA8E /* Project.xcconfig */;
@@ -434,6 +421,19 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 			};
 			name = Debug;
+		};
+		EB5695A1439841D669DD9942 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 90D494117EFC5FD52B8B8CF3 /* BiathlonWidgets.xcconfig */;
+			buildSettings = {
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				SDKROOT = iphoneos;
+			};
+			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
