@@ -3,7 +3,7 @@ import type { SubrequestBudget } from "./subrequests";
 
 /** A request left for the next run. */
 export type Deferred = { kind: "deferred" };
-const DEFERRED: Deferred = { kind: "deferred" };
+export const DEFERRED: Deferred = { kind: "deferred" };
 
 /**
  * The APNs provider tokens of one cron run, one per environment, as Apple
@@ -31,15 +31,25 @@ export class ProviderTokens {
   ): Promise<Outcome | Deferred> {
     if (!this.budget.take()) return DEFERRED;
     const outcome = await request(await this.token(environment));
-    if (outcome.kind !== "expiredProviderToken" || this.refreshed.has(environment)) return outcome;
-    this.refreshed.add(environment);
-    // Signed and cached before the retry, which may wait for the next run.
-    const token = await this.token(environment, true);
+    if (outcome.kind !== "expiredProviderToken") return outcome;
+    const token = await this.renew(environment);
+    if (!token) return outcome;
     if (!this.budget.take()) return DEFERRED;
     return request(token);
   }
 
-  private async token(environment: APNsEnvironment, forceRefresh = false): Promise<string> {
+  /**
+   * Signs and caches a new token after APNs rejected the current one, at most once per run;
+   * `undefined` once renewed. Cached before the retry, which may wait for the next run.
+   */
+  async renew(environment: APNsEnvironment): Promise<string | undefined> {
+    if (this.refreshed.has(environment)) return undefined;
+    this.refreshed.add(environment);
+    return this.token(environment, true);
+  }
+
+  /** The environment's token, signed or read from D1 at the first request of the run. */
+  async token(environment: APNsEnvironment, forceRefresh = false): Promise<string> {
     const current = this.tokens.get(environment);
     if (current && !forceRefresh) return current;
     const token = await this.load(environment, forceRefresh);

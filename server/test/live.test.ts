@@ -6,8 +6,11 @@ import { liveState, relevanceScore, syncLiveActivities, type IBUResults, type Li
 import { parseStartRegistration, pruneStarts, saveStartToken, startFavoriteActivities } from "../src/liveStarts";
 import { ProviderTokens } from "../src/providerTokens";
 import { SubrequestBudget } from "../src/subrequests";
+import { buildPayload } from "../src/payload";
+import { PushLots } from "../src/pushLots";
 import { drainOutbox } from "../src/watcher";
 import { makeD1 } from "./d1";
+import { pushSenders } from "./pushSenders";
 
 // Shared with the app's BiathlonKit tests, which decode each `content-state` with
 // ActivityKit's default strategies and give its local updates the same relevance score.
@@ -116,6 +119,7 @@ async function makeEnv(): Promise<Env> {
     APNS_SANDBOX_KEY_ID: "ABC123DEFG",
     APNS_PRODUCTION_KEY: pem,
     APNS_PRODUCTION_KEY_ID: "HIJ456KLMN",
+    PUSH_SENDER: pushSenders(),
   } as unknown as Env;
   // The watcher stores each race before its channels reference it.
   await env.DB.prepare(
@@ -125,6 +129,38 @@ async function makeEnv(): Promise<Env> {
     .run();
   return env;
 }
+
+/** Counts the D1 queries made from now on: each `run`, `all` or `first`, and each statement of a `batch`. */
+function countD1Queries(env: Env): () => number {
+  let queries = 0;
+  const db = env.DB;
+  const counted = <T extends (...args: never[]) => unknown>(method: T) =>
+    ((...args: Parameters<T>) => {
+      queries += 1;
+      return method(...args);
+    }) as T;
+  const statement = (prepared: D1PreparedStatement): D1PreparedStatement =>
+    ({
+      bind: (...values: unknown[]) => statement(prepared.bind(...values)),
+      run: counted(() => prepared.run()),
+      all: counted(() => prepared.all()),
+      first: counted(() => prepared.first()),
+      raw: prepared,
+    }) as unknown as D1PreparedStatement;
+  env.DB = {
+    prepare: (sql: string) => statement(db.prepare(sql)),
+    // D1's limits apply to each statement of a batch (https://developers.cloudflare.com/d1/platform/limits/).
+    batch: (statements: D1PreparedStatement[]) => {
+      queries += statements.length;
+      return db.batch(statements.map((item) => (item as unknown as { raw: D1PreparedStatement }).raw));
+    },
+  } as unknown as D1Database;
+  return () => queries;
+}
+
+/** The pushes of one run, with room for `capacity` of them. */
+const pushLots = (env: Env, now: number, capacity: number) =>
+  new PushLots(env, new ProviderTokens(env, now, new SubrequestBudget()), capacity);
 
 const channels = (env: Env) =>
   env.DB.prepare("SELECT environment, channel_id AS channelId, state FROM live_channels ORDER BY environment")
@@ -987,22 +1023,88 @@ describe("GET /v1/races/:id/channels/:environment", () => {
 });
 
 describe("alerts", () => {
-  it("leave the alerts the run has no subrequests left for to the next run", async () => {
-    const env = await makeEnv();
-    for (const token of ["a", "b"]) {
+  const PERSISTED = "SELECT token, attempts FROM outbox ORDER BY id";
+
+  async function queue(env: Env, tokens: string[], kind = "cancelled") {
+    for (const token of tokens) {
       await env.DB.prepare(
-        "INSERT INTO outbox (token, environment, kind, race_id, race_name, start_time, locale, time_zone, created_at) VALUES (?1, 'sandbox', 'cancelled', ?2, 'x', '2026-11-26T15:15:00.000Z', 'en', 'UTC', ?3)",
+        "INSERT INTO outbox (token, environment, kind, race_id, race_name, start_time, locale, time_zone, created_at) VALUES (?1, 'sandbox', ?2, ?3, 'x', '2026-11-26T15:15:00.000Z', 'fr', 'Europe/Paris', ?4)",
       )
-        .bind(token, RACE_ID, NOW)
+        .bind(token, kind, RACE_ID, NOW)
         .run();
     }
+  }
+
+  const devicePushes = (sent: Sent[]) => sent.filter((request) => request.url.includes("/3/device/"));
+
+  it("sends a run's alerts in lots of 50 Durable Object calls, more than the run's own subrequests", async () => {
+    const env = await makeEnv();
+    const lots: number[] = [];
+    env.PUSH_SENDER = pushSenders(lots);
+    await queue(env, Array.from({ length: 120 }, (_, index) => `t${index}`));
     const sent = stubNetwork();
 
-    await drainOutbox(env, NOW, new SubrequestBudget(1));
+    await drainOutbox(env, NOW);
 
-    expect(sent.length).toBe(1);
-    const { results } = await env.DB.prepare("SELECT token, attempts FROM outbox").all();
-    expect(results).toEqual([{ token: "b", attempts: 0 }]);
+    expect(lots).toEqual([50, 50, 20]);
+    expect(devicePushes(sent).length).toBe(120);
+    expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([]);
+  });
+
+  it("builds each alert in the device's language and time zone", async () => {
+    const env = await makeEnv();
+    await queue(env, ["a"], "rescheduled");
+    const sent = stubNetwork();
+
+    await drainOutbox(env, NOW);
+
+    expect(devicePushes(sent)[0]?.body).toEqual(
+      buildPayload({
+        kind: "rescheduled",
+        raceId: RACE_ID,
+        raceName: "x",
+        startTime: "2026-11-26T15:15:00.000Z",
+        locale: "fr",
+        timeZone: "Europe/Paris",
+      }),
+    );
+  });
+
+  it("leaves the alerts past the run's push capacity to the next run", async () => {
+    const env = await makeEnv();
+    await queue(env, ["a", "b"]);
+    const sent = stubNetwork();
+
+    await drainOutbox(env, NOW, pushLots(env, NOW, 1));
+
+    expect(devicePushes(sent).length).toBe(1);
+    expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([{ token: "b", attempts: 0 }]);
+  });
+
+  it("forgets the devices APNs no longer knows in a few D1 queries", async () => {
+    const env = await makeEnv();
+    await queue(env, Array.from({ length: 60 }, (_, index) => `t${index}`));
+    const calls = countD1Queries(env);
+    stubNetwork({ deviceStatus: 410 });
+
+    await drainOutbox(env, NOW);
+
+    expect(calls()).toBeLessThanOrEqual(10);
+    expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([]);
+  });
+
+  it("tries the alerts of a lot that failed again", async () => {
+    const env = await makeEnv();
+    env.PUSH_SENDER = pushSenders([], { failing: true });
+    await queue(env, ["a", "b"]);
+    stubNetwork();
+
+    await drainOutbox(env, NOW);
+
+    expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([
+      { token: "a", attempts: 1 },
+      { token: "b", attempts: 1 },
+    ]);
   });
 });
 
@@ -1039,6 +1141,9 @@ describe("Live Activities started for favorites", () => {
   }
 
   const starts = (sent: Sent[]) => sent.filter((request) => request.url.includes("/3/device/"));
+  /** The devices started, sorted: the APNs environments' lots go out at once. */
+  const startUrls = (sent: Sent[]) => starts(sent).map((request) => request.url).sort();
+  const startOn = (sent: Sent[], host: string) => starts(sent).find((request) => request.url.startsWith(host));
   const ibu = (sent: Sent[]) => sent.filter((request) => request.url.includes("biathlonresults.com"));
 
   it("starts the race's activity on its channel for the devices whose favorites are on the start list, 30 minutes before", async () => {
@@ -1052,19 +1157,19 @@ describe("Live Activities started for favorites", () => {
       `https://biathlonresults.com/modules/sportapi/api/Results?RaceId=${RACE_ID}`,
     ]);
     const [production, sandbox] = await channels(env);
-    expect(starts(sent).map((request) => request.url)).toEqual([
+    expect(startUrls(sent)).toEqual([
       `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
       `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
     ]);
     // Apple: push type liveactivity, its own topic, an alert, and iOS 18's input-push-channel.
-    expect(starts(sent)[0]?.headers).toMatchObject({
+    expect(startOn(sent, "https://api.push.apple.com")?.headers).toMatchObject({
       "apns-push-type": "liveactivity",
       "apns-topic": "com.fouteox.biathlon.push-type.liveactivity",
       "apns-priority": "10",
       // Kept by APNs until a while after the race starts, for a device offline meanwhile.
       "apns-expiration": String(START / 1000 + 15 * 60),
     });
-    expect(starts(sent)[0]?.body).toEqual({
+    expect(startOn(sent, "https://api.push.apple.com")?.body).toEqual({
       aps: {
         timestamp: DUE / 1000,
         event: "start",
@@ -1080,12 +1185,69 @@ describe("Live Activities started for favorites", () => {
         },
       },
     });
-    expect((starts(sent)[1]?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe(sandbox!.channelId);
+    expect((startOn(sent, "https://api.sandbox.push.apple.com")?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe(sandbox!.channelId);
 
     // Each device is checked once per race.
     const later = stub();
     await startFavoriteActivities(env, [race({ IsLive: true })], DUE + 20 * 60_000);
     expect(later).toEqual([]);
+  });
+
+  it("starts more activities in one run than its own subrequests, in lots of 50", async () => {
+    const env = await setUp();
+    const lots: number[] = [];
+    env.PUSH_SENDER = pushSenders(lots);
+    const fans = Array.from({ length: 120 }, (_, index) => index.toString(16).padStart(64, "0"));
+    for (const token of fans) await save(env, token, { athletes: [PERROT] });
+    const sent = stub();
+
+    // One subrequest of the run, for the start list.
+    await startFavoriteActivities(env, [race()], DUE, new SubrequestBudget(1));
+
+    expect(starts(sent).length).toBe(122);
+    expect(Math.max(...lots)).toBe(50);
+    expect(lots.reduce((sum, size) => sum + size, 0)).toBe(122);
+  });
+
+  it("claims and settles a race's starts in a few D1 queries, whatever their number", async () => {
+    const env = await setUp();
+    for (const index of Array.from({ length: 120 }, (_, value) => value)) {
+      await save(env, index.toString(16).padStart(64, "0"), { athletes: [PERROT] });
+    }
+    // The Workers Free plan allows 50 D1 queries per invocation.
+    const calls = countD1Queries(env);
+    stub({ deviceStatus: 503 });
+
+    await startFavoriteActivities(env, [race()], DUE);
+
+    // The race's reads, its two provider tokens, a claim and a settle.
+    expect(calls()).toBeLessThanOrEqual(12);
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(starts(sent).length).toBe(122);
+  });
+
+  it("claims nothing when D1 fails while claiming, for the next run to start them all", async () => {
+    const env = await setUp();
+    const batch = env.DB.batch.bind(env.DB);
+    let failing = true;
+    env.DB.batch = (async (statements: D1PreparedStatement[]) => {
+      if (failing) {
+        failing = false;
+        throw new Error("D1 unavailable");
+      }
+      return batch(statements);
+    }) as typeof env.DB.batch;
+    const failed = stub();
+    await expect(startFavoriteActivities(env, [race()], DUE)).rejects.toThrow("D1 unavailable");
+    expect(starts(failed)).toEqual([]);
+
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(startUrls(sent)).toEqual([
+      `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
+      `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
+    ]);
   });
 
   it("checks the race again for a device whose favorites changed, but never starts it twice", async () => {
@@ -1097,7 +1259,7 @@ describe("Live Activities started for favorites", () => {
     await save(env, "bb".repeat(32), { nations: ["FRA"] });
     const sent = stub();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
-    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
+    expect(startUrls(sent)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
   });
 
   it("checks again only for changed favorites, and keeps an install's starts when its token changes", async () => {
@@ -1142,7 +1304,7 @@ describe("Live Activities started for favorites", () => {
     const amended = { ...START_LIST, Results: [...(START_LIST.Results ?? []), entrant] };
     const sent = stub({ results: amended });
     await startFavoriteActivities(env, [race()], DUE + 60_000);
-    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
+    expect(startUrls(sent)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
   });
 
   it("starts nothing on a channel that ended while the start list was read", async () => {
@@ -1165,7 +1327,7 @@ describe("Live Activities started for favorites", () => {
     await env.DB.prepare("UPDATE live_channels SET channel_id = 'replacement' WHERE environment = 'production'").run();
     const sent = stub();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
-    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
+    expect(startUrls(sent)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
     expect((starts(sent)[0]?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe("replacement");
   });
 
@@ -1188,7 +1350,9 @@ describe("Live Activities started for favorites", () => {
       },
     });
     await startFavoriteActivities(env, [race()], DUE);
-    expect((starts(sent)[0]?.body as { aps: { "content-state": unknown } }).aps["content-state"]).toEqual(published);
+    expect((startOn(sent, "https://api.push.apple.com")?.body as { aps: { "content-state": unknown } }).aps["content-state"]).toEqual(
+      published,
+    );
   });
 
   it("forgets the checks of races two days after their start", async () => {
@@ -1206,7 +1370,7 @@ describe("Live Activities started for favorites", () => {
     const env = await setUp();
     const sent = stub();
     await Promise.all([startFavoriteActivities(env, [race()], DUE), startFavoriteActivities(env, [race()], DUE)]);
-    expect(starts(sent).map((request) => request.url).sort()).toEqual([
+    expect(startUrls(sent)).toEqual([
       `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
       `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
     ]);
@@ -1222,10 +1386,10 @@ describe("Live Activities started for favorites", () => {
     await syncLiveActivities(env, [race()], DUE + 2 * 60_000);
     await startFavoriteActivities(env, [race()], DUE + 2 * 60_000);
     const [production] = await channels(env);
-    expect(starts(sent).map((request) => (request.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"])).toEqual([
-      production!.channelId,
-      expect.any(String),
-    ]);
+    const channelOf = (host: string) =>
+      (startOn(sent, host)?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"];
+    expect(starts(sent).length).toBe(2);
+    expect(channelOf("https://api.push.apple.com")).toBe(production!.channelId);
   });
 
   it("waits for the start list, and for an open channel", async () => {
@@ -1237,19 +1401,19 @@ describe("Live Activities started for favorites", () => {
 
     const sent = stub();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
-    expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
+    expect(startUrls(sent)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
   });
 
-  it("starts nothing for a race that is over, and leaves the rest to the next run when the budget runs out", async () => {
+  it("starts nothing for a race that is over, and leaves the rest to the next run past its push capacity", async () => {
     const env = await setUp();
     const sent = stub();
     await startFavoriteActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], DUE);
     expect(sent).toEqual([]);
 
-    await startFavoriteActivities(env, [race()], DUE, new SubrequestBudget(2));
+    await startFavoriteActivities(env, [race()], DUE, new SubrequestBudget(), pushLots(env, DUE, 1));
     expect(starts(sent).length).toBe(1);
     await startFavoriteActivities(env, [race()], DUE + 60_000);
-    expect(starts(sent).map((request) => request.url)).toEqual([
+    expect(startUrls(sent)).toEqual([
       `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
       `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
     ]);
@@ -1265,7 +1429,7 @@ describe("Live Activities started for favorites", () => {
 
     const sent = stubNetwork();
     await startFavoriteActivities(env, [race({ IsLive: true })], START + 60_000);
-    expect(starts(sent).map((request) => request.url)).toEqual([
+    expect(startUrls(sent)).toEqual([
       `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
       `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
     ]);
@@ -1300,10 +1464,39 @@ describe("Live Activities started for favorites", () => {
 
     const sent = stub();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
-    expect(starts(sent).map((request) => request.url)).toEqual([
+    expect(startUrls(sent)).toEqual([
       `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
       `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
     ]);
+  });
+
+  it("retries a start when the provider token can't be loaded", async () => {
+    const env = await setUp();
+    const key = env.APNS_PRODUCTION_KEY;
+    env.APNS_PRODUCTION_KEY = "not a key";
+    const failed = stub();
+    await startFavoriteActivities(env, [race()], DUE);
+    expect(startUrls(failed)).toEqual([`https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`]);
+
+    env.APNS_PRODUCTION_KEY = key;
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(startUrls(sent)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
+  });
+
+  it("stops retrying a start after five failed sends", async () => {
+    const env = await setUp();
+    for (const minute of [0, 1, 2, 3, 4]) {
+      const failed = stub({ deviceStatus: 503 });
+      await startFavoriteActivities(env, [race()], DUE + minute * 60_000);
+      expect(starts(failed).length).toBe(2);
+    }
+
+    // Each failed send writes its row of live_starts twice, claimed then given back: past five,
+    // a lasting APNs outage would spend the day's D1 row writes of the Free plan.
+    const sent = stub();
+    await startFavoriteActivities(env, [race()], DUE + 5 * 60_000);
+    expect(starts(sent)).toEqual([]);
   });
 
   it("forgets a token APNs no longer knows, and doesn't retry a start APNs refused", async () => {

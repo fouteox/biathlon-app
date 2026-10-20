@@ -1,9 +1,11 @@
-import { isEnvironment, sendPush, type APNsEnvironment } from "./apns";
+import { isEnvironment, type APNsEnvironment, type PushOutcome } from "./apns";
 import { isDeviceToken } from "./devices";
 import { fetchIBU, parseIBUDate, type RaceSnapshot } from "./ibu";
 import { isFollowable, relevanceScore, type IBUResults, type LiveState } from "./live";
 import { LOC_KEYS } from "./payload";
-import { ProviderTokens } from "./providerTokens";
+import { ProviderTokens, type Deferred } from "./providerTokens";
+import { MAX_SEND_ATTEMPTS, PushLots } from "./pushLots";
+import type { LotPush } from "./pushSender";
 import { SubrequestBudget } from "./subrequests";
 
 /**
@@ -112,6 +114,7 @@ export async function deleteOwnedStartToken(db: D1Database, _token: string, keyI
 interface PendingToken {
   token: string;
   environment: APNsEnvironment;
+  keyId: string;
 }
 
 /**
@@ -122,13 +125,16 @@ interface PendingToken {
 const STARTED = `s.channel_id IN (SELECT channel_id FROM live_channels
   WHERE race_id = ?1 AND environment = t.environment AND ended_at IS NULL AND deleted_at IS NULL)`;
 
+/** Whether the start of the check `s` failed too many times to be sent again. */
+const EXHAUSTED = `s.attempts >= ${MAX_SEND_ATTEMPTS}`;
+
 /**
  * The tokens `t` of the environments ?2 (a JSON array) whose install race ?1 started nothing
- * for, unless it was checked against the entrants ?5 (their `digest`).
+ * for, unless it was checked against the entrants ?5 (their `digest`) or its start was given up.
  */
 const UNCHECKED = `t.environment IN (SELECT value FROM json_each(?2))
   AND t.app_attest_key_id NOT IN (
-    SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR s.entrants = ?5))`;
+    SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR s.entrants = ?5 OR ${EXHAUSTED}))`;
 
 /** Whether one of the favorites of `t` is among the athletes ?3 or the nations ?4 (JSON arrays). */
 const ENTERED = `(EXISTS (SELECT 1 FROM json_each(t.athletes) WHERE value IN (SELECT value FROM json_each(?3)))
@@ -137,15 +143,16 @@ const ENTERED = `(EXISTS (SELECT 1 FROM json_each(t.athletes) WHERE value IN (SE
 /**
  * Starts the activity of each race due within `START_LEAD_MS`, until it is over, on the
  * devices whose favorites are on its start list and that it wasn't checked for. A race
- * waits for its channel, and for its start list; what the budget can't cover, for the next run.
+ * waits for its channel, and for its start list; what the budget or the run's pushes can't
+ * cover, for the next run.
  */
 export async function startFavoriteActivities(
   env: Env,
   races: RaceSnapshot[],
   now: number,
   budget = new SubrequestBudget(),
+  lots = new PushLots(env, new ProviderTokens(env, now, budget)),
 ): Promise<void> {
-  const tokens = new ProviderTokens(env, now, budget);
   const due = races.filter((race) => isFollowable(race) && now >= parseIBUDate(race.startTime) - START_LEAD_MS);
   for (const race of due) {
     const { results: channels } = await env.DB.prepare(
@@ -160,14 +167,13 @@ export async function startFavoriteActivities(
     const unchecked = await env.DB.prepare(
       `SELECT 1 FROM live_start_tokens t WHERE t.environment IN (SELECT value FROM json_each(?2))
          AND t.app_attest_key_id NOT IN (
-           SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR (s.entrants IS NOT NULL AND ?3)))
+           SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR (s.entrants IS NOT NULL AND ?3) OR ${EXHAUSTED}))
        LIMIT 1`,
     )
       .bind(race.id, environments, race.status === "scheduled" ? 0 : 1)
       .first();
     if (!unchecked) continue;
-    // The start list, then at least one start.
-    if (!budget.has(2)) return;
+    if (!budget.has(1) || lots.room === 0) return;
     const entrants = await startList(race, budget);
     if (!entrants) continue;
 
@@ -183,53 +189,72 @@ export async function startFavoriteActivities(
       .bind(race.id, environments, ...lists, checked)
       .run();
     const { results: pending } = await env.DB.prepare(
-      `SELECT token, environment FROM live_start_tokens t WHERE ${UNCHECKED} AND ${ENTERED} ORDER BY updated_at, token`,
+      `SELECT token, environment, app_attest_key_id AS keyId FROM live_start_tokens t
+       WHERE ${UNCHECKED} AND ${ENTERED} ORDER BY updated_at, token`,
     )
       .bind(race.id, environments, ...lists, checked)
       .all<PendingToken>();
 
-    for (const device of pending) {
-      const channel = channels.find((row) => row.environment === device.environment)!;
-      // Claimed before the push: an overlapping run that read the same token skips it, and so
-      // does a device whose favorites or opt-out were saved meanwhile.
-      const claimed = await claim(env, race.id, channel.channelId, device, lists);
-      if (!claimed) continue;
-      const { state } = claimed;
-      const outcome = await tokens.send(device.environment, (token) =>
-        sendPush(
-          {
-            deviceToken: device.token,
-            environment: device.environment,
-            topic: `${env.APNS_TOPIC}.push-type.liveactivity`,
-            pushType: "liveactivity",
-            expiration: Math.floor(Math.max(now, parseIBUDate(race.startTime)) / 1000) + START_EXPIRATION_S,
-            payload: startPayload(race, channel.channelId, state, now),
-          },
-          token,
-        ),
-      );
-      switch (outcome.kind) {
-        case "sent":
-          break;
-        case "deferred":
-          await release(env, claimed);
-          return;
-        case "unregistered":
-          await release(env, claimed);
-          await deleteStartToken(env.DB, device.token);
-          break;
-        case "retry":
-        case "expiredProviderToken":
-          // The APNs key or clock may be fixed by the next run.
-          console.warn("APNs Live Activity start retry", race.id, outcome);
-          await release(env, claimed);
-          break;
-        default:
-          // Refused, the claim stays: sent again, it would be refused again.
-          console.error("APNs Live Activity start failed", race.id, outcome);
-      }
-    }
+    // Claimed before the pushes, in one transaction: an overlapping run that read the same
+    // tokens skips them, and so does a device whose favorites or opt-out were saved meanwhile.
+    const claims = await claim(env, race.id, channels, pending.slice(0, lots.room), lists);
+    const outcomes = claims.map((claimed) => lots.send(startPush(env, race, claimed, now)));
+    await lots.flush();
+    await settle(env, race.id, claims, await Promise.all(outcomes));
   }
+}
+
+function startPush(env: Env, race: RaceSnapshot, claimed: Claim, now: number): LotPush {
+  return {
+    deviceToken: claimed.token,
+    environment: claimed.environment,
+    topic: `${env.APNS_TOPIC}.push-type.liveactivity`,
+    pushType: "liveactivity",
+    expiration: Math.floor(Math.max(now, parseIBUDate(race.startTime)) / 1000) + START_EXPIRATION_S,
+    payload: startPayload(race, claimed.channelId, claimed.state, now),
+  };
+}
+
+/**
+ * Gives the starts that didn't go through back to a later run, and forgets the tokens APNs no
+ * longer knows, in at most three D1 queries, whatever the number of starts.
+ */
+async function settle(env: Env, raceId: string, claims: Claim[], outcomes: (PushOutcome | Deferred)[]): Promise<void> {
+  const unsent: Claim[] = [];
+  const failed: Claim[] = [];
+  const unregistered: string[] = [];
+  claims.forEach((claimed, index) => {
+    const outcome = outcomes[index]!;
+    switch (outcome.kind) {
+      case "sent":
+        break;
+      case "unregistered":
+        unsent.push(claimed);
+        unregistered.push(claimed.token);
+        break;
+      case "deferred":
+        // Not sent: the run had no provider token to send it with.
+        unsent.push(claimed);
+        break;
+      case "retry":
+      case "expiredProviderToken":
+        // The APNs key or clock may be fixed by the next run.
+        console.warn("APNs Live Activity start retry", raceId, outcome);
+        failed.push(claimed);
+        break;
+      default:
+        // Refused, the claim stays: sent again, it would be refused again.
+        console.error("APNs Live Activity start failed", raceId, outcome);
+    }
+  });
+  const statements = [
+    ...(unsent.length > 0 ? [release(env, raceId, unsent, 0)] : []),
+    ...(failed.length > 0 ? [release(env, raceId, failed, 1)] : []),
+    ...(unregistered.length > 0
+      ? [env.DB.prepare("DELETE FROM live_start_tokens WHERE token IN (SELECT value FROM json_each(?1))").bind(JSON.stringify(unregistered))]
+      : []),
+  ];
+  if (statements.length > 0) await env.DB.batch(statements);
 }
 
 /**
@@ -287,45 +312,54 @@ function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, n
   };
 }
 
-interface Claim {
+interface Claim extends PendingToken {
   raceId: string;
-  keyId: string;
   channelId: string;
   /** The state last published on the channel, which the new activity starts from: it gets only the broadcasts sent after. */
   state: LiveState;
 }
 
 /**
- * Claims the start of the race on `channelId` for the device's install, while the channel is
+ * Claims the start of the race on its channel for each device's install, while the channel is
  * open and the stored token still has a favorite among the entrants `lists`, over a check the
- * previous entrants started nothing for; `undefined` when there is nothing to claim.
+ * previous entrants started nothing for. One transaction of two queries, whatever the number
+ * of devices: the Workers Free plan allows 50 D1 queries per invocation, each statement of a
+ * batch counting (https://developers.cloudflare.com/d1/platform/limits/).
  */
 async function claim(
   env: Env,
   raceId: string,
-  channelId: string,
-  device: PendingToken,
+  channels: { environment: APNsEnvironment; channelId: string }[],
+  devices: PendingToken[],
   lists: string[],
-): Promise<Claim | undefined> {
-  const insert = env.DB.prepare(
-    `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
-     SELECT ?1, t.app_attest_key_id, ?6, NULL FROM live_start_tokens t
-     WHERE t.token = ?5 AND t.environment = ?2 AND ${ENTERED} AND EXISTS (
-       SELECT 1 FROM live_channels
-       WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?6 AND ended_at IS NULL AND deleted_at IS NULL)
-     ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL
-       WHERE live_starts.channel_id IS NOT excluded.channel_id
-     RETURNING app_attest_key_id AS keyId`,
-  ).bind(raceId, device.environment, ...lists, device.token, channelId);
-  // In the same transaction as the claim.
-  const read = env.DB.prepare(
-    "SELECT state FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3",
-  ).bind(raceId, device.environment, channelId);
-  const [claimed, channel] = await env.DB.batch([insert, read]);
-  const keyId = (claimed?.results[0] as { keyId: string } | undefined)?.keyId;
-  const state = (channel?.results[0] as { state: string } | undefined)?.state;
-  if (!keyId || !state) return undefined;
-  return { raceId, keyId, channelId, state: JSON.parse(state) as LiveState };
+): Promise<Claim[]> {
+  if (devices.length === 0) return [];
+  const channelIds = JSON.stringify(channels.map((channel) => channel.channelId));
+  const [claimed, read] = await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
+       SELECT ?1, t.app_attest_key_id, c.channel_id, NULL FROM live_start_tokens t
+       JOIN live_channels c ON c.race_id = ?1 AND c.environment = t.environment
+         AND c.channel_id IN (SELECT value FROM json_each(?2)) AND c.ended_at IS NULL AND c.deleted_at IS NULL
+       WHERE t.token IN (SELECT value FROM json_each(?5)) AND ${ENTERED}
+       ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL
+         WHERE live_starts.channel_id IS NOT excluded.channel_id
+       RETURNING app_attest_key_id AS keyId`,
+    ).bind(raceId, channelIds, ...lists, JSON.stringify(devices.map((device) => device.token))),
+    // In the same transaction as the claims.
+    env.DB.prepare(
+      `SELECT environment, state FROM live_channels
+       WHERE race_id = ?1 AND channel_id IN (SELECT value FROM json_each(?2))`,
+    ).bind(raceId, channelIds),
+  ]);
+  const keys = new Set((claimed!.results as { keyId: string }[]).map((row) => row.keyId));
+  const states = new Map((read!.results as { environment: APNsEnvironment; state: string }[]).map((row) => [row.environment, row.state]));
+  return devices.flatMap((device) => {
+    const state = states.get(device.environment);
+    if (!keys.has(device.keyId) || !state) return [];
+    const channelId = channels.find((channel) => channel.environment === device.environment)!.channelId;
+    return [{ ...device, raceId, channelId, state: JSON.parse(state) as LiveState }];
+  });
 }
 
 /**
@@ -354,16 +388,15 @@ export async function pruneStarts(db: D1Database, now: number): Promise<void> {
 }
 
 /**
- * Gives a start that didn't go through back to a later run, unless its channel was replaced
- * meanwhile: the claim is then a newer run's, on the new channel.
+ * Gives the starts `claims` of the race that didn't go through back to a later run, counting
+ * the `failed` send, unless their channel was replaced meanwhile: the claim is then a newer
+ * run's, on the new channel. Their rows are kept, for one write rather than a delete and an
+ * insert at each retry.
  */
-function release(env: Env, claimed: Claim) {
-  return env.DB.prepare("DELETE FROM live_starts WHERE race_id = ?1 AND app_attest_key_id = ?2 AND channel_id = ?3")
-    .bind(claimed.raceId, claimed.keyId, claimed.channelId)
-    .run();
-}
-
-/** Deletes a token APNs reported as no longer valid. */
-async function deleteStartToken(db: D1Database, token: string): Promise<void> {
-  await db.prepare("DELETE FROM live_start_tokens WHERE token = ?1").bind(token).run();
+function release(env: Env, raceId: string, claims: Claim[], failed: 0 | 1): D1PreparedStatement {
+  return env.DB.prepare(
+    `UPDATE live_starts SET channel_id = NULL, attempts = attempts + ?3
+     WHERE race_id = ?1 AND (app_attest_key_id, channel_id) IN (
+       SELECT value ->> '$[0]', value ->> '$[1]' FROM json_each(?2))`,
+  ).bind(raceId, JSON.stringify(claims.map((claimed) => [claimed.keyId, claimed.channelId])), failed);
 }

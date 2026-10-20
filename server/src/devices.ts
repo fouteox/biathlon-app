@@ -100,11 +100,12 @@ export async function ownsDevice(db: D1Database, token: string, keyId: string): 
   return row === null || row.keyId === null || row.keyId === keyId;
 }
 
-/** Deletes a token APNs reported as no longer valid. */
-export async function deleteDevice(db: D1Database, token: string): Promise<void> {
+/** Deletes the tokens APNs reported as no longer valid, with their queued alerts. */
+export async function deleteDevices(db: D1Database, tokens: string[]): Promise<void> {
+  const list = JSON.stringify(tokens);
   await db.batch([
-    db.prepare("DELETE FROM devices WHERE token = ?1").bind(token),
-    db.prepare("DELETE FROM outbox WHERE token = ?1").bind(token),
+    db.prepare("DELETE FROM devices WHERE token IN (SELECT value FROM json_each(?1))").bind(list),
+    db.prepare("DELETE FROM outbox WHERE token IN (SELECT value FROM json_each(?1))").bind(list),
   ]);
 }
 

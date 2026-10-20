@@ -1,37 +1,38 @@
-import { sendPush, type APNsEnvironment } from "./apns";
+import type { APNsEnvironment } from "./apns";
 import { detectChange, hasChanged, type RaceChange } from "./changes";
-import { deleteDevice } from "./devices";
+import { deleteDevices } from "./devices";
 import { activeEvents, fetchIBU, seasonId, snapshot, type IBUCompetition, type IBUEvent, type RaceSnapshot } from "./ibu";
 import { syncLiveActivities } from "./live";
 import { startFavoriteActivities } from "./liveStarts";
-import { buildPayload, type AlertInput } from "./payload";
+import type { AlertInput } from "./payload";
 import { ProviderTokens } from "./providerTokens";
+import { MAX_SEND_ATTEMPTS, PushLots } from "./pushLots";
 import { SubrequestBudget } from "./subrequests";
 
 /** The calendar of events rarely changes: refresh it every 6 hours. */
 const EVENTS_TTL_MS = 6 * 60 * 60 * 1000;
 /** An alert older than this is no longer useful. */
 const OUTBOX_MAX_AGE_MS = 30 * 60 * 1000;
-const MAX_ATTEMPTS = 5;
 
 /**
  * One cron run: detect race changes and queue alerts, send a batch of alerts, then
- * update the races' Live Activities and start those of the favorites' races with the
- * subrequests left.
+ * update the races' Live Activities with the subrequests left, and start those of the
+ * favorites' races. Device pushes go out in lots (`PushLots`), outside the run's budget.
  */
 export async function runCron(env: Env, now: number): Promise<void> {
   const budget = new SubrequestBudget();
+  const lots = new PushLots(env, new ProviderTokens(env, now, budget));
   let races: RaceSnapshot[] | undefined;
   try {
     ({ races } = await pollRaces(env, now, budget));
   } finally {
     // Alerts queued by earlier runs and ended activities still go out while the IBU API is down.
     try {
-      await drainOutbox(env, now, budget);
+      await drainOutbox(env, now, lots);
     } finally {
       await syncLiveActivities(env, races, now, budget);
       // After the channels it subscribes the new activities to.
-      if (races) await startFavoriteActivities(env, races, now, budget);
+      if (races) await startFavoriteActivities(env, races, now, budget, lots);
     }
   }
 }
@@ -112,56 +113,58 @@ interface OutboxRow {
   created_at: number;
 }
 
-export async function drainOutbox(env: Env, now: number, budget = new SubrequestBudget()): Promise<void> {
-  const limit = Number(env.MAX_PUSHES_PER_RUN) || 30;
+export async function drainOutbox(
+  env: Env,
+  now: number,
+  lots = new PushLots(env, new ProviderTokens(env, now, new SubrequestBudget())),
+): Promise<void> {
   const { results: rows } = await env.DB.prepare(
     "SELECT * FROM outbox WHERE created_at >= ?1 ORDER BY id LIMIT ?2",
   )
-    .bind(now - OUTBOX_MAX_AGE_MS, limit)
+    .bind(now - OUTBOX_MAX_AGE_MS, lots.room)
     .all<OutboxRow>();
 
   const done: number[] = [];
   const retry: number[] = [];
   const unregistered: string[] = [];
-  if (rows.length > 0) {
-    const tokens = new ProviderTokens(env, now, budget);
-    for (const row of rows) {
-      const request = {
-        deviceToken: row.token,
-        environment: row.environment,
-        topic: env.APNS_TOPIC,
-        collapseId: `${row.kind}-${row.race_id}`,
-        expiration: Math.floor((row.created_at + OUTBOX_MAX_AGE_MS) / 1000),
-        payload: buildPayload({
-          kind: row.kind,
-          raceId: row.race_id,
-          raceName: row.race_name,
-          startTime: row.start_time,
-          locale: row.locale,
-          timeZone: row.time_zone,
-        }),
-      };
-      const outcome = await tokens.send(row.environment, (token) => sendPush(request, token));
-      switch (outcome.kind) {
-        case "sent":
-          done.push(row.id);
-          break;
-        case "unregistered":
-          unregistered.push(row.token);
-          break;
-        case "deferred":
-          // Left untouched for the next run.
-          break;
-        case "retry":
-          (row.attempts + 1 >= MAX_ATTEMPTS ? done : retry).push(row.id);
-          console.warn("APNs retry", row.id, outcome.reason);
-          break;
-        default:
-          done.push(row.id);
-          console.error("APNs failure", row.id, outcome);
-      }
+  const sent = rows.map(async (row) => {
+    const outcome = await lots.send({
+      deviceToken: row.token,
+      environment: row.environment,
+      topic: env.APNS_TOPIC,
+      collapseId: `${row.kind}-${row.race_id}`,
+      expiration: Math.floor((row.created_at + OUTBOX_MAX_AGE_MS) / 1000),
+      alert: {
+        kind: row.kind,
+        raceId: row.race_id,
+        raceName: row.race_name,
+        startTime: row.start_time,
+        locale: row.locale,
+        timeZone: row.time_zone,
+      },
+    });
+    switch (outcome.kind) {
+      case "sent":
+        done.push(row.id);
+        break;
+      case "unregistered":
+        unregistered.push(row.token);
+        break;
+      case "deferred":
+        // Left untouched for the next run.
+        break;
+      case "retry":
+      case "expiredProviderToken":
+        (row.attempts + 1 >= MAX_SEND_ATTEMPTS ? done : retry).push(row.id);
+        console.warn("APNs retry", row.id, outcome);
+        break;
+      default:
+        done.push(row.id);
+        console.error("APNs failure", row.id, outcome);
     }
-  }
+  });
+  await lots.flush();
+  await Promise.all(sent);
 
   const statements = [
     env.DB.prepare("DELETE FROM outbox WHERE created_at < ?1").bind(now - OUTBOX_MAX_AGE_MS),
@@ -171,7 +174,7 @@ export async function drainOutbox(env: Env, now: number, budget = new Subrequest
     ),
   ];
   await env.DB.batch(statements);
-  for (const deviceToken of new Set(unregistered)) await deleteDevice(env.DB, deviceToken);
+  if (unregistered.length > 0) await deleteDevices(env.DB, [...new Set(unregistered)]);
 }
 
 /** World Cup events (Level=1) of the current season, cached in D1. */

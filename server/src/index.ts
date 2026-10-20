@@ -14,6 +14,8 @@ import { authorize, pruneKeys, registerKey } from "./keys";
 import { channelFor } from "./live";
 import { runCron } from "./watcher";
 
+export { PushSender } from "./pushSender";
+
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
