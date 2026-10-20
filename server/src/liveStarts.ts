@@ -60,12 +60,21 @@ function codes(value: unknown, pattern: RegExp): string[] | undefined {
 
 /**
  * Saves the favorites for the App Attest key that signed the request, with one token per key
- * like `saveDevice`. The races the previous favorites started nothing for are checked again.
+ * like `saveDevice`. Changed favorites check again the races the previous ones started nothing for.
  */
 export async function saveStartToken(db: D1Database, registration: StartRegistration, keyId: string, now: number): Promise<void> {
+  const athletes = JSON.stringify(registration.athletes);
+  const nations = JSON.stringify(registration.nations);
   await db.batch([
+    // Read before the upsert: the app sends its favorites at every launch, mostly unchanged.
+    db
+      .prepare(
+        `DELETE FROM live_starts WHERE app_attest_key_id = ?1 AND started = 0 AND NOT EXISTS (
+           SELECT 1 FROM live_start_tokens
+           WHERE app_attest_key_id = ?1 AND environment = ?2 AND athletes = ?3 AND nations = ?4)`,
+      )
+      .bind(keyId, registration.environment, athletes, nations),
     db.prepare("DELETE FROM live_start_tokens WHERE app_attest_key_id = ?1 AND token <> ?2").bind(keyId, registration.token),
-    db.prepare("DELETE FROM live_starts WHERE token = ?1 AND started = 0").bind(registration.token),
     db
       .prepare(
         `INSERT INTO live_start_tokens (token, environment, athletes, nations, updated_at, app_attest_key_id)
@@ -75,14 +84,7 @@ export async function saveStartToken(db: D1Database, registration: StartRegistra
            updated_at = excluded.updated_at
          WHERE live_start_tokens.app_attest_key_id = excluded.app_attest_key_id`,
       )
-      .bind(
-        registration.token,
-        registration.environment,
-        JSON.stringify(registration.athletes),
-        JSON.stringify(registration.nations),
-        now,
-        keyId,
-      ),
+      .bind(registration.token, registration.environment, athletes, nations, now, keyId),
   ]);
 }
 
@@ -95,13 +97,18 @@ export async function ownsStartToken(db: D1Database, token: string, keyId: strin
   return row === null || row.keyId === keyId;
 }
 
-/** Deletes `token` on behalf of `keyId`, only if that key saved it. Its starts go with it. */
-export async function deleteOwnedStartToken(db: D1Database, token: string, keyId: string): Promise<void> {
-  await db.prepare("DELETE FROM live_start_tokens WHERE token = ?1 AND app_attest_key_id = ?2").bind(token, keyId).run();
+/**
+ * Deletes the favorites `keyId` saved, whatever token the app sends: ActivityKit may have
+ * replaced the one the server holds before the app could send the new one. `ownsStartToken`
+ * first checks the token sent isn't another key's.
+ */
+export async function deleteOwnedStartToken(db: D1Database, _token: string, keyId: string): Promise<void> {
+  await db.prepare("DELETE FROM live_start_tokens WHERE app_attest_key_id = ?1").bind(keyId).run();
 }
 
 interface PendingToken {
   token: string;
+  keyId: string;
   environment: APNsEnvironment;
   athletes: string;
   nations: string;
@@ -128,9 +135,9 @@ export async function startFavoriteActivities(
       .bind(race.id)
       .all<{ environment: APNsEnvironment; channelId: string; state: string }>();
     const { results: pending } = await env.DB.prepare(
-      `SELECT token, environment, athletes, nations FROM live_start_tokens
+      `SELECT token, app_attest_key_id AS keyId, environment, athletes, nations FROM live_start_tokens
        WHERE environment IN (SELECT value FROM json_each(?2))
-         AND token NOT IN (SELECT token FROM live_starts WHERE race_id = ?1)
+         AND app_attest_key_id NOT IN (SELECT app_attest_key_id FROM live_starts WHERE race_id = ?1)
        ORDER BY updated_at, token`,
     )
       .bind(race.id, JSON.stringify(channels.map((channel) => channel.environment)))
@@ -146,9 +153,11 @@ export async function startFavoriteActivities(
         (JSON.parse(device.athletes) as string[]).some((id) => entrants.athletes.has(id)) ||
         (JSON.parse(device.nations) as string[]).some((nation) => entrants.nations.has(nation));
       if (!isEntered) {
-        await record(env, race.id, device.token, false);
+        await claim(env, race.id, device.keyId, false);
         continue;
       }
+      // Claimed before the push: an overlapping run that read the same pending token skips it.
+      if (!(await claim(env, race.id, device.keyId, true))) continue;
       const channel = channels.find((row) => row.environment === device.environment)!;
       const state = JSON.parse(channel.state) as LiveState;
       const outcome = await tokens.send(device.environment, (token) =>
@@ -165,21 +174,22 @@ export async function startFavoriteActivities(
         ),
       );
       switch (outcome.kind) {
+        case "sent":
+          break;
         case "deferred":
+          await release(env, race.id, device.keyId);
           return;
         case "unregistered":
+          await release(env, race.id, device.keyId);
           await deleteStartToken(env.DB, device.token);
           break;
         case "retry":
           console.warn("APNs Live Activity start retry", race.id, outcome.reason);
-          break;
-        case "sent":
-          await record(env, race.id, device.token, true);
+          await release(env, race.id, device.keyId);
           break;
         default:
-          // Refused: sent again, it would be refused again.
+          // Refused, the claim stays: sent again, it would be refused again.
           console.error("APNs Live Activity start failed", race.id, outcome);
-          await record(env, race.id, device.token, true);
       }
     }
   }
@@ -228,9 +238,20 @@ function startPayload(race: RaceSnapshot, channelId: string, state: LiveState, n
   };
 }
 
-function record(env: Env, raceId: string, token: string, started: boolean) {
-  return env.DB.prepare("INSERT INTO live_starts (race_id, token, started) VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING")
-    .bind(raceId, token, started ? 1 : 0)
+/** Records that the race was checked for the install; `false` when another run already had. */
+async function claim(env: Env, raceId: string, keyId: string, started: boolean): Promise<boolean> {
+  const { meta } = await env.DB.prepare(
+    "INSERT INTO live_starts (race_id, app_attest_key_id, started) VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING",
+  )
+    .bind(raceId, keyId, started ? 1 : 0)
+    .run();
+  return meta.changes === 1;
+}
+
+/** Gives a start that didn't go through back to a later run. */
+function release(env: Env, raceId: string, keyId: string) {
+  return env.DB.prepare("DELETE FROM live_starts WHERE race_id = ?1 AND app_attest_key_id = ?2 AND started = 1")
+    .bind(raceId, keyId)
     .run();
 }
 

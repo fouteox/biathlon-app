@@ -13,12 +13,13 @@ CREATE TABLE live_start_tokens (
 );
 CREATE INDEX live_start_tokens_by_app_attest_key ON live_start_tokens (app_attest_key_id);
 
--- The tokens a race was checked for: started when one of their favorites is on its start
--- list, so each device gets at most one start per race. Changed favorites check again
--- the races that started nothing.
+-- The installs a race was checked for, by App Attest key rather than by token, which
+-- ActivityKit can replace: started (or being started) when one of their favorites is on its
+-- start list, so each install gets at most one start per race. Changed favorites check
+-- again the races that started nothing; a race reinstated after its end, every install.
 CREATE TABLE live_starts (
   race_id TEXT NOT NULL REFERENCES races (id),
-  token TEXT NOT NULL REFERENCES live_start_tokens (token) ON DELETE CASCADE,
+  app_attest_key_id TEXT NOT NULL REFERENCES app_attest_keys (key_id) ON DELETE CASCADE,
   started INTEGER NOT NULL CHECK (started IN (0, 1)),
-  PRIMARY KEY (race_id, token)
+  PRIMARY KEY (race_id, app_attest_key_id)
 );

@@ -345,6 +345,14 @@ describe("Live Activity start endpoint", () => {
     expect(await owner.tokens()).toEqual(["cd".repeat(32)]);
   });
 
+  it("forgets the key's favorites whatever token the app deletes with", async () => {
+    const { call, signed, tokens } = await live();
+    await call(await signed("PUT", token, favorites));
+    // ActivityKit replaced the token before the app could send the new one.
+    expect((await call(await signed("DELETE", "cd".repeat(32)))).status).toBe(204);
+    expect(await tokens()).toEqual([]);
+  });
+
   it("keeps the keys of saved favorites", async () => {
     const { env, call, signed } = await live();
     const keys = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;

@@ -995,15 +995,16 @@ describe("Live Activities started for favorites", () => {
   const PERROT = "BTFRA00000000001";
   const KEY = "key";
 
-  async function save(env: Env, token: string, body: object) {
+  /** Saves the favorites of the install `key`, by default one per token. */
+  async function save(env: Env, token: string, body: object, key = `${KEY}-${token}`) {
     await env.DB.prepare(
       "INSERT INTO app_attest_keys (key_id, public_key, environment, counter, receipt, created_at) VALUES (?1, '', 'development', 0, '', 0) ON CONFLICT DO NOTHING",
     )
-      .bind(`${KEY}-${token}`)
+      .bind(key)
       .run();
     const registration = parseStartRegistration(token, { environment: "production", athletes: [], nations: [], ...body });
     if (typeof registration === "string") throw new Error(registration);
-    await saveStartToken(env.DB, registration, `${KEY}-${token}`, 0);
+    await saveStartToken(env.DB, registration, key, 0);
   }
 
   /** A race with its channels, and tokens: Perrot's fan, an Italy fan who has nobody racing, and a sandbox France fan. */
@@ -1076,6 +1077,45 @@ describe("Live Activities started for favorites", () => {
     const sent = stubNetwork();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
     expect(starts(sent).map((request) => request.url)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
+  });
+
+  it("checks again only for changed favorites, and keeps an install's starts when its token changes", async () => {
+    const env = await setUp();
+    stubNetwork();
+    await startFavoriteActivities(env, [race()], DUE);
+
+    // The app sends its favorites at every launch, and ActivityKit can replace the token.
+    await save(env, "bb".repeat(32), { nations: ["ITA"] });
+    await save(env, "dd".repeat(32), { athletes: [PERROT] }, `${KEY}-${"aa".repeat(32)}`);
+    const sent = stubNetwork();
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
+    expect(sent).toEqual([]);
+  });
+
+  it("sends each start once when cron runs overlap", async () => {
+    const env = await setUp();
+    const sent = stubNetwork();
+    await Promise.all([startFavoriteActivities(env, [race()], DUE), startFavoriteActivities(env, [race()], DUE)]);
+    expect(starts(sent).map((request) => request.url).sort()).toEqual([
+      `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
+      `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
+    ]);
+  });
+
+  it("starts the activity again when a race is reinstated after its end", async () => {
+    const env = await setUp();
+    stubNetwork();
+    await startFavoriteActivities(env, [race()], DUE);
+    await syncLiveActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], DUE + 60_000);
+
+    const sent = stubNetwork();
+    await syncLiveActivities(env, [race()], DUE + 2 * 60_000);
+    await startFavoriteActivities(env, [race()], DUE + 2 * 60_000);
+    const [production] = await channels(env);
+    expect(starts(sent).map((request) => (request.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"])).toEqual([
+      production!.channelId,
+      expect.any(String),
+    ]);
   });
 
   it("waits for the start list, and for an open channel", async () => {
