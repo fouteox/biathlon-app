@@ -92,7 +92,7 @@ final class LiveActivityStarts {
         }
     }
 
-    private static func hex(_ token: Data) -> String {
+    private nonisolated static func hex(_ token: Data) -> String {
         token.map { String(format: "%02x", $0) }.joined()
     }
 
