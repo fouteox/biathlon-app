@@ -1,9 +1,10 @@
-import { isEnvironment, sendPush, type APNsEnvironment } from "./apns";
+import { isEnvironment, type APNsEnvironment } from "./apns";
 import { isDeviceToken } from "./devices";
 import { fetchIBU, parseIBUDate, type RaceSnapshot } from "./ibu";
 import { isFollowable, relevanceScore, type IBUResults, type LiveState } from "./live";
 import { LOC_KEYS } from "./payload";
 import { ProviderTokens } from "./providerTokens";
+import { PushLots } from "./pushLots";
 import { SubrequestBudget } from "./subrequests";
 
 /**
@@ -137,15 +138,16 @@ const ENTERED = `(EXISTS (SELECT 1 FROM json_each(t.athletes) WHERE value IN (SE
 /**
  * Starts the activity of each race due within `START_LEAD_MS`, until it is over, on the
  * devices whose favorites are on its start list and that it wasn't checked for. A race
- * waits for its channel, and for its start list; what the budget can't cover, for the next run.
+ * waits for its channel, and for its start list; what the budget or the run's pushes can't
+ * cover, for the next run.
  */
 export async function startFavoriteActivities(
   env: Env,
   races: RaceSnapshot[],
   now: number,
   budget = new SubrequestBudget(),
+  lots = new PushLots(env, new ProviderTokens(env, now, budget)),
 ): Promise<void> {
-  const tokens = new ProviderTokens(env, now, budget);
   const due = races.filter((race) => isFollowable(race) && now >= parseIBUDate(race.startTime) - START_LEAD_MS);
   for (const race of due) {
     const { results: channels } = await env.DB.prepare(
@@ -166,8 +168,7 @@ export async function startFavoriteActivities(
       .bind(race.id, environments, race.status === "scheduled" ? 0 : 1)
       .first();
     if (!unchecked) continue;
-    // The start list, then at least one start.
-    if (!budget.has(2)) return;
+    if (!budget.has(1) || lots.room === 0) return;
     const entrants = await startList(race, budget);
     if (!entrants) continue;
 
@@ -188,47 +189,48 @@ export async function startFavoriteActivities(
       .bind(race.id, environments, ...lists, checked)
       .all<PendingToken>();
 
+    const started: Promise<void>[] = [];
     for (const device of pending) {
+      if (lots.room === 0) break;
       const channel = channels.find((row) => row.environment === device.environment)!;
       // Claimed before the push: an overlapping run that read the same token skips it, and so
       // does a device whose favorites or opt-out were saved meanwhile.
       const claimed = await claim(env, race.id, channel.channelId, device, lists);
       if (!claimed) continue;
-      const { state } = claimed;
-      const outcome = await tokens.send(device.environment, (token) =>
-        sendPush(
-          {
-            deviceToken: device.token,
-            environment: device.environment,
-            topic: `${env.APNS_TOPIC}.push-type.liveactivity`,
-            pushType: "liveactivity",
-            expiration: Math.floor(Math.max(now, parseIBUDate(race.startTime)) / 1000) + START_EXPIRATION_S,
-            payload: startPayload(race, channel.channelId, state, now),
-          },
-          token,
-        ),
-      );
-      switch (outcome.kind) {
-        case "sent":
-          break;
-        case "deferred":
-          await release(env, claimed);
-          return;
-        case "unregistered":
-          await release(env, claimed);
-          await deleteStartToken(env.DB, device.token);
-          break;
-        case "retry":
-        case "expiredProviderToken":
-          // The APNs key or clock may be fixed by the next run.
-          console.warn("APNs Live Activity start retry", race.id, outcome);
-          await release(env, claimed);
-          break;
-        default:
-          // Refused, the claim stays: sent again, it would be refused again.
-          console.error("APNs Live Activity start failed", race.id, outcome);
-      }
+      started.push(startOn(env, lots, race, device, claimed, now));
     }
+    await lots.flush();
+    await Promise.all(started);
+  }
+}
+
+/** Queues the start of the claimed activity, then settles the claim with its outcome. */
+async function startOn(env: Env, lots: PushLots, race: RaceSnapshot, device: PendingToken, claimed: Claim, now: number) {
+  const outcome = await lots.send({
+    deviceToken: device.token,
+    environment: device.environment,
+    topic: `${env.APNS_TOPIC}.push-type.liveactivity`,
+    pushType: "liveactivity",
+    expiration: Math.floor(Math.max(now, parseIBUDate(race.startTime)) / 1000) + START_EXPIRATION_S,
+    payload: startPayload(race, claimed.channelId, claimed.state, now),
+  });
+  switch (outcome.kind) {
+    case "sent":
+      break;
+    case "unregistered":
+      await release(env, claimed);
+      await deleteStartToken(env.DB, device.token);
+      break;
+    case "deferred":
+    case "retry":
+    case "expiredProviderToken":
+      // The APNs key or clock may be fixed by the next run.
+      console.warn("APNs Live Activity start retry", race.id, outcome);
+      await release(env, claimed);
+      break;
+    default:
+      // Refused, the claim stays: sent again, it would be refused again.
+      console.error("APNs Live Activity start failed", race.id, outcome);
   }
 }
 

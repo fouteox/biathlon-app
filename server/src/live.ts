@@ -71,9 +71,8 @@ const RELEVANCE_SCORES: Record<RaceStatus, number> = { live: 1, scheduled: 0.5, 
 /** Seconds between the UNIX epoch and the reference date of Foundation's `Date`. */
 const REFERENCE_DATE_S = 978_307_200;
 /**
- * Each creation is one subrequest; the Free plan allows 50 per invocation, and
- * the outbox spends up to `MAX_PUSHES_PER_RUN` of them. Counted per environment,
- * so failures in one never hold up the other.
+ * Each creation is one subrequest; the Free plan allows 50 per invocation. Counted
+ * per environment, so failures in one never hold up the other.
  */
 const MAX_CHANNEL_CREATIONS_PER_ENVIRONMENT = 2;
 /**

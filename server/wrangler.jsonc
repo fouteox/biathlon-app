@@ -18,10 +18,11 @@
       "migrations_dir": "migrations"
     }
   ],
+  // Sends the device pushes in lots, each Durable Object invocation having its own subrequests (src/pushSender.ts).
+  "durable_objects": { "bindings": [{ "name": "PUSH_SENDER", "class_name": "PushSender" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PushSender"] }],
   "vars": {
     "APNS_TOPIC": "com.fouteox.biathlon",
-    // Each push is one subrequest; the Free plan allows 50 per invocation, and Live Activities need up to 15.
-    "MAX_PUSHES_PER_RUN": "30",
     // Oldest app build (CFBundleVersion) App Attest accepts: raise it to shut out builds before a fix.
     "APP_ATTEST_MIN_BUNDLE_VERSION": "1"
   },
