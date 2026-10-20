@@ -9,6 +9,9 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
     /// (`Date.FormatStyle` with `timeZone = .gmt`) so the day doesn't shift.
     public let birthdate: Date?
     public let photoURL: URL?
+    /// `Functions` is "Deceased" instead of "Athlete" once the IBU records an athlete's death
+    /// (Sivert Guttorm Bakken, Linas Banys); a retirement isn't recorded.
+    public let isDeceased: Bool
 
     enum CodingKeys: String, CodingKey {
         case id = "IBUId"
@@ -18,6 +21,7 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
         case nation = "NAT"
         case birthdate = "Birthdate"
         case photoURL = "PhotoURI"
+        case functions = "Functions"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -31,6 +35,7 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
         nation = try c.decodeIfPresent(String.self, forKey: .nation)
         birthdate = try? c.decodeIfPresent(Date.self, forKey: .birthdate)
         photoURL = (try? c.decodeIfPresent(String.self, forKey: .photoURL)).flatMap { URL(string: $0) }
+        isDeceased = try c.decodeIfPresent(String.self, forKey: .functions) == "Deceased"
     }
 }
 

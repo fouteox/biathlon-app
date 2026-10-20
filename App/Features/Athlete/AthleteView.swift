@@ -29,6 +29,9 @@ struct AthleteView: View {
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(bio.fullName).font(.title3.bold())
+                            if bio.isDeceased {
+                                Text("Deceased").foregroundStyle(.secondary)
+                            }
                             if let nation = bio.nation {
                                 Text(Nation.titled(nation, nation: nation))
                             }

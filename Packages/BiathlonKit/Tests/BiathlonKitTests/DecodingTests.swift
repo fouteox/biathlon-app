@@ -45,6 +45,15 @@ struct DecodingTests {
         let bio: AthleteBio = try fixture("athlete")
         #expect(bio.birthdate != nil)
         #expect(bio.photoURL?.lastPathComponent == "BTFRA12906200101.png")
+        #expect(!bio.isDeceased)
+    }
+
+    /// As `CISBios?IBUId=BTNOR11807199801` returns Sivert Guttorm Bakken, who died in December 2025.
+    @Test func deceasedAthlete() throws {
+        let bio: AthleteBio = try decode(
+            #"{"IBUId":"BTNOR11807199801","FullName":"Sivert Guttorm BAKKEN","NAT":"NOR","Age":null,"Functions":"Deceased"}"#
+        )
+        #expect(bio.isDeceased)
     }
 
     @Test func seasonIDs() {
@@ -61,5 +70,14 @@ struct DecodingTests {
         let championships: BiathlonEvent = try decode(
             event("BT2425SWRLCH__", start: "2025-02-11T12:00:00Z", end: "2025-02-23T12:00:00Z"))
         #expect(championships.isWorldChampionships)
+        #expect(!championships.isOlympics)
+    }
+
+    /// The Olympics are in the World Cup calendar (`Level=1`): `BT2526SWRLOG__` (Antholz-Anterselva).
+    @Test func olympics() throws {
+        let olympics: BiathlonEvent = try decode(
+            event("BT2526SWRLOG__", start: "2026-02-06T12:00:00Z", end: "2026-02-22T12:00:00Z"))
+        #expect(olympics.isOlympics)
+        #expect(!olympics.isWorldChampionships)
     }
 }

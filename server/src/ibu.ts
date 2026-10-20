@@ -32,6 +32,8 @@ export interface RaceSnapshot {
 
 export type RaceStatus = "scheduled" | "live" | "cancelled" | "finished";
 
+const FIRST_RESULT_STATUS_ID = 10;
+
 /** Spends one subrequest of the run's budget; throws once none is left. */
 export async function fetchIBU<T>(path: string, query: Record<string, string>, budget: SubrequestBudget): Promise<T> {
   if (!budget.take()) throw new Error(`IBU ${path}: no subrequest left in this run`);
@@ -40,6 +42,11 @@ export async function fetchIBU<T>(path: string, query: Record<string, string>, b
   const response = await fetch(url);
   if (!response.ok) throw new Error(`IBU ${path} answered ${response.status}`);
   return response.json<T>();
+}
+
+/** A race's event: a `RaceId` starts with its 14-character `EventId`, as biathlonresults.com reads it. */
+export function eventId(raceId: string): string {
+  return raceId.slice(0, 14);
 }
 
 /** IBU season id for a date, e.g. "2627" for winter 2026-27. Seasons start on July 1st. */
@@ -79,13 +86,14 @@ export function snapshot(race: IBUCompetition): RaceSnapshot {
 
 /**
  * Observed values: StatusId 1 / "Scheduled" / SCHEDULED, 6 / "Cancelled" /
- * CANCELLED and 11 / "Final" / FINISHED. Same rules as the app
+ * CANCELLED and 11 / "Final" / FINISHED. biathlonresults.com shows results from
+ * StatusId 10, which covers results not yet official. Same rules as the app
  * (`Competition.state`), checked against the shared `race-status.json` fixture.
  */
 export function raceStatus(race: Omit<IBUCompetition, "RaceId" | "ShortDescription">): RaceStatus {
   if (race.IsLive) return "live";
   const text = `${race.ScheduleStatus ?? ""} ${race.StatusText ?? ""}`.toUpperCase();
   if (text.includes("CANCEL") || Number(race.StatusId) === 6) return "cancelled";
-  if (text.includes("FINISHED") || Number(race.StatusId) === 11) return "finished";
+  if (text.includes("FINISHED") || Number(race.StatusId) >= FIRST_RESULT_STATUS_ID) return "finished";
   return "scheduled";
 }

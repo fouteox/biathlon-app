@@ -50,7 +50,8 @@ enum ReminderScheduler {
         content.title = race.shortDescription
         content.body = String(localized: "Starts in \(minutes) minutes")
         content.sound = .default
-        content.threadIdentifier = race.id
+        // Grouped by event, like the server's alerts.
+        content.threadIdentifier = race.eventID
         content.userInfo = ["raceId": race.id]
 
         // A time interval is absolute, unlike calendar components, which follow the device's time zone.

@@ -23,6 +23,9 @@ struct CalendarView: View {
                             if event.isWorldChampionships {
                                 Text("World Championships").font(.caption.bold()).foregroundStyle(.tint)
                             }
+                            if event.isOlympics {
+                                Text("Olympic Games").font(.caption.bold()).foregroundStyle(.tint)
+                            }
                         }
                     }
                 }
