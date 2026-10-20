@@ -246,16 +246,22 @@ async function openChannels(env: Env, tokens: ProviderTokens, races: RaceSnapsho
     // The new channel replaces a dropped one, with the leaders last published on it while the race runs.
     const stored = race.status === "live" ? dropped.get(key(race.id, environment))?.state : undefined;
     const state: LiveState = { leaders: [], ...(stored && (JSON.parse(stored) as LiveState)), ...calendarFields(race) };
-    const { meta } = await env.DB.prepare(
-      `INSERT INTO live_channels (race_id, environment, channel_id, state, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
-       ON CONFLICT (race_id, environment) DO UPDATE
-       SET channel_id = excluded.channel_id, state = excluded.state, created_at = excluded.created_at, deleted_at = NULL
-       WHERE ended_at IS NULL AND deleted_at IS NOT NULL`,
-    )
-      .bind(race.id, environment, outcome.channelId, JSON.stringify(state), now)
-      .run();
-    // An overlapping run recorded its channel first: this one has no row to be deleted with.
-    if (meta.changes === 0) await retire(env, environment, outcome.channelId).run();
+    try {
+      const { meta } = await env.DB.prepare(
+        `INSERT INTO live_channels (race_id, environment, channel_id, state, created_at) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT (race_id, environment) DO UPDATE
+         SET channel_id = excluded.channel_id, state = excluded.state, created_at = excluded.created_at, deleted_at = NULL
+         WHERE ended_at IS NULL AND deleted_at IS NOT NULL`,
+      )
+        .bind(race.id, environment, outcome.channelId, JSON.stringify(state), now)
+        .run();
+      // An overlapping run recorded its channel first: this one has no row to be deleted with.
+      if (meta.changes === 0) await retire(env, environment, outcome.channelId).run();
+    } catch (error) {
+      // Recorded nowhere, the channel would count against the limit forever: deleted before the run stops.
+      await tokens.send(environment, (token) => deleteChannel(environment, env.APNS_TOPIC, outcome.channelId, token));
+      throw error;
+    }
   }
 }
 
@@ -291,18 +297,26 @@ const OPEN_CHANNEL = "race_id = ?2 AND environment = ?3 AND channel_id = ?4 AND 
 const UNCHANGED_OPEN_CHANNEL = `${OPEN_CHANNEL} AND state = ?5`;
 
 /**
- * Sends the final state, retried at the next run until it succeeds. A channel APNs no
- * longer knows, dropped already or now, ends all the same, for the app to learn the final state.
+ * Ends the channel with the final state, whether its broadcast goes through or not, for
+ * the app to learn it: an end not sent goes again at the next runs (`resendEnd`), and a
+ * channel APNs no longer knows, dropped already or now, is marked deleted.
  */
 async function end(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
   const outcome = isDropped(channel) ? "unregistered" : await send(env, tokens, channel, "end", state, now);
-  if (outcome === "failed" || outcome === "deferred") return;
-  const deletedAt = outcome === "unregistered" ? now : null;
   await env.DB.prepare(
-    `UPDATE live_channels SET state = ?1, ended_at = ?6, end_sent_at = ?6, deleted_at = COALESCE(deleted_at, ?7)
+    `UPDATE live_channels SET state = ?1, ended_at = ?6, end_sent_at = ?7, deleted_at = COALESCE(deleted_at, ?8)
      WHERE ${UNCHANGED_OPEN_CHANNEL}`,
   )
-    .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state, now, deletedAt)
+    .bind(
+      JSON.stringify(state),
+      channel.raceId,
+      channel.environment,
+      channel.channelId,
+      channel.state,
+      now,
+      outcome === "sent" ? now : null,
+      outcome === "unregistered" ? now : null,
+    )
     .run();
 }
 
@@ -325,7 +339,8 @@ async function resendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, 
     await env.DB.batch([retire(env, channel.environment, channel.channelId), markDeleted()]);
     return;
   }
-  if (now - (channel.endSentAt ?? now) < END_RESEND_INTERVAL_MS) return;
+  // An end never sent goes at once.
+  if (channel.endSentAt !== null && now - channel.endSentAt < END_RESEND_INTERVAL_MS) return;
   const outcome = await send(env, tokens, channel, "end", JSON.parse(channel.state) as LiveState, now);
   if (outcome === "deferred") return;
   if (outcome === "unregistered") {

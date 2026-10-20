@@ -8,7 +8,8 @@ CREATE TABLE live_channels (
   -- Last content-state published on the channel, as JSON.
   state TEXT NOT NULL,
   created_at INTEGER NOT NULL,
-  -- When the end event was first sent, then last sent; NULL while the race is followed.
+  -- When the activity ended, NULL while the race is followed; when its end event was last
+  -- sent, NULL until it goes through.
   ended_at INTEGER,
   end_sent_at INTEGER,
   -- When the channel was deleted at APNs, or found unknown there: the row stays, for the

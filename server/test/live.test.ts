@@ -593,6 +593,40 @@ describe("Live Activity channels", () => {
     expect((await channels(env)).map(({ state }) => JSON.parse(state).leaders)).toEqual([[], []]);
   });
 
+  it("ends the activity with its final state even when APNs rejects the end, sent again at the next run", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await syncLiveActivities(env, [race()], NOW);
+    const finished = [race({ StatusId: 11, ScheduleStatus: "FINISHED" })];
+    stubNetwork({ results: relay.results, broadcastReason: "BadPayload" });
+    await syncLiveActivities(env, finished, NOW);
+
+    const { results } = await env.DB.prepare("SELECT ended_at AS endedAt, end_sent_at AS endSentAt FROM live_channels").all();
+    expect(results).toEqual([
+      { endedAt: NOW, endSentAt: null },
+      { endedAt: NOW, endSentAt: null },
+    ]);
+    const sent = stubNetwork({ results: relay.results });
+    await syncLiveActivities(env, finished, NOW + 60_000);
+    expect(broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
+  });
+
+  it("deletes a channel at APNs when it can't record it", async () => {
+    const env = await makeEnv();
+    const prepare = env.DB.prepare.bind(env.DB);
+    env.DB.prepare = (sql: string) => {
+      if (sql.startsWith("INSERT INTO live_channels")) throw new Error("D1 unavailable");
+      return prepare(sql);
+    };
+    const sent = stubNetwork();
+
+    await expect(syncLiveActivities(env, [race()], NOW)).rejects.toThrow("D1 unavailable");
+
+    expect(sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"])).toEqual([
+      "channel-1",
+    ]);
+  });
+
   it("keeps a race's lookup for a run that can broadcast its result", async () => {
     const env = await makeEnv();
     stubNetwork();
