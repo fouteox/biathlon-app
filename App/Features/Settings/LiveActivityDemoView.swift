@@ -167,7 +167,6 @@
         /// on the demo race: its attributes, its channel and Apple's required alert.
         private func copyStartPayload() {
             let state = RaceLiveState.demo(startTime: .now + RaceLiveState.activityLead)[0]
-            let name = RaceActivityAttributes.demoName
             copy(
                 Push(
                     aps: .init(
@@ -175,11 +174,12 @@
                         relevanceScore: state.relevanceScore, contentState: state,
                         attributesType: String(describing: RaceActivityAttributes.self),
                         attributes: RaceActivityAttributes(
-                            raceID: Self.raceID, name: name, channelID: channelID, scheduledStart: nil),
+                            raceID: Self.raceID, name: RaceActivityAttributes.demoName, channelID: channelID,
+                            scheduledStart: nil),
                         inputPushChannel: channelID,
                         alert: .init(
-                            title: .init(locKey: "push.liveActivity.title"),
-                            body: .init(locKey: "push.liveActivity.body", locArgs: [name]),
+                            title: .init(locKey: RaceKind.menSprint.localizationKey),
+                            body: .init(locKey: "push.liveActivity"),
                             sound: "default"))))
         }
 
@@ -224,11 +224,9 @@
 
                 struct Localized: Encodable {
                     let locKey: String
-                    var locArgs: [String]?
 
                     enum CodingKeys: String, CodingKey {
                         case locKey = "loc-key"
-                        case locArgs = "loc-args"
                     }
                 }
             }

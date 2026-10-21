@@ -73,7 +73,7 @@ struct RaceRow: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text(race.shortDescription).font(.headline)
+                Text(race.title).font(.headline)
                 RaceStart(race: race)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

@@ -1196,146 +1196,410 @@
         }
       }
     },
-    "push.cancelled.body": {
-      "comment": "Body of the cancellation push. %@ is the race name.",
+    "push.cancelled": {
+      "comment": "Body of the push alert sent by the server when a race is cancelled; the race name is the title.",
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ findet nicht statt."
+            "value": "Dieses Rennen findet nicht statt."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ will not take place."
+            "value": "This race will not take place."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ n'aura pas lieu."
+            "value": "Cette course n'aura pas lieu."
           }
         }
       }
     },
-    "push.cancelled.title": {
-      "comment": "Title of the push alert sent by the server when a race is cancelled.",
+    "push.liveActivity": {
+      "comment": "Body of the alert of a Live Activity the server starts because a favorite is on the start list; the race name is the title.",
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Rennen abgesagt"
+            "value": "Ein Favorit ist am Start. Verfolge das Rennen live auf dem Sperrbildschirm."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Race cancelled"
+            "value": "A favorite is on the start list. Follow the race live on the Lock Screen."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Course annulée"
+            "value": "Un favori est au départ. Suivez la course en direct sur l'écran verrouillé."
           }
         }
       }
     },
-    "push.liveActivity.body": {
-      "comment": "Body of the alert of a Live Activity the server starts for a favorite. %@ is the race name.",
+    "push.rescheduled": {
+      "comment": "Body of the push alert sent by the server when a start time moves; the race name is the title. The new start's weekday, then its time.",
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Verfolge %@ live auf dem Sperrbildschirm."
+            "value": "Neuer Start am %1$@ um %2$@."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Follow %@ live on the Lock Screen."
+            "value": "New start on %1$@ at %2$@."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Suivez %@ en direct sur l'écran verrouillé."
+            "value": "Nouveau départ %1$@ à %2$@."
           }
         }
       }
     },
-    "push.liveActivity.title": {
-      "comment": "Title of the alert of a Live Activity the server starts because a favorite is on the start list.",
+    "race.MXRL": {
+      "comment": "Name of a race of IBU category MX and discipline RL, in the app and as the title of the server's alerts.",
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ein Favorit ist am Start"
+            "value": "Mixed-Staffel"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "A favorite is racing"
+            "value": "Mixed Relay"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Un favori est au départ"
+            "value": "Relais mixte"
           }
         }
       }
     },
-    "push.rescheduled.body": {
-      "comment": "Body of the start time push: the race name, then the new start's weekday and time.",
+    "race.MXSR": {
+      "comment": "Name of a race of IBU category MX and discipline SR, in the app and as the title of the server's alerts.",
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ startet jetzt am %2$@ um %3$@."
+            "value": "Single-Mixed-Staffel"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ now starts on %2$@ at %3$@."
+            "value": "Single Mixed Relay"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "%1$@ : nouveau départ %2$@ à %3$@."
+            "value": "Relais simple mixte"
           }
         }
       }
     },
-    "push.rescheduled.title": {
-      "comment": "Title of the push alert sent by the server when a start time moves.",
+    "race.SMIN": {
+      "comment": "Name of a race of IBU category SM and discipline IN, in the app and as the title of the server's alerts.",
       "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Startzeit geändert"
+            "value": "Herren-Einzel"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Start time changed"
+            "value": "Men's Individual"
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Horaire modifié"
+            "value": "Individuel hommes"
+          }
+        }
+      }
+    },
+    "race.SMMS": {
+      "comment": "Name of a race of IBU category SM and discipline MS, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herren-Massenstart"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Men's Mass Start"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mass start hommes"
+          }
+        }
+      }
+    },
+    "race.SMPU": {
+      "comment": "Name of a race of IBU category SM and discipline PU, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herren-Verfolgung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Men's Pursuit"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poursuite hommes"
+          }
+        }
+      }
+    },
+    "race.SMRL": {
+      "comment": "Name of a race of IBU category SM and discipline RL, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herren-Staffel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Men's Relay"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relais hommes"
+          }
+        }
+      }
+    },
+    "race.SMSI": {
+      "comment": "Name of a race of IBU category SM and discipline SI, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verkürztes Herren-Einzel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Men's Short Individual"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Individuel court hommes"
+          }
+        }
+      }
+    },
+    "race.SMSP": {
+      "comment": "Name of a race of IBU category SM and discipline SP, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herren-Sprint"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Men's Sprint"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprint hommes"
+          }
+        }
+      }
+    },
+    "race.SWIN": {
+      "comment": "Name of a race of IBU category SW and discipline IN, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Damen-Einzel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Women's Individual"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Individuel femmes"
+          }
+        }
+      }
+    },
+    "race.SWMS": {
+      "comment": "Name of a race of IBU category SW and discipline MS, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Damen-Massenstart"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Women's Mass Start"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mass start femmes"
+          }
+        }
+      }
+    },
+    "race.SWPU": {
+      "comment": "Name of a race of IBU category SW and discipline PU, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Damen-Verfolgung"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Women's Pursuit"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Poursuite femmes"
+          }
+        }
+      }
+    },
+    "race.SWRL": {
+      "comment": "Name of a race of IBU category SW and discipline RL, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Damen-Staffel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Women's Relay"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Relais femmes"
+          }
+        }
+      }
+    },
+    "race.SWSI": {
+      "comment": "Name of a race of IBU category SW and discipline SI, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verkürztes Damen-Einzel"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Women's Short Individual"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Individuel court femmes"
+          }
+        }
+      }
+    },
+    "race.SWSP": {
+      "comment": "Name of a race of IBU category SW and discipline SP, in the app and as the title of the server's alerts.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Damen-Sprint"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Women's Sprint"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprint femmes"
           }
         }
       }

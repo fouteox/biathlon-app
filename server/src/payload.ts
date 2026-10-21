@@ -3,15 +3,31 @@ import { eventId } from "./ibu";
 
 /**
  * Alert texts are resolved on the device from the app's Localizable.xcstrings
- * through `title-loc-key` / `loc-key`, so the server never translates.
- * The keys must exist in the app's String Catalog.
+ * through `title-loc-key` / `loc-key`, so the server never translates: the title
+ * names the race, the body says what happened. The keys must exist in the app's
+ * String Catalog.
  */
 export const LOC_KEYS = {
-  cancelled: { title: "push.cancelled.title", body: "push.cancelled.body" },
-  rescheduled: { title: "push.rescheduled.title", body: "push.rescheduled.body" },
+  cancelled: "push.cancelled",
+  rescheduled: "push.rescheduled",
   /** The alert of a Live Activity started for a favorite (liveStarts.ts). */
-  liveActivityStart: { title: "push.liveActivity.title", body: "push.liveActivity.body" },
+  liveActivityStart: "push.liveActivity",
 } as const;
+
+/**
+ * The `catId` + `DisciplineId` pairs that end a `RaceId` and that the app names
+ * (`RaceKind` in BiathlonKit), checked against the shared `race-kinds.json` fixture.
+ */
+export const RACE_KINDS = [
+  "SMSP", "SWSP", "SMPU", "SWPU", "SMIN", "SWIN", "SMSI",
+  "SWSI", "SMMS", "SWMS", "SMRL", "SWRL", "MXRL", "MXSR",
+] as const;
+
+/** The race's name in the app's String Catalog, or `undefined` for a kind the app doesn't know. */
+export function raceTitleKey(raceId: string): string | undefined {
+  const kind = raceId.slice(-4);
+  return (RACE_KINDS as readonly string[]).includes(kind) ? `race.${kind}` : undefined;
+}
 
 export interface AlertInput {
   kind: ChangeKind;
@@ -24,14 +40,13 @@ export interface AlertInput {
 }
 
 export function buildPayload(input: AlertInput) {
-  const keys = LOC_KEYS[input.kind];
-  const bodyArgs = input.kind === "rescheduled" ? rescheduledArgs(input) : [input.raceName];
+  const titleKey = raceTitleKey(input.raceId);
   return {
     aps: {
       alert: {
-        "title-loc-key": keys.title,
-        "loc-key": keys.body,
-        "loc-args": bodyArgs,
+        ...(titleKey ? { "title-loc-key": titleKey } : { title: input.raceName }),
+        "loc-key": LOC_KEYS[input.kind],
+        ...(input.kind === "rescheduled" && { "loc-args": rescheduledArgs(input) }),
       },
       sound: "default",
       // One group per event: a whole event cancelled stacks as one group of alerts.
@@ -46,7 +61,7 @@ export function buildPayload(input: AlertInput) {
 /** A race can be postponed to another day, so the alert names the day with the time. */
 function rescheduledArgs(input: AlertInput): string[] {
   const { day, time } = formatStart(input);
-  return [input.raceName, day, time];
+  return [day, time];
 }
 
 /**

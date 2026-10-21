@@ -1179,8 +1179,8 @@ describe("Live Activities started for favorites", () => {
         attributes: { raceID: RACE_ID, name: "Men's 20km Individual", channelID: production!.channelId },
         "input-push-channel": production!.channelId,
         alert: {
-          title: { "loc-key": "push.liveActivity.title" },
-          body: { "loc-key": "push.liveActivity.body", "loc-args": ["Men's 20km Individual"] },
+          title: { "loc-key": "race.SMIN" },
+          body: { "loc-key": "push.liveActivity" },
           sound: "default",
         },
       },

@@ -92,13 +92,25 @@ describe("APNs", () => {
       timeZone: "Europe/Paris",
     });
     expect(payload.aps.alert).toEqual({
-      "title-loc-key": "push.rescheduled.title",
-      "loc-key": "push.rescheduled.body",
-      "loc-args": ["Men's 20km Individual", "jeudi", "16:45"],
+      "title-loc-key": "race.SMIN",
+      "loc-key": "push.rescheduled",
+      "loc-args": ["jeudi", "16:45"],
     });
     // A whole event cancelled stacks as one group of alerts.
     expect(payload.aps["thread-id"]).toBe("BT2627SWRLCP01");
     expect(new TextEncoder().encode(JSON.stringify(payload)).length).toBeLessThan(4096);
+  });
+
+  it("names a race of a kind the app doesn't know with the IBU's name", () => {
+    const payload = buildPayload({
+      kind: "cancelled",
+      raceId: "BT2627SWRLCP01SMXX",
+      raceName: "Men's Super Sprint",
+      startTime: "2026-11-26T15:45:00.000Z",
+      locale: "fr-FR",
+      timeZone: "Europe/Paris",
+    });
+    expect(payload.aps.alert).toEqual({ title: "Men's Super Sprint", "loc-key": "push.cancelled" });
   });
 
   it("falls back to UTC on an unknown time zone", () => {

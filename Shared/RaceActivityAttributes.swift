@@ -11,6 +11,7 @@ nonisolated struct RaceActivityAttributes: ActivityAttributes {
     typealias ContentState = RaceLiveState
 
     let raceID: String
+    /// The IBU's English name, shown only for a race whose kind the app doesn't know (`title`).
     let name: String
     /// The broadcast channel it subscribes to: the server replaces a channel APNs no
     /// longer knows, and the app then moves the activity to the new one.
@@ -23,7 +24,8 @@ nonisolated struct RaceActivityAttributes: ActivityAttributes {
 #if DEBUG
     extension RaceActivityAttributes {
         /// The race `RaceLiveState.demo` plays, in Xcode previews and the app's developer settings.
-        static let demoRaceID = "demo"
+        /// It ends with its kind, as a `RaceId` does, so it is named like a real men's sprint.
+        static let demoRaceID = "demo" + RaceKind.menSprint.rawValue
         static let demoName = "Men's 10km Sprint"
     }
 #endif

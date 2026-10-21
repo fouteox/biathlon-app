@@ -58,7 +58,7 @@ struct RaceView: View {
                 }
             }
         }
-        .navigationTitle(race.shortDescription)
+        .navigationTitle(race.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             // A followed race keeps its toggle to stop following.
