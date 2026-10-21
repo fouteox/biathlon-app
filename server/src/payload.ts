@@ -15,7 +15,7 @@ export const LOC_KEYS = {
 } as const;
 
 /**
- * The `catId` + `DisciplineId` pairs that end a `RaceId` and that the app names
+ * The `catId` + `DisciplineId` pairs that follow a `RaceId`'s event and that the app names
  * (`RaceKind` in BiathlonKit), checked against the shared `race-kinds.json` fixture.
  */
 export const RACE_KINDS = [
@@ -23,9 +23,12 @@ export const RACE_KINDS = [
   "SWSI", "SMMS", "SWMS", "SMRL", "SWRL", "MXRL", "MXSR",
 ] as const;
 
-/** The race's name in the app's String Catalog, or `undefined` for a kind the app doesn't know. */
+/**
+ * The race's name in the app's String Catalog, or `undefined` for a kind the app doesn't know.
+ * The kind follows the 14-character event, as in `RaceKind(raceID:)`.
+ */
 export function raceTitleKey(raceId: string): string | undefined {
-  const kind = raceId.slice(-4);
+  const kind = raceId.slice(14, 18);
   return (RACE_KINDS as readonly string[]).includes(kind) ? `race.${kind}` : undefined;
 }
 

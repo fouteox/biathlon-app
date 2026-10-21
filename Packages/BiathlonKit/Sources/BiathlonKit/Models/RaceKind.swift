@@ -1,5 +1,6 @@
-/// A race's category and discipline: a `RaceId` ends with its `catId` and `DisciplineId`,
-/// e.g. `BT2526SWRLCP03SMMS` for the men's mass start of Le Grand-Bornand.
+/// A race's category and discipline: after its 14-character `EventId`, a `RaceId` goes on with
+/// its `catId` and `DisciplineId`, e.g. `BT2526SWRLCP03SMMS` for the men's mass start of
+/// Le Grand-Bornand. A few older IDs add a fifth character, e.g. `BT1314SWRLCP08SMSPS`.
 ///
 /// The app names a race from its kind, in the device's language, rather than with the
 /// IBU's English `ShortDescription`. The server's alerts do the same (`server/src/payload.ts`).
@@ -21,7 +22,7 @@ public enum RaceKind: String, CaseIterable, Sendable {
 
     /// `nil` for a kind the IBU adds later: the app then keeps the IBU's name.
     public init?(raceID: String) {
-        self.init(rawValue: String(raceID.suffix(4)))
+        self.init(rawValue: String(raceID.dropFirst(14).prefix(4)))
     }
 
     /// The race's name in the app's String Catalog, also sent as an alert's `title-loc-key`.
