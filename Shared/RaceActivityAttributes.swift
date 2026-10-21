@@ -24,8 +24,9 @@ nonisolated struct RaceActivityAttributes: ActivityAttributes {
 #if DEBUG
     extension RaceActivityAttributes {
         /// The race `RaceLiveState.demo` plays, in Xcode previews and the app's developer settings.
-        /// It ends with its kind, as a `RaceId` does, so it is named like a real men's sprint.
-        static let demoRaceID = "demo" + RaceKind.menSprint.rawValue
+        /// Shaped like a `RaceId`, a 14-character event then the race's kind, so it is named like a
+        /// real men's sprint.
+        static let demoRaceID = "demo".padding(toLength: 14, withPad: "_", startingAt: 0) + RaceKind.menSprint.rawValue
         static let demoName = "Men's 10km Sprint"
     }
 #endif
