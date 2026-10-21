@@ -3,7 +3,7 @@ import { classify, makeProviderToken } from "../src/apns";
 import { detectChange } from "../src/changes";
 import { parseRegistration } from "../src/devices";
 import { activeEvents, seasonId, snapshot, type RaceSnapshot } from "../src/ibu";
-import { buildPayload, formatStart } from "../src/payload";
+import { buildPayload, formatStart, raceTitleKey } from "../src/payload";
 
 // Shape of a real `Competitions?EventId=BT2627SWRLCP01` row, fetched 2026-10-19.
 const scheduled = {
@@ -99,6 +99,11 @@ describe("APNs", () => {
     // A whole event cancelled stacks as one group of alerts.
     expect(payload.aps["thread-id"]).toBe("BT2627SWRLCP01");
     expect(new TextEncoder().encode(JSON.stringify(payload)).length).toBeLessThan(4096);
+  });
+
+  it("reads the race's kind after its event, as older IDs carry a fifth character", () => {
+    // Real ID: a Kontiolahti sprint of the 2013-14 World Cup.
+    expect(raceTitleKey("BT1314SWRLCP08SMSPS")).toBe("race.SMSP");
   });
 
   it("names a race of a kind the app doesn't know with the IBU's name", () => {

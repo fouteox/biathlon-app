@@ -7,7 +7,8 @@ struct AthleteView: View {
 
     @Environment(\.ibu) private var ibu
     @State private var bio = Loader<AthleteBio>()
-    /// Loaded on its own: the profile shows without waiting for it, and without it.
+    /// Loaded on its own: the profile shows without waiting for it, and without it. Only the
+    /// World Cup, World Championships and Olympic races, which the rest of the app follows.
     @State private var history = Loader<[AthleteResult]>()
     @ScaledMetric private var photoSize = 72.0
 
@@ -55,9 +56,7 @@ struct AthleteView: View {
                         ForEach(results.prefix(30)) { result in
                             HStack {
                                 VStack(alignment: .leading) {
-                                    if let competition = result.competition {
-                                        Text(competition)
-                                    }
+                                    Text(RaceKind.title(ofRace: result.raceID ?? "", ibuName: result.competition ?? ""))
                                     Text([result.place, result.season].compactMap(\.self).joined(separator: " · "))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
@@ -88,7 +87,9 @@ struct AthleteView: View {
 
     private func load() async {
         async let bioLoad: Void = bio.load { try await ibu.athlete(id: athleteID) }
-        async let historyLoad: Void = history.load { try await ibu.athleteResults(id: athleteID) }
+        async let historyLoad: Void = history.load {
+            try await ibu.athleteResults(id: athleteID).filter(\.isWorldCupCircuit)
+        }
         _ = await (bioLoad, historyLoad)
     }
 }

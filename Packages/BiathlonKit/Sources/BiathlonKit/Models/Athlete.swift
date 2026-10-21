@@ -48,6 +48,9 @@ public struct AthleteResult: Decodable, Identifiable, Hashable, Sendable {
     public let competition: String?
     public let place: String?
     public let rank: String?
+    /// The circuit: "WC", "WCH" and "OWG" for the World Cup, the World Championships and the
+    /// Olympics, the races of `Events?Level=1`; others for the IBU Cup, juniors or summer events.
+    public let level: String?
 
     enum CodingKeys: String, CodingKey {
         case raceID = "RaceId"
@@ -55,6 +58,7 @@ public struct AthleteResult: Decodable, Identifiable, Hashable, Sendable {
         case competition = "Comp"
         case place = "Place"
         case rank = "Rank"
+        case level = "Level"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -64,5 +68,13 @@ public struct AthleteResult: Decodable, Identifiable, Hashable, Sendable {
         competition = try c.decodeIfPresent(String.self, forKey: .competition)
         place = try c.decodeIfPresent(String.self, forKey: .place)
         rank = try c.decodeLooseString(forKey: .rank)
+        level = try c.decodeIfPresent(String.self, forKey: .level)
     }
+
+    /// The races the app follows everywhere else.
+    public var isWorldCupCircuit: Bool { level.map(Self.worldCupLevels.contains) ?? false }
+
+    public var kind: RaceKind? { raceID.flatMap(RaceKind.init(raceID:)) }
+
+    private static let worldCupLevels: Set = ["WC", "WCH", "OWG"]
 }
