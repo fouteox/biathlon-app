@@ -31,8 +31,8 @@ struct RaceView: View {
                     }
                 }
                 // Only while it can still be watched live.
-                if competition.state.canBeFollowedLive {
-                    TVCoverageSection(listings: tvListings(of: competition))
+                if competition.state.canBeFollowedLive, let listings = tvListings(of: competition) {
+                    TVCoverageSection(listings: listings)
                 }
                 if !results.rows.isEmpty {
                     Section {
@@ -50,18 +50,18 @@ struct RaceView: View {
                     } header: {
                         Self.listTitle(of: results)
                     }
-                }
-            }
-            .refreshable { await load() }
-            .overlay {
-                if results.rows.isEmpty {
-                    if competition.state == .cancelled {
-                        ContentUnavailableView("Race cancelled", systemImage: "xmark.circle")
-                    } else {
-                        ContentUnavailableView("No start list yet", systemImage: "clock")
+                } else {
+                    // In the list, below the sections above it, rather than over them.
+                    Section {
+                        if competition.state == .cancelled {
+                            ContentUnavailableView("Race cancelled", systemImage: "xmark.circle")
+                        } else {
+                            ContentUnavailableView("No start list yet", systemImage: "clock")
+                        }
                     }
                 }
             }
+            .refreshable { await load() }
         }
         .navigationTitle(race.title)
         .navigationBarTitleDisplayMode(.inline)
@@ -106,9 +106,9 @@ struct RaceView: View {
     }
 
     /// Nothing until the guide loads, or without a server.
-    private func tvListings(of competition: Competition) -> [TVGuide.Listing] {
+    private func tvListings(of competition: Competition) -> TVGuide.Listings? {
         let guide = tvGuide.state.value ?? nil
-        return guide?.listings(at: competition.startTime, firstCountry: Locale.current.region?.identifier) ?? []
+        return guide?.listings(at: competition.startTime, home: Locale.current.region?.identifier)
     }
 
     private func isFavorite(_ row: ResultRow, in results: RaceResults) -> Bool {
