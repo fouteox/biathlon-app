@@ -47,11 +47,15 @@ struct StandingsView: View {
             .padding(.bottom, 8)
         }
         .navigationTitle("Standings")
-        .task(id: [category.rawValue, discipline.rawValue]) {
-            loader.reset()
-            await load()
-        }
+        // The task also runs again each time the screen reappears (back from an
+        // athlete): it refreshes the list in place, so the scroll position stays.
+        // Only a new filter shows the loading state.
+        .onChange(of: filters) { loader.reset() }
+        .task(id: filters) { await load() }
     }
+
+    /// The standings shown depend on both pickers.
+    private var filters: [String] { [category.rawValue, discipline.rawValue] }
 
     private func load() async {
         await loader.load { try await ibu.worldCupStandings(category: category, discipline: discipline, now: .now) }
