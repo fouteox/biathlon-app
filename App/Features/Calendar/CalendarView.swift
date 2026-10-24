@@ -43,10 +43,11 @@ struct CalendarView: View {
                 ForEach(seasons, id: \.self) { Text($0.displayName).tag($0) }
             }
         }
-        .task(id: season) {
-            loader.reset()
-            await load()
-        }
+        // The task also runs again each time the screen reappears (back from an
+        // event): it refreshes the list in place, so the scroll position stays.
+        // Only a new season shows the loading state.
+        .onChange(of: season) { loader.reset() }
+        .task(id: season) { await load() }
     }
 
     private func load() async {
