@@ -12,6 +12,7 @@ import { IBU_BASE_URL } from "./ibu";
 import { isPurpose, issueChallenge } from "./challenges";
 import { authorize, pruneKeys, registerKey } from "./keys";
 import { channelFor } from "./live";
+import { TV_COVERAGE } from "./tvCoverage";
 import { runCron } from "./watcher";
 
 export { PushSender } from "./pushSender";
@@ -43,6 +44,11 @@ export default {
       const live = await channelFor(env.DB, raceId, environment);
       if (!live) return json({ error: "no channel for this race" }, 404, NO_STORE);
       return "ended" in live ? json({ state: live.ended }, 410, NO_STORE) : json(live, 200, NO_STORE);
+    }
+
+    if (url.pathname === "/v1/tv-coverage" && request.method === "GET") {
+      // Changes only with a deploy: an hour of staleness is harmless.
+      return json({ coverage: TV_COVERAGE }, 200, { "cache-control": "public, max-age=3600" });
     }
 
     if (url.pathname === "/v1/health" && request.method === "GET") {

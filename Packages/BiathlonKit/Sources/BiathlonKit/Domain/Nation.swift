@@ -34,11 +34,27 @@ public enum Nation {
     /// Flag emoji of an IOC code, or `nil` when the code is unknown.
     public static func flag(_ code: String?) -> String? {
         guard let code, let iso = iso[code.uppercased()] else { return nil }
-        return String(String.UnicodeScalarView(iso.unicodeScalars.compactMap { Unicode.Scalar(127_397 + $0.value) }))
+        return flag(region: iso)
+    }
+
+    /// Flag emoji of an ISO 3166 code, or `nil` when the code isn't two letters.
+    public static func flag(region code: String) -> String? {
+        let letters = code.uppercased().unicodeScalars
+        guard letters.count == 2, letters.allSatisfy({ ("A"..."Z").contains($0) }) else { return nil }
+        return String(String.UnicodeScalarView(letters.compactMap { Unicode.Scalar(127_397 + $0.value) }))
     }
 
     /// The text preceded by the nation's flag, or the text alone when the flag is unknown.
     public static func titled(_ text: String, nation: String?) -> String {
-        [flag(nation), text].compactMap(\.self).joined(separator: " ")
+        titled(text, flag: flag(nation))
+    }
+
+    /// The text preceded by the flag of an ISO 3166 code, or the text alone when it has none.
+    public static func titled(_ text: String, region: String) -> String {
+        titled(text, flag: flag(region: region))
+    }
+
+    private static func titled(_ text: String, flag: String?) -> String {
+        [flag, text].compactMap(\.self).joined(separator: " ")
     }
 }

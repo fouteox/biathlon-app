@@ -26,4 +26,20 @@ struct NationTests {
         #expect(Nation.titled("Hochfilzen", nation: "XXX") == "Hochfilzen")
         #expect(Nation.titled("Hochfilzen", nation: nil) == "Hochfilzen")
     }
+
+    /// The TV guide names countries by ISO code.
+    @Test(arguments: [("FR", "🇫🇷"), ("GB", "🇬🇧"), ("de", "🇩🇪")])
+    func isoCodesBecomeFlags(code: String, flag: String) {
+        #expect(Nation.flag(region: code) == flag)
+    }
+
+    @Test(arguments: ["", "F", "FRA", "F1"])
+    func malformedISOCodeHasNoFlag(code: String) {
+        #expect(Nation.flag(region: code) == nil)
+        #expect(Nation.titled("Nowhere", region: code) == "Nowhere")
+    }
+
+    @Test func countryNamesStartWithTheirFlag() {
+        #expect(Nation.titled("Allemagne", region: "DE") == "🇩🇪 Allemagne")
+    }
 }
