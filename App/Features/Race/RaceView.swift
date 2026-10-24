@@ -9,6 +9,7 @@ struct RaceView: View {
     @Environment(\.ibu) private var ibu
     @Environment(LiveActivities.self) private var liveActivities
     @State private var loader = Loader<RaceResults>()
+    @State private var tvGuide = Loader<TVGuide?>()
     @State private var liveActivityFailed = false
     @State private var liveActivityFailure = ""
     @Query private var favorites: [Favorite]
@@ -28,6 +29,10 @@ struct RaceView: View {
                     } label: {
                         RaceStart(race: competition)
                     }
+                }
+                // Only while it can still be watched live.
+                if competition.state.canBeFollowedLive {
+                    TVCoverageSection(listings: tvListings(of: competition))
                 }
                 if !results.rows.isEmpty {
                     Section {
@@ -73,6 +78,7 @@ struct RaceView: View {
             Text(liveActivityFailure)
         }
         .task { await load() }
+        .task { await tvGuide.load(TVGuide.load) }
         .refreshingWhileLive(isLive, action: load)
     }
 
@@ -97,6 +103,12 @@ struct RaceView: View {
         } else {
             nil
         }
+    }
+
+    /// Nothing until the guide loads, or without a server.
+    private func tvListings(of competition: Competition) -> [TVGuide.Listing] {
+        let guide = tvGuide.state.value ?? nil
+        return guide?.listings(at: competition.startTime, firstCountry: Locale.current.region?.identifier) ?? []
     }
 
     private func isFavorite(_ row: ResultRow, in results: RaceResults) -> Bool {

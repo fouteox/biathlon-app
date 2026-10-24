@@ -418,6 +418,22 @@
         }
       }
     },
+    "Live on TV or on the broadcaster's stream. Schedules can change.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live im TV oder im Stream des Senders. Änderungen vorbehalten."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En direct à la télévision ou en streaming chez le diffuseur. Les programmes peuvent changer."
+          }
+        }
+      }
+    },
     "Mass start": {
       "localizations": {
         "de": {
@@ -622,6 +638,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Jeux olympiques"
+          }
+        }
+      }
+    },
+    "On TV": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im TV"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "À la télévision"
           }
         }
       }
