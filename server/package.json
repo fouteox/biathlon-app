@@ -4,10 +4,12 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "deploy": "npm run migrate && wrangler deploy",
+    "migrate": "wrangler d1 migrations apply DB --remote",
     "types": "wrangler types",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check": "wrangler types --check && npm run typecheck && npm test"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
