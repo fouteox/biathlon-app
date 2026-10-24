@@ -29,16 +29,23 @@ public struct TVGuide: Decodable, Sendable {
         self = try decoder.decode(Self.self, from: json)
     }
 
-    /// The countries with a broadcaster at `start`, in the guide's order, `firstCountry`
-    /// (the viewer's region) on top: every country shows, whatever the app's language.
-    public func listings(at start: Date, firstCountry: String?) -> [Listing] {
+    /// The broadcasters of a race: the viewer's own country apart, the others in the guide's order.
+    public struct Listings: Sendable, Hashable {
+        public let home: Listing?
+        public let others: [Listing]
+        public var isEmpty: Bool { home == nil && others.isEmpty }
+    }
+
+    /// The countries with a broadcaster at `start`, `home` (the viewer's region) set apart
+    /// from the others, which every viewer can still look up, whatever the app's language.
+    public func listings(at start: Date, home: String?) -> Listings {
         let airing = coverage.filter { $0.from <= start && start < $0.until }
         let countries = airing.map(\.country).reduce(into: [String]()) { countries, country in
             if !countries.contains(country) { countries.append(country) }
         }
-        let ordered = countries.filter { $0 == firstCountry } + countries.filter { $0 != firstCountry }
-        return ordered.map { country in
+        let listings = countries.map { country in
             Listing(country: country, broadcasters: airing.filter { $0.country == country })
         }
+        return Listings(home: listings.first { $0.country == home }, others: listings.filter { $0.country != home })
     }
 }

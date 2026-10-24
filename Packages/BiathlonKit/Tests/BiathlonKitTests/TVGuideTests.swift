@@ -20,28 +20,42 @@ struct TVGuideTests {
             ]}
             """.utf8))
 
-    @Test func listsEachCountryInTheGuidesOrder() {
-        let listings = guide.listings(at: date("2026-11-26T15:15:00Z"), firstCountry: nil)
-        #expect(listings.map(\.country) == ["FR", "GB", "DE"])
-        #expect(listings.map(\.names) == [["La Chaîne L'Équipe"], ["TNT Sports"], ["ARD"]])
-        #expect(listings[0].broadcasters[0].url == URL(string: "https://www.lequipe.fr/tv/"))
+    @Test func setsTheViewersCountryApart() {
+        let listings = guide.listings(at: date("2026-11-26T15:15:00Z"), home: "FR")
+        #expect(listings.home?.country == "FR")
+        #expect(listings.home?.names == ["La Chaîne L'Équipe"])
+        #expect(listings.home?.broadcasters.first?.url == URL(string: "https://www.lequipe.fr/tv/"))
+        #expect(listings.others.map(\.country) == ["GB", "DE"])
+        #expect(listings.others.map(\.names) == [["TNT Sports"], ["ARD"]])
     }
 
-    /// Whatever the app's language: the viewer's own country only moves to the top.
-    @Test(arguments: [("DE", ["DE", "FR", "GB"]), ("GB", ["GB", "FR", "DE"]), ("CH", ["FR", "GB", "DE"])])
-    func putsTheViewersCountryFirst(region: String, order: [String]) {
-        #expect(guide.listings(at: date("2026-11-26T15:15:00Z"), firstCountry: region).map(\.country) == order)
+    /// Whatever the app's language: the other countries keep the guide's order.
+    @Test(arguments: [("DE", ["FR", "GB"]), ("GB", ["FR", "DE"])])
+    func keepsTheOthersInTheGuidesOrder(region: String, others: [String]) {
+        let listings = guide.listings(at: date("2026-11-26T15:15:00Z"), home: region)
+        #expect(listings.home?.country == region)
+        #expect(listings.others.map(\.country) == others)
+    }
+
+    /// A viewer elsewhere, or with no region, has no country of their own in the guide.
+    @Test(arguments: ["CH", nil] as [String?])
+    func hasNoHomeOutsideTheGuidesCountries(region: String?) {
+        let listings = guide.listings(at: date("2026-11-26T15:15:00Z"), home: region)
+        #expect(listings.home == nil)
+        #expect(listings.others.map(\.country) == ["FR", "GB", "DE"])
     }
 
     /// A period includes its first instant and ends just before its last.
     @Test func followsThePeriods() {
-        #expect(guide.listings(at: date("2026-11-29T23:59:59Z"), firstCountry: "DE").first?.names == ["ARD"])
-        #expect(guide.listings(at: date("2026-11-30T00:00:00Z"), firstCountry: "DE").first?.names == ["ZDF"])
+        #expect(guide.listings(at: date("2026-11-29T23:59:59Z"), home: "DE").home?.names == ["ARD"])
+        #expect(guide.listings(at: date("2026-11-30T00:00:00Z"), home: "DE").home?.names == ["ZDF"])
     }
 
     @Test func leavesOutCountriesWithNothingAnnounced() {
-        #expect(guide.listings(at: date("2026-12-10T15:15:00Z"), firstCountry: nil).map(\.country) == ["FR", "GB"])
-        #expect(guide.listings(at: date("2027-04-01T12:00:00Z"), firstCountry: nil).isEmpty)
+        let listings = guide.listings(at: date("2026-12-10T15:15:00Z"), home: "DE")
+        #expect(listings.home == nil)
+        #expect(listings.others.map(\.country) == ["FR", "GB"])
+        #expect(guide.listings(at: date("2027-04-01T12:00:00Z"), home: "FR").isEmpty)
     }
 
     @Test func groupsTheBroadcastersOfOneCountry() throws {
@@ -54,9 +68,9 @@ struct TVGuideTests {
                 {"country":"DE","broadcaster":"Eurosport","url":"https://www.eurosport.de/","from":"2026-11-23T00:00:00Z","until":"2027-03-22T00:00:00Z"}
                 ]}
                 """.utf8))
-        let listings = guide.listings(at: date("2026-12-04T13:15:00Z"), firstCountry: nil)
-        #expect(listings.map(\.country) == ["DE", "FR"])
-        #expect(listings.first?.names == ["ZDF", "Eurosport"])
+        let listings = guide.listings(at: date("2026-12-04T13:15:00Z"), home: "DE")
+        #expect(listings.home?.names == ["ZDF", "Eurosport"])
+        #expect(listings.others.map(\.country) == ["FR"])
     }
 }
 
