@@ -1,0 +1,51 @@
+name: Deploy server
+
+# Deploys the Cloudflare Worker in server/ each time main changes it: the
+# checks run again on that exact commit, then `npm run deploy` applies the
+# pending D1 migrations and deploys the Worker.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - server/**
+      - .github/actions/server-setup/**
+      - .github/workflows/deploy-server.yml
+
+permissions:
+  contents: read
+
+# Deploys run one at a time, and one already started is never cancelled
+# halfway through its migrations.
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+env:
+  SERVER_URL: https://biathlon-server.fouteox.workers.dev
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    # Holds the Cloudflare secrets, which only main may use.
+    environment:
+      name: production
+      url: ${{ env.SERVER_URL }}
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/server-setup
+      - run: npm run check
+      - run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # The Worker answers and reaches APNs over HTTP/2.
+      - name: Check health
+        run: |
+          curl --fail-with-body --silent --show-error "$SERVER_URL/v1/health" \
+            | jq --exit-status '.apns.pushes.http2 and .apns.channels.http2'

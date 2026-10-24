@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-24.04
     container: swift:6.4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: swift test
         working-directory: Packages/BiathlonKit
 
@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-24.04
     container: swift:6.4
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: swift format lint --strict --recursive App Shared Widgets Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
 
   server:
@@ -30,22 +30,15 @@ jobs:
       run:
         working-directory: server
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: server/package-lock.json
-      - run: npm ci
-      - run: npx wrangler types --check
-      - run: npm run typecheck
-      - run: npm test
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/server-setup
+      - run: npm run check
 
   app-ios:
     name: App (iOS Simulator)
     runs-on: macos-26
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: xcodebuild -version && swift --version
       - name: Build
         run: |

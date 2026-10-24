@@ -38,7 +38,6 @@ Each `PUT` and `DELETE` on `/v1/devices/:token` and `/v1/live-activity-starts/:t
    npm ci
    npx wrangler login
    npx wrangler d1 create biathlon          # paste the printed database_id into wrangler.jsonc
-   npx wrangler d1 migrations apply biathlon --remote
    npx wrangler secret put APNS_TEAM_ID
    npx wrangler secret put APP_ATTEST_APP_ID   # <App ID prefix>.com.fouteox.biathlon, from Identifiers
    openssl rand -base64 32 | npx wrangler secret put APP_ATTEST_SECRET
@@ -46,9 +45,15 @@ Each `PUT` and `DELETE` on `/v1/devices/:token` and `/v1/live-activity-starts/:t
    npx wrangler secret put APNS_SANDBOX_KEY < AuthKey_SANDBOXKEYID.p8
    npx wrangler secret put APNS_PRODUCTION_KEY_ID
    npx wrangler secret put APNS_PRODUCTION_KEY < AuthKey_PRODKEYID.p8
-   npx wrangler deploy
+   npm run deploy                           # applies the pending D1 migrations, then deploys
    curl https://biathlon-server.<subdomain>.workers.dev/v1/health
    ```
+
+3. Every later deploy is automatic: each push to `main` that changes `server/` runs the `Deploy server` workflow (`.github/workflows/deploy-server.yml`), which runs the checks on that commit, then `npm run deploy`, then checks `/v1/health`. It reads two secrets of the `production` environment of the GitHub repository (Settings > Environments), whose deployment branches are limited to `main`:
+   - `CLOUDFLARE_ACCOUNT_ID`: the account ID (Workers & Pages > Account details);
+   - `CLOUDFLARE_API_TOKEN`: an account API token (Manage account > Account API tokens > Create Token) from the **Edit Cloudflare Workers** template, with **Account > D1 > Edit** added and scoped to this account only.
+
+   Migrations are applied before the new code is deployed, so the version still running meets the new schema for a few seconds: a migration must keep working with the code already deployed (add columns with a default, rebuild a table with the same columns plus new ones), and a column is dropped only once no deployed code reads it.
 
 ## Limits (Workers Free plan)
 
