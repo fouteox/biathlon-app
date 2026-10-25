@@ -28,7 +28,9 @@ describe("IBU parsing", () => {
   });
 
   it("treats a finished race and a cancelled one", () => {
-    expect(snapshot({ ...scheduled, StatusId: 11, StatusText: "Final", ScheduleStatus: "FINISHED" }).status).toBe("finished");
+    expect(snapshot({ ...scheduled, StatusId: 11, StatusText: "Final", ScheduleStatus: "FINISHED" }).status).toBe(
+      "finished",
+    );
     expect(snapshot({ ...scheduled, StatusText: "Cancelled", ScheduleStatus: "CANCELLED" }).status).toBe("cancelled");
   });
 
@@ -68,7 +70,14 @@ describe("change detection", () => {
 
 describe("device registration", () => {
   const token = "a".repeat(64);
-  const body = { environment: "production", categories: ["SM", "SW"], cancellation: true, rescheduling: false, locale: "fr-FR", timeZone: "Europe/Paris" };
+  const body = {
+    environment: "production",
+    categories: ["SM", "SW"],
+    cancellation: true,
+    rescheduling: false,
+    locale: "fr-FR",
+    timeZone: "Europe/Paris",
+  };
 
   it("accepts a valid registration", () => {
     expect(parseRegistration(token.toUpperCase(), body)).toMatchObject({ token, categories: ["SM", "SW"] });
@@ -133,12 +142,16 @@ describe("APNs", () => {
   });
 
   it("signs a verifiable ES256 token", async () => {
-    const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
+    const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+      "sign",
+      "verify",
+    ])) as CryptoKeyPair;
     const pkcs8 = new Uint8Array((await crypto.subtle.exportKey("pkcs8", pair.privateKey)) as ArrayBuffer);
     const pem = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...pkcs8))}\n-----END PRIVATE KEY-----`;
     const jwt = await makeProviderToken({ pem, keyId: "ABC123DEFG", teamId: "DEF123GHIJ" }, 1437179036);
     const [header, claims, signature] = jwt.split(".") as [string, string, string];
-    const decode = (part: string) => Uint8Array.from(atob(part.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+    const decode = (part: string) =>
+      Uint8Array.from(atob(part.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
     expect(JSON.parse(new TextDecoder().decode(decode(header)))).toEqual({ alg: "ES256", kid: "ABC123DEFG" });
     expect(JSON.parse(new TextDecoder().decode(decode(claims)))).toEqual({ iss: "DEF123GHIJ", iat: 1437179036 });
     const valid = await crypto.subtle.verify(

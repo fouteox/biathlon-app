@@ -176,7 +176,12 @@ async function apnsRequest(
   return { outcome: classify(response.status, await errorReason(response)), response };
 }
 
-const UNREGISTERED_REASONS = new Set(["BadDeviceToken", "DeviceTokenNotForTopic", "ChannelNotRegistered", "BadChannelId"]);
+const UNREGISTERED_REASONS = new Set([
+  "BadDeviceToken",
+  "DeviceTokenNotForTopic",
+  "ChannelNotRegistered",
+  "BadChannelId",
+]);
 
 export function classify(status: number, reason: string): PushOutcome {
   if (status === 410) return { kind: "unregistered" };

@@ -67,7 +67,12 @@ function codes(value: unknown, pattern: RegExp): string[] | undefined {
  * Saves the favorites for the App Attest key that signed the request, with one token per key
  * like `saveDevice`. Changed favorites check again the races the previous ones started nothing for.
  */
-export async function saveStartToken(db: D1Database, registration: StartRegistration, keyId: string, now: number): Promise<void> {
+export async function saveStartToken(
+  db: D1Database,
+  registration: StartRegistration,
+  keyId: string,
+  now: number,
+): Promise<void> {
   const athletes = JSON.stringify(registration.athletes);
   const nations = JSON.stringify(registration.nations);
   await db.batch([
@@ -79,7 +84,9 @@ export async function saveStartToken(db: D1Database, registration: StartRegistra
            WHERE app_attest_key_id = ?1 AND environment = ?2 AND athletes = ?3 AND nations = ?4)`,
       )
       .bind(keyId, registration.environment, athletes, nations),
-    db.prepare("DELETE FROM live_start_tokens WHERE app_attest_key_id = ?1 AND token <> ?2").bind(keyId, registration.token),
+    db
+      .prepare("DELETE FROM live_start_tokens WHERE app_attest_key_id = ?1 AND token <> ?2")
+      .bind(keyId, registration.token),
     db
       .prepare(
         `INSERT INTO live_start_tokens (token, environment, athletes, nations, updated_at, app_attest_key_id)
@@ -251,7 +258,11 @@ async function settle(env: Env, raceId: string, claims: Claim[], outcomes: (Push
     ...(unsent.length > 0 ? [release(env, raceId, unsent, 0)] : []),
     ...(failed.length > 0 ? [release(env, raceId, failed, 1)] : []),
     ...(unregistered.length > 0
-      ? [env.DB.prepare("DELETE FROM live_start_tokens WHERE token IN (SELECT value FROM json_each(?1))").bind(JSON.stringify(unregistered))]
+      ? [
+          env.DB.prepare("DELETE FROM live_start_tokens WHERE token IN (SELECT value FROM json_each(?1))").bind(
+            JSON.stringify(unregistered),
+          ),
+        ]
       : []),
   ];
   if (statements.length > 0) await env.DB.batch(statements);
@@ -354,7 +365,9 @@ async function claim(
     ).bind(raceId, channelIds),
   ]);
   const keys = new Set((claimed!.results as { keyId: string }[]).map((row) => row.keyId));
-  const states = new Map((read!.results as { environment: APNsEnvironment; state: string }[]).map((row) => [row.environment, row.state]));
+  const states = new Map(
+    (read!.results as { environment: APNsEnvironment; state: string }[]).map((row) => [row.environment, row.state]),
+  );
   return devices.flatMap((device) => {
     const state = states.get(device.environment);
     if (!keys.has(device.keyId) || !state) return [];

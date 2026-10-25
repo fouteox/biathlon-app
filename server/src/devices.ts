@@ -51,10 +51,17 @@ export function parseRegistration(token: string, body: unknown): DeviceRegistrat
  * one token: registering a new token (APNs issued another one) replaces the
  * previous token, so one attested install can't register many tokens.
  */
-export async function saveDevice(db: D1Database, device: DeviceRegistration, keyId: string, now: number): Promise<void> {
+export async function saveDevice(
+  db: D1Database,
+  device: DeviceRegistration,
+  keyId: string,
+  now: number,
+): Promise<void> {
   await db.batch([
     db
-      .prepare("DELETE FROM outbox WHERE token IN (SELECT token FROM devices WHERE app_attest_key_id = ?1 AND token <> ?2)")
+      .prepare(
+        "DELETE FROM outbox WHERE token IN (SELECT token FROM devices WHERE app_attest_key_id = ?1 AND token <> ?2)",
+      )
       .bind(keyId, device.token),
     db.prepare("DELETE FROM devices WHERE app_attest_key_id = ?1 AND token <> ?2").bind(keyId, device.token),
     db

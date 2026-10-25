@@ -34,9 +34,15 @@ describe("attestation", () => {
   });
 
   it("rejects an attestation for another app, key or challenge", async () => {
-    await expect(verifyAttestation({ ...sampleInput, appId: "1234567890.com.example.other" })).rejects.toThrow("App ID mismatch");
-    await expect(verifyAttestation({ ...sampleInput, keyId: new Uint8Array(32) })).rejects.toThrow("key identifier mismatch");
-    await expect(verifyAttestation({ ...sampleInput, clientDataHash: new Uint8Array(32) })).rejects.toThrow("nonce mismatch");
+    await expect(verifyAttestation({ ...sampleInput, appId: "1234567890.com.example.other" })).rejects.toThrow(
+      "App ID mismatch",
+    );
+    await expect(verifyAttestation({ ...sampleInput, keyId: new Uint8Array(32) })).rejects.toThrow(
+      "key identifier mismatch",
+    );
+    await expect(verifyAttestation({ ...sampleInput, clientDataHash: new Uint8Array(32) })).rejects.toThrow(
+      "nonce mismatch",
+    );
   });
 
   it("rejects validation categories other than this app's builds", async () => {
@@ -49,12 +55,16 @@ describe("attestation", () => {
     // Apple's sample is build "1".
     await expect(verifyAttestation({ ...sampleInput, minBundleVersion: "1.0" })).resolves.toBeDefined();
     await expect(verifyAttestation({ ...sampleInput, minBundleVersion: "0.9.9" })).resolves.toBeDefined();
-    await expect(verifyAttestation({ ...sampleInput, minBundleVersion: "1.0.1" })).rejects.toThrow("bundle version 1 no longer supported");
+    await expect(verifyAttestation({ ...sampleInput, minBundleVersion: "1.0.1" })).rejects.toThrow(
+      "bundle version 1 no longer supported",
+    );
     await expect(verifyAttestation({ ...sampleInput, minBundleVersion: "10" })).rejects.toThrow("no longer supported");
   });
 
   it("rejects an expired credential certificate", async () => {
-    await expect(verifyAttestation({ ...sampleInput, now: Date.parse("2026-05-01T00:00:00Z") })).rejects.toThrow("validity");
+    await expect(verifyAttestation({ ...sampleInput, now: Date.parse("2026-05-01T00:00:00Z") })).rejects.toThrow(
+      "validity",
+    );
   });
 
   it("rejects a chain that doesn't lead to Apple's root", async () => {
@@ -91,12 +101,18 @@ const appId = "TEAM123456.com.fouteox.biathlon";
 
 /** A device-side App Attest key, signing like DCAppAttestService.generateAssertion. */
 async function makeDevice() {
-  const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
+  const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+    "verify",
+  ])) as CryptoKeyPair;
   const publicKey = new Uint8Array((await crypto.subtle.exportKey("raw", pair.publicKey)) as ArrayBuffer);
   const keyId = toBase64(await sha256(publicKey));
   const rpIdHash = await sha256(new TextEncoder().encode(appId));
   let counter = 0;
-  const assert = async (data: Uint8Array, options: { counter?: number; rpIdHash?: Uint8Array; extensions?: Uint8Array } = {}) => {
+  const assert = async (
+    data: Uint8Array,
+    options: { counter?: number; rpIdHash?: Uint8Array; extensions?: Uint8Array } = {},
+  ) => {
     counter = options.counter ?? counter + 1;
     const extensions = options.extensions ?? buildExtensions(3, "1");
     const authenticatorData = new Uint8Array(37 + extensions.length);
@@ -134,11 +150,14 @@ describe("assertion", () => {
     const device = await makeDevice();
     const data = new TextEncoder().encode("request");
     const input = { clientData: data, publicKey: device.publicKey, appId, previousCounter: 0 };
-    await expect(verifyAssertion({ ...input, assertion: await device.assert(data, { extensions: new Uint8Array() }) })).rejects.toThrow(
-      "missing validation category",
-    );
     await expect(
-      verifyAssertion({ ...input, assertion: await device.assert(data, { extensions: buildExtensions(3, "1").subarray(0, 39) }) }),
+      verifyAssertion({ ...input, assertion: await device.assert(data, { extensions: new Uint8Array() }) }),
+    ).rejects.toThrow("missing validation category");
+    await expect(
+      verifyAssertion({
+        ...input,
+        assertion: await device.assert(data, { extensions: buildExtensions(3, "1").subarray(0, 39) }),
+      }),
     ).rejects.toThrow();
   });
 
@@ -146,8 +165,12 @@ describe("assertion", () => {
     const device = await makeDevice();
     const data = new TextEncoder().encode("request");
     const input = { clientData: data, publicKey: device.publicKey, appId, previousCounter: 0, minBundleVersion: "2" };
-    await expect(verifyAssertion({ ...input, assertion: await device.assert(data) })).rejects.toThrow("no longer supported");
-    await expect(verifyAssertion({ ...input, assertion: await device.assert(data, { extensions: buildExtensions(4, "2") }) })).resolves.toBe(2);
+    await expect(verifyAssertion({ ...input, assertion: await device.assert(data) })).rejects.toThrow(
+      "no longer supported",
+    );
+    await expect(
+      verifyAssertion({ ...input, assertion: await device.assert(data, { extensions: buildExtensions(4, "2") }) }),
+    ).resolves.toBe(2);
   });
 
   it("accepts a signed request and returns its counter", async () => {
@@ -161,13 +184,19 @@ describe("assertion", () => {
     const device = await makeDevice();
     const data = new TextEncoder().encode("request");
     const input = { clientData: data, publicKey: device.publicKey, appId, previousCounter: 5 };
-    await expect(verifyAssertion({ ...input, assertion: await device.assert(data, { counter: 6 }), clientData: new Uint8Array(1) })).rejects.toThrow(
-      "invalid signature",
+    await expect(
+      verifyAssertion({
+        ...input,
+        assertion: await device.assert(data, { counter: 6 }),
+        clientData: new Uint8Array(1),
+      }),
+    ).rejects.toThrow("invalid signature");
+    await expect(
+      verifyAssertion({ ...input, assertion: await device.assert(data, { counter: 7, rpIdHash: new Uint8Array(32) }) }),
+    ).rejects.toThrow("App ID mismatch");
+    await expect(verifyAssertion({ ...input, assertion: await device.assert(data, { counter: 5 }) })).rejects.toThrow(
+      "counter",
     );
-    await expect(verifyAssertion({ ...input, assertion: await device.assert(data, { counter: 7, rpIdHash: new Uint8Array(32) }) })).rejects.toThrow(
-      "App ID mismatch",
-    );
-    await expect(verifyAssertion({ ...input, assertion: await device.assert(data, { counter: 5 }) })).rejects.toThrow("counter");
   });
 
   it("rejects malformed CBOR text as a verification failure", async () => {
@@ -201,7 +230,9 @@ async function setUp(
     .run();
   const call = (request: Request) => worker.fetch!(request as never, env, {} as ExecutionContext);
   const challenge = async () => {
-    const response = await call(new Request("https://server.test/v1/app-attest/challenges?purpose=assert", { method: "POST" }));
+    const response = await call(
+      new Request("https://server.test/v1/app-attest/challenges?purpose=assert", { method: "POST" }),
+    );
     return ((await response.json()) as { challenge: string }).challenge;
   };
   const signed = async (method: string, deviceToken: string, body?: unknown, tamper?: (body: string) => string) => {
@@ -209,16 +240,32 @@ async function setUp(
     const text = body === undefined ? "" : JSON.stringify(body);
     const path = `${prefix}${deviceToken}`;
     const assertion = await device.assert(clientData(value, method, path, new TextEncoder().encode(text)));
-    const headers = { [HEADERS.keyId]: device.keyId, [HEADERS.assertion]: toBase64(assertion), [HEADERS.challenge]: value };
-    return new Request(`https://server.test${path}`, { method, headers, body: tamper ? tamper(text) : text || undefined });
+    const headers = {
+      [HEADERS.keyId]: device.keyId,
+      [HEADERS.assertion]: toBase64(assertion),
+      [HEADERS.challenge]: value,
+    };
+    return new Request(`https://server.test${path}`, {
+      method,
+      headers,
+      body: tamper ? tamper(text) : text || undefined,
+    });
   };
-  const tokens = async () => (await env.DB.prepare(`SELECT token FROM ${table}`).all<{ token: string }>()).results.map((row) => row.token);
+  const tokens = async () =>
+    (await env.DB.prepare(`SELECT token FROM ${table}`).all<{ token: string }>()).results.map((row) => row.token);
   return { env, call, signed, tokens };
 }
 
 describe("device registration endpoint", () => {
   const token = "ab".repeat(32);
-  const registration = { environment: "sandbox", categories: ["SW"], cancellation: true, rescheduling: true, locale: "fr-FR", timeZone: "Europe/Paris" };
+  const registration = {
+    environment: "sandbox",
+    categories: ["SW"],
+    cancellation: true,
+    rescheduling: true,
+    locale: "fr-FR",
+    timeZone: "Europe/Paris",
+  };
 
   it("registers and unregisters with a valid assertion", async () => {
     const { call, signed, tokens } = await setUp();
@@ -230,7 +277,10 @@ describe("device registration endpoint", () => {
 
   it("rejects unsigned, replayed and tampered requests", async () => {
     const { call, signed, tokens } = await setUp();
-    const unsigned = new Request(`https://server.test/v1/devices/${token}`, { method: "PUT", body: JSON.stringify(registration) });
+    const unsigned = new Request(`https://server.test/v1/devices/${token}`, {
+      method: "PUT",
+      body: JSON.stringify(registration),
+    });
     expect((await call(unsigned)).status).toBe(401);
 
     const request = await signed("PUT", token, registration);
@@ -255,7 +305,8 @@ describe("device registration endpoint", () => {
 
   it("deletes keys no device has used for 30 days", async () => {
     const { env, call, signed } = await setUp();
-    const keys = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;
+    const keys = async () =>
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;
     await call(await signed("PUT", token, registration));
     const later = Date.now() + 31 * 24 * 60 * 60 * 1000;
     await pruneKeys(env.DB, later);
@@ -288,7 +339,8 @@ describe("device registration endpoint", () => {
   it("checks ownership in the delete itself", async () => {
     const { env, call, signed, tokens } = await setUp();
     await call(await signed("PUT", token, registration));
-    const owner = (await env.DB.prepare("SELECT app_attest_key_id AS keyId FROM devices").first<{ keyId: string }>())!.keyId;
+    const owner = (await env.DB.prepare("SELECT app_attest_key_id AS keyId FROM devices").first<{ keyId: string }>())!
+      .keyId;
     await deleteOwnedDevice(env.DB, token, "another key");
     expect(await tokens()).toEqual([token]);
     await deleteOwnedDevice(env.DB, token, owner);
@@ -319,7 +371,10 @@ describe("Live Activity start endpoint", () => {
 
   it("rejects unsigned requests and invalid favorites", async () => {
     const { call, signed, tokens } = await live();
-    const unsigned = new Request(`https://server.test/v1/live-activity-starts/${token}`, { method: "PUT", body: JSON.stringify(favorites) });
+    const unsigned = new Request(`https://server.test/v1/live-activity-starts/${token}`, {
+      method: "PUT",
+      body: JSON.stringify(favorites),
+    });
     expect((await call(unsigned)).status).toBe(401);
     for (const body of [
       { ...favorites, environment: "staging" },
@@ -355,7 +410,8 @@ describe("Live Activity start endpoint", () => {
 
   it("keeps the keys of saved favorites", async () => {
     const { env, call, signed } = await live();
-    const keys = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;
+    const keys = async () =>
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;
     await call(await signed("PUT", token, favorites));
     const later = Date.now() + 31 * 24 * 60 * 60 * 1000;
     await pruneKeys(env.DB, later);
@@ -377,7 +433,9 @@ describe("challenges", () => {
   });
 
   it("expires assert challenges after 5 minutes and attest ones after a day", async () => {
-    expect(await checkChallenge("secret", await issueChallenge("secret", "assert", now), "assert", now + 6 * 60_000)).toBe(false);
+    expect(
+      await checkChallenge("secret", await issueChallenge("secret", "assert", now), "assert", now + 6 * 60_000),
+    ).toBe(false);
     const attest = await issueChallenge("secret", "attest", now);
     expect(await checkChallenge("secret", attest, "attest", now + 23 * 3_600_000)).toBe(true);
     expect(await checkChallenge("secret", attest, "attest", now + 25 * 3_600_000)).toBe(false);
@@ -395,7 +453,11 @@ describe("challenges", () => {
 /** Encodes a CBOR map with text keys and byte string values. */
 function cborMap(entries: Record<string, Uint8Array>): Uint8Array {
   const head = (major: number, length: number) =>
-    length < 24 ? [(major << 5) | length] : length < 256 ? [(major << 5) | 24, length] : [(major << 5) | 25, length >> 8, length & 0xff];
+    length < 24
+      ? [(major << 5) | length]
+      : length < 256
+        ? [(major << 5) | 24, length]
+        : [(major << 5) | 25, length >> 8, length & 0xff];
   const bytes = [...head(5, Object.keys(entries).length)];
   for (const [key, value] of Object.entries(entries)) {
     const text = new TextEncoder().encode(key);

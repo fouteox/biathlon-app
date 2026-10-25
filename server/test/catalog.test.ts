@@ -8,7 +8,9 @@ type Localization = { stringUnit?: StringUnit; variations?: { plural?: Record<st
 type Entry = { extractionState?: string; shouldTranslate?: boolean; localizations?: Record<string, Localization> };
 
 const read = (path: string) => readFileSync(join(import.meta.dirname, path), "utf8");
-const catalog: { sourceLanguage: string; strings: Record<string, Entry> } = JSON.parse(read("../../Shared/Localizable.xcstrings"));
+const catalog: { sourceLanguage: string; strings: Record<string, Entry> } = JSON.parse(
+  read("../../Shared/Localizable.xcstrings"),
+);
 
 // The languages the app ships: the Xcode project's known regions, as Xcode lists
 // them once a language is added under Project > Info > Localizations.
@@ -32,7 +34,10 @@ describe("app String Catalog", () => {
   // A string extracted from code reads as its own key in the source language;
   // a manual key needs a value there too.
   for (const [key, entry] of Object.entries(catalog.strings).filter(([, entry]) => entry.shouldTranslate !== false)) {
-    const required = entry.extractionState === "manual" ? languages : languages.filter((language) => language !== catalog.sourceLanguage);
+    const required =
+      entry.extractionState === "manual"
+        ? languages
+        : languages.filter((language) => language !== catalog.sourceLanguage);
     it(`translates "${key}" in ${required.join(", ")}`, () => {
       expect(required.filter((language) => !isTranslated(entry.localizations?.[language]))).toEqual([]);
     });
@@ -47,8 +52,14 @@ describe("app String Catalog", () => {
 
   // The app's BiathlonKit tests check its RaceKind against the same list.
   it("names every race kind the app knows", () => {
-    const kinds: string[] = JSON.parse(read("../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/race-kinds.json"));
+    const kinds: string[] = JSON.parse(
+      read("../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/race-kinds.json"),
+    );
     expect([...RACE_KINDS].sort()).toEqual(kinds);
-    expect(Object.keys(catalog.strings).filter((key) => key.startsWith("race.")).sort()).toEqual(kinds.map((kind) => `race.${kind}`));
+    expect(
+      Object.keys(catalog.strings)
+        .filter((key) => key.startsWith("race."))
+        .sort(),
+    ).toEqual(kinds.map((kind) => `race.${kind}`));
   });
 });

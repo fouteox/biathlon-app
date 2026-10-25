@@ -342,7 +342,9 @@ async function publish(env: Env, tokens: ProviderTokens, channel: ChannelRow, st
     }
   }
   const stored = JSON.stringify(state);
-  const { meta } = await env.DB.prepare(`UPDATE live_channels SET state = ?1, published_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`)
+  const { meta } = await env.DB.prepare(
+    `UPDATE live_channels SET state = ?1, published_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`,
+  )
     .bind(stored, channel.raceId, channel.environment, channel.channelId, channel.state, now)
     .run();
   if (meta.changes > 0) channel.state = stored;
@@ -370,7 +372,9 @@ const UNCHANGED_OPEN_CHANNEL = `${OPEN_CHANNEL} AND state = ?5`;
  * through or not.
  */
 async function end(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
-  const { meta } = await env.DB.prepare(`UPDATE live_channels SET state = ?1, published_at = ?6, ended_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`)
+  const { meta } = await env.DB.prepare(
+    `UPDATE live_channels SET state = ?1, published_at = ?6, ended_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`,
+  )
     .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state, now)
     .run();
   // A dropped channel, already unknown to APNs, has no subscriber left to tell.
@@ -441,7 +445,9 @@ async function deleteRetiredChannels(env: Env, tokens: ProviderTokens, now: numb
     .bind(MAX_CHANNEL_DELETIONS_PER_RUN)
     .all<{ environment: APNsEnvironment; channelId: string }>();
   for (const { environment, channelId } of results) {
-    const deletion = await tokens.send(environment, (token) => deleteChannel(environment, env.APNS_TOPIC, channelId, token));
+    const deletion = await tokens.send(environment, (token) =>
+      deleteChannel(environment, env.APNS_TOPIC, channelId, token),
+    );
     if (deletion.kind === "sent" || deletion.kind === "unregistered") {
       await env.DB.prepare("DELETE FROM retired_channels WHERE environment = ?1 AND channel_id = ?2")
         .bind(environment, channelId)
@@ -473,10 +479,18 @@ async function send(
   now: number,
 ): Promise<"sent" | "unregistered" | "deferred" | "failed"> {
   const payload = {
-    aps: { timestamp: broadcastTimestamp(now), event, "relevance-score": relevanceScore(state), "content-state": state },
+    aps: {
+      timestamp: broadcastTimestamp(now),
+      event,
+      "relevance-score": relevanceScore(state),
+      "content-state": state,
+    },
   };
   const outcome = await tokens.send(channel.environment, (token) =>
-    broadcast({ environment: channel.environment, bundleId: env.APNS_TOPIC, channelId: channel.channelId, payload }, token),
+    broadcast(
+      { environment: channel.environment, bundleId: env.APNS_TOPIC, channelId: channel.channelId, payload },
+      token,
+    ),
   );
   if (outcome.kind === "sent" || outcome.kind === "unregistered" || outcome.kind === "deferred") return outcome.kind;
   console.error("APNs broadcast failed", channel.raceId, channel.environment, outcome);
@@ -501,7 +515,13 @@ export async function channelFor(
        FROM live_channels WHERE race_id = ?1 AND environment = ?2`,
     )
     .bind(raceId, environment)
-    .first<{ channelId: string; state: string; publishedAt: number; endedAt: number | null; deletedAt: number | null }>();
+    .first<{
+      channelId: string;
+      state: string;
+      publishedAt: number;
+      endedAt: number | null;
+      deletedAt: number | null;
+    }>();
   if (!row) return undefined;
   const state = JSON.parse(row.state) as LiveState;
   if (row.endedAt !== null) return { ended: state };

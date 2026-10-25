@@ -1,5 +1,14 @@
 import { CBORError, decode, decodeItem, type CBORValue } from "./cbor";
-import { children, DERError, firstChild, isCertificateAuthority, parseCertificate, readSingle, TAG, type Certificate } from "./der";
+import {
+  children,
+  DERError,
+  firstChild,
+  isCertificateAuthority,
+  parseCertificate,
+  readSingle,
+  TAG,
+  type Certificate,
+} from "./der";
 
 /**
  * Apple App Attest verification, following "Validating apps that connect to
@@ -156,9 +165,13 @@ export async function verifyAssertion(input: {
 
     // 1-3. The signature covers nonce = SHA-256(authenticatorData || SHA-256(clientData)).
     const nonce = await sha256(concat(authDataBytes, await sha256(input.clientData)));
-    const key = await crypto.subtle.importKey("raw", copy(input.publicKey), { name: "ECDSA", namedCurve: "P-256" }, false, [
-      "verify",
-    ]);
+    const key = await crypto.subtle.importKey(
+      "raw",
+      copy(input.publicKey),
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["verify"],
+    );
     const valid = await crypto.subtle.verify(
       { name: "ECDSA", hash: "SHA-256" },
       key,
@@ -207,7 +220,8 @@ function parseAuthenticatorData(data: Uint8Array, attested: boolean): Authentica
     const extensions = asMap(value);
     const category = extensions.get("apple_validation_category_01");
     if (category !== undefined) {
-      if (!(category instanceof Uint8Array) || category.length !== 4) throw new AttestationError("invalid validation category");
+      if (!(category instanceof Uint8Array) || category.length !== 4)
+        throw new AttestationError("invalid validation category");
       // Apple's sample encodes category 1 as 01 00 00 00: little-endian.
       result.validationCategory = new DataView(category.buffer, category.byteOffset, 4).getUint32(0, true);
     }
@@ -262,15 +276,20 @@ function attestEnvironment(aaguid: Uint8Array): AttestEnvironment {
 
 async function verifyIssued(certificate: Certificate, issuer: Certificate, now: number): Promise<void> {
   for (const item of [certificate, issuer]) {
-    if (now < item.notBefore || now > item.notAfter) throw new AttestationError("certificate outside its validity period");
+    if (now < item.notBefore || now > item.notAfter)
+      throw new AttestationError("certificate outside its validity period");
   }
   if (!equal(certificate.issuer, issuer.subject)) throw new AttestationError("certificate chain mismatch");
   const hash = SIGNATURE_HASHES[certificate.signatureAlgorithm];
   const curve = CURVES[issuer.curve];
   if (!hash || !curve) throw new AttestationError("unsupported certificate algorithm");
-  const key = await crypto.subtle.importKey("spki", copy(issuer.spki), { name: "ECDSA", namedCurve: curve.name }, false, [
-    "verify",
-  ]);
+  const key = await crypto.subtle.importKey(
+    "spki",
+    copy(issuer.spki),
+    { name: "ECDSA", namedCurve: curve.name },
+    false,
+    ["verify"],
+  );
   const valid = await crypto.subtle.verify(
     { name: "ECDSA", hash },
     key,

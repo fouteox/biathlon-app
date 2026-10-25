@@ -15,8 +15,8 @@
       "binding": "DB",
       "database_name": "biathlon",
       "database_id": "173d1fd8-cacb-4b93-a4de-5fb5ec22a016",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
   // Sends the device pushes in lots, each Durable Object invocation having its own subrequests (src/pushSender.ts).
   "durable_objects": { "bindings": [{ "name": "PUSH_SENDER", "class_name": "PushSender" }] },
@@ -24,7 +24,7 @@
   "vars": {
     "APNS_TOPIC": "com.fouteox.biathlon",
     // Oldest app build (CFBundleVersion) App Attest accepts: raise it to shut out builds before a fix.
-    "APP_ATTEST_MIN_BUNDLE_VERSION": "1"
+    "APP_ATTEST_MIN_BUNDLE_VERSION": "1",
   },
   "secrets": {
     // Apple recommends one team-scoped key per APNs environment.
@@ -36,7 +36,7 @@
       "APNS_PRODUCTION_KEY",
       "APNS_PRODUCTION_KEY_ID",
       "APP_ATTEST_APP_ID",
-      "APP_ATTEST_SECRET"
-    ]
-  }
+      "APP_ATTEST_SECRET",
+    ],
+  },
 }
