@@ -15,6 +15,6 @@ SWIFT_APPROACHABLE_CONCURRENCY = YES
 SWIFT_UPCOMING_FEATURE_EXISTENTIAL_ANY = YES
 SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
 
-// String Catalogs: the compiler extracts localizable strings into App/Resources/Localizable.xcstrings.
+// String Catalogs: the compiler extracts localizable strings into Shared/Localizable.xcstrings.
 LOCALIZATION_PREFERS_STRING_CATALOGS = YES
 SWIFT_EMIT_LOC_STRINGS = YES

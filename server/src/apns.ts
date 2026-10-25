@@ -237,19 +237,25 @@ async function probeURL(url: string, method: string, headers: Record<string, str
 
 /** The reason APNs gives in the response's body, or "" when it can't be read before `signal` aborts. */
 async function errorReason(response: Response, signal?: AbortSignal): Promise<string> {
+  const settled = new AbortController();
   try {
-    const body = await Promise.race([response.json<{ reason?: string }>(), ...(signal ? [whenAborted(signal)] : [])]);
+    const body = await Promise.race([
+      response.json<{ reason?: string }>(),
+      ...(signal ? [whenAborted(signal, settled.signal)] : []),
+    ]);
     return body.reason ?? "";
   } catch {
     return "";
+  } finally {
+    settled.abort();
   }
 }
 
-/** Rejects once `signal` aborts, which a body still being read may not notice. */
-function whenAborted(signal: AbortSignal): Promise<never> {
+/** Rejects once `signal` aborts, which a body still being read may not notice, unless `until` aborts first. */
+function whenAborted(signal: AbortSignal, until: AbortSignal): Promise<never> {
   return new Promise((_, reject) => {
     if (signal.aborted) reject(signal.reason);
-    else signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+    else signal.addEventListener("abort", () => reject(signal.reason), { once: true, signal: until });
   });
 }
 
