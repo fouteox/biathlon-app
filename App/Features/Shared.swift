@@ -20,6 +20,22 @@ extension View {
     }
 }
 
+extension LocalizedStringResource {
+    /// Under the name of an athlete the IBU records as deceased, agreeing with their gender
+    /// where the language needs it ("Décédée" in French).
+    static func deceased(_ gender: Gender?) -> LocalizedStringResource {
+        switch gender {
+        case .woman:
+            LocalizedStringResource(
+                "deceased.woman", defaultValue: "Deceased",
+                comment: "Under the name of a woman athlete the IBU records as deceased.")
+        case .man, nil:
+            LocalizedStringResource(
+                "Deceased", comment: "Under the name of an athlete the IBU records as deceased.")
+        }
+    }
+}
+
 /// A nation's flag, or its IOC code when no flag is known.
 struct NationMark: View {
     let code: String?

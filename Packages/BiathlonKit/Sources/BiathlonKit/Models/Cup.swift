@@ -71,16 +71,18 @@ public struct CupRow: Decodable, Identifiable, Hashable, Sendable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         rank = try c.decodeLooseString(forKey: .rank)
-        athleteID = try c.decodeIfPresent(String.self, forKey: .athleteID)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         shortName = try c.decodeIfPresent(String.self, forKey: .shortName)
-        nation = try c.decodeIfPresent(String.self, forKey: .nation)
+        let nation = try c.decodeIfPresent(String.self, forKey: .nation)
+        self.nation = nation
+        // A nation's row carries its code as `IBUId`.
+        athleteID = try c.decodeIfPresent(String.self, forKey: .athleteID).flatMap { $0 == nation ? nil : $0 }
         score = try c.decodeLooseString(forKey: .score)
         rankChange = try c.decodeLooseInt(forKey: .rankChange)
         let bibs = (try? c.decodeIfPresent([Bib].self, forKey: .bibs)) ?? nil
         bibColors = bibs?.compactMap(\.color) ?? []
     }
 
-    /// Nations standings: no `IBUId`, the name is the country.
+    /// Nations standings: the `IBUId` is the nation's code, the name is the country in English.
     public var isNation: Bool { athleteID == nil }
 }
