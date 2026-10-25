@@ -39,7 +39,7 @@ export async function fetchIBU<T>(path: string, query: Record<string, string>, b
   if (!budget.take()) throw new Error(`IBU ${path}: no subrequest left in this run`);
   const url = new URL(path, IBU_BASE_URL);
   for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value);
-  const response = await fetch(url);
+  const response = await fetch(url, { signal: budget.signal() });
   if (!response.ok) throw new Error(`IBU ${path} answered ${response.status}`);
   return response.json<T>();
 }

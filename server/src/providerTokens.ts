@@ -21,26 +21,26 @@ export class ProviderTokens {
   constructor(
     private readonly env: Env,
     private readonly now: number,
-    private readonly budget: SubrequestBudget,
+    readonly budget: SubrequestBudget,
     private readonly given?: ProviderTokenSet,
   ) {}
 
   /**
-   * Runs `request` with the environment's token. When APNs rejects the token, signs
+   * Runs `request` with the environment's token and the budget's signal. When APNs rejects the token, signs
    * a new one and retries, at most once per run: APNs rejects updates more frequent
    * than every 20 minutes. "deferred" once the run has no subrequest left.
    */
   async send<Outcome extends { kind: string }>(
     environment: APNsEnvironment,
-    request: (token: string) => Promise<Outcome>,
+    request: (token: string, signal?: AbortSignal) => Promise<Outcome>,
   ): Promise<Outcome | Deferred> {
     if (!this.budget.take()) return DEFERRED;
-    const outcome = await request(await this.token(environment));
+    const outcome = await request(await this.token(environment), this.budget.signal());
     if (outcome.kind !== "expiredProviderToken") return outcome;
     const token = await this.renew(environment);
     if (!token) return outcome;
     if (!this.budget.take()) return DEFERRED;
-    return request(token);
+    return request(token, this.budget.signal());
   }
 
   /**

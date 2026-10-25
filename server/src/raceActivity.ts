@@ -15,7 +15,7 @@ import {
 import { startFavoriteActivities } from "./liveStarts";
 import { ProviderTokens, type ProviderTokenSet } from "./providerTokens";
 import { PushLots } from "./pushLots";
-import { SubrequestBudget } from "./subrequests";
+import { SUBREQUESTS_PER_RUN, SubrequestBudget } from "./subrequests";
 
 /**
  * The channels store no messages, as Apple advises for frequent updates like sports
@@ -26,6 +26,12 @@ const END_RESEND_INTERVAL_MS = 10 * 60_000;
 const END_GRACE_MS = 60 * 60_000;
 /** How long a failed request to APNs waits before it goes again: the cron's interval. */
 const RETRY_MS = 60_000;
+/**
+ * How long the APNs and IBU API requests of an update may wait, at most: the object is reset
+ * once an update has run 30 s (`blockConcurrencyWhile`), and a subrequest has no time limit of
+ * its own. The rest is left for the D1 queries that record what the requests did.
+ */
+const REQUESTS_TIME_MS = 20_000;
 /** The storage key of the channels left to delete at APNs (`RetiredChannel`). */
 const RETIRED_KEY = "retiredChannels";
 
@@ -43,8 +49,8 @@ const RETIRED_KEY = "retiredChannels";
 export class RaceActivity extends DurableObject<Env> {
   /** Brings the race's activity up to date with the race as the cron run scheduled at `now` read it. */
   async sync(race: RaceSnapshot, now: number, providerTokens: ProviderTokenSet): Promise<void> {
-    const failure = await this.serialized(() =>
-      syncRace(this.env, this.ctx.storage, race.id, now, { race, providerTokens }),
+    const failure = await this.serialized((deadline) =>
+      syncRace(this.env, this.ctx.storage, race.id, now, deadline, { race, providerTokens }),
     );
     if (failure) throw failure.error;
   }
@@ -52,20 +58,23 @@ export class RaceActivity extends DurableObject<Env> {
   override async alarm(): Promise<void> {
     // The object's name, the race's id, is known in its alarms too (Cloudflare changelog, 2026-03-15).
     const raceId = this.ctx.id.name ?? "";
-    const failure = await this.serialized(() => syncRace(this.env, this.ctx.storage, raceId, Date.now()));
+    const failure = await this.serialized((deadline) =>
+      syncRace(this.env, this.ctx.storage, raceId, Date.now(), deadline),
+    );
     if (failure) console.error("Live Activity alarm failed", raceId, String(failure.error));
   }
 
   /**
    * Runs `update` while no other request or alarm reaches the object: it waits on APNs and the
    * IBU API, when the object would otherwise take the next one. A failure is returned rather
-   * than thrown, which would reset the object, and the alarm tries again a minute later.
+   * than thrown, which would reset the object, and the alarm tries again a minute later. The
+   * update's requests are given up at the deadline it is handed, before the object's time is up.
    */
-  private async serialized(update: () => Promise<void>): Promise<{ error: unknown } | undefined> {
+  private async serialized(update: (deadline: number) => Promise<void>): Promise<{ error: unknown } | undefined> {
     let failure: { error: unknown } | undefined;
     await this.ctx.blockConcurrencyWhile(async () => {
       try {
-        await update();
+        await update(Date.now() + REQUESTS_TIME_MS);
       } catch (error) {
         failure = { error };
         await this.ctx.storage.setAlarm(Date.now() + RETRY_MS);
@@ -102,19 +111,21 @@ interface RetiredChannel {
  * state of the race is broadcast on them; a race over, or unlisted for longer than its activity
  * can last, has its activity ended. The activity then starts on the devices whose favorites
  * race (liveStarts.ts), the ends are sent, again for the devices that were offline, and the
- * channels are deleted at APNs an hour after; the alarm is set for the next of them.
+ * channels are deleted at APNs an hour after; the alarm is set for the next of them. The requests
+ * still unanswered at `deadline` are given up, for a later update.
  */
 export async function syncRace(
   env: Env,
   storage: DurableObjectStorage,
   raceId: string,
   now: number,
+  deadline: number,
   listed?: { race: RaceSnapshot; providerTokens: ProviderTokenSet },
 ): Promise<void> {
   const rows = await readChannels(env.DB, raceId);
   // A run started before the latest state recorded, which a newer run read from a newer calendar.
   if (listed && rows.some((row) => Math.max(row.publishedAt, row.endedAt ?? 0) > now)) return;
-  const budget = new SubrequestBudget();
+  const budget = new SubrequestBudget(SUBREQUESTS_PER_RUN, deadline);
   const tokens = new ProviderTokens(env, now, budget, listed?.providerTokens);
   const results = lazyResults(raceId, budget);
   const race = listed?.race;
@@ -240,7 +251,9 @@ async function openChannel(
   state: LiveState,
   now: number,
 ) {
-  const outcome = await tokens.send(environment, (token) => createChannel(environment, env.APNS_TOPIC, token));
+  const outcome = await tokens.send(environment, (token, signal) =>
+    createChannel(environment, env.APNS_TOPIC, token, signal),
+  );
   if (outcome.kind !== "created") {
     if (outcome.kind !== "deferred") console.error("APNs channel creation failed", raceId, environment, outcome);
     return;
@@ -365,8 +378,8 @@ async function deleteAtAPNs(
   environment: APNsEnvironment,
   channelId: string,
 ): Promise<"deleted" | "deferred" | "failed"> {
-  const deletion = await tokens.send(environment, (token) =>
-    deleteChannel(environment, env.APNS_TOPIC, channelId, token),
+  const deletion = await tokens.send(environment, (token, signal) =>
+    deleteChannel(environment, env.APNS_TOPIC, channelId, token, signal),
   );
   if (deletion.kind === "sent" || deletion.kind === "unregistered") return "deleted";
   if (deletion.kind === "deferred") return "deferred";
@@ -451,8 +464,12 @@ async function send(
       "content-state": state,
     },
   };
-  const outcome = await tokens.send(row.environment, (token) =>
-    broadcast({ environment: row.environment, bundleId: env.APNS_TOPIC, channelId: row.channelId, payload }, token),
+  const outcome = await tokens.send(row.environment, (token, signal) =>
+    broadcast(
+      { environment: row.environment, bundleId: env.APNS_TOPIC, channelId: row.channelId, payload },
+      token,
+      signal,
+    ),
   );
   if (outcome.kind === "sent" || outcome.kind === "unregistered" || outcome.kind === "deferred") return outcome.kind;
   console.error("APNs broadcast failed", row.raceId, row.environment, outcome);
