@@ -167,6 +167,13 @@ export async function verifyAttestation(input: {
 const RECEIPT_FIELD = { appId: 2, attestedPublicKey: 3, creationTime: 12 } as const;
 /** Apple: a receipt created more than five minutes ago may be replayed. */
 const RECEIPT_MAX_AGE_MS = 5 * 60 * 1000;
+/**
+ * Apple Root CA - G3 also issues certificates for keys developers hold (Apple Pay
+ * Payment Processing, through WWDR G2), so the chain is pinned to the names Apple
+ * gives the receipt signer and its CA. Only Apple can issue a CA under the root.
+ */
+const RECEIPT_SIGNER = "CN=Application Attestation Fraud Receipt Signing, O=Apple Inc., C=US";
+const RECEIPT_CA = "CN=Apple Application Integration CA 5 - G1, OU=Apple Certification Authority, O=Apple Inc., C=US";
 const SHA256_OID = "2.16.840.1.101.3.4.2.1";
 const ECDSA_WITH_SHA256_OID = "1.2.840.10045.4.3.2";
 
@@ -222,8 +229,11 @@ export async function verifyReceipt(input: {
       throw new AttestationError("invalid receipt signature");
     }
 
-    // 2. The signing certificate chains up to Apple Root CA - G3.
-    const intermediate = certificates.find((certificate) => certificate.subject === signing.issuer);
+    // 2. The signing certificate is Apple's receipt signer, and chains up to Apple Root CA - G3.
+    if (signing.subject !== RECEIPT_SIGNER || signing.issuer !== RECEIPT_CA) {
+      throw new AttestationError("receipt not signed by Apple's receipt signer");
+    }
+    const intermediate = certificates.find((certificate) => certificate.subject === RECEIPT_CA);
     if (!intermediate) throw new AttestationError("receipt certificate chain mismatch");
     if (!intermediate.getExtension(BasicConstraintsExtension)?.ca) {
       throw new AttestationError("receipt intermediate is not a CA");

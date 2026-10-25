@@ -3,6 +3,7 @@ import { X509Certificate } from "@peculiar/x509";
 import { describe, expect, it } from "vite-plus/test";
 import { decode } from "cborg";
 import { fromBase64, verifyAttestation, verifyReceipt } from "../src/attestation";
+import forged from "./fixtures/forged-receipt.json";
 import sample from "./fixtures/apple-attestation-sample.json";
 
 // The receipt in Apple's sample was created at 2026-04-21T18:13:12.153Z, for the key it attests.
@@ -53,6 +54,13 @@ describe("receipt", () => {
 
   it("rejects a chain that doesn't lead to Apple Root CA - G3", async () => {
     await expect(verifyReceipt({ ...input, root: intermediate })).rejects.toThrow("chain");
+  });
+
+  it("rejects a receipt signed by another certificate under an Apple CA", async () => {
+    // Apple Root CA - G3 also issues certificates for developer keys: only the receipt signer counts.
+    await expect(
+      verifyReceipt({ ...input, receipt: fromBase64(forged.receipt), root: fromBase64(forged.root) }),
+    ).rejects.toThrow("receipt not signed by Apple's receipt signer");
   });
 
   it("rejects garbage", async () => {
