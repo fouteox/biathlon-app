@@ -33,6 +33,9 @@ final class AccessibilityUITests: XCTestCase {
         openFirstAthlete(in: app)
         let profile = firstRow(in: app)
         XCTAssertEqual(profile.images.count, 0)
+        // The results load on their own, after the profile.
+        let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Latest results")).firstMatch
+        XCTAssertTrue(results.waitForExistence(timeout: Self.timeout))
         assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
     }
@@ -54,16 +57,18 @@ final class AccessibilityUITests: XCTestCase {
         let star = app.navigationBars.buttons["Add to favorites"]
         XCTAssertTrue(star.waitForExistence(timeout: Self.timeout))
         star.tap()
-        teamButton(in: app, titled: "Add ").tap()
+        Self.teamButton(in: app, titled: "Add ").tap()
+        // Leaves the favorites as they were for the next run, even when an assertion fails: the
+        // store persists on the simulator.
+        addTeardownBlock { @MainActor in
+            app.tabBars.buttons["Standings"].tap()
+            Self.teamButton(in: app, titled: "Remove ").tap()
+            app.navigationBars.buttons["Remove from favorites"].tap()
+        }
 
         app.tabBars.buttons["Favorites"].tap()
         assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
-
-        // Leaves the favorites as they were for the next run.
-        app.tabBars.buttons["Standings"].tap()
-        teamButton(in: app, titled: "Remove ").tap()
-        app.navigationBars.buttons["Remove from favorites"].tap()
     }
 
     @MainActor func testHomeRowsReadAsOneElement() throws {
@@ -93,7 +98,7 @@ final class AccessibilityUITests: XCTestCase {
     }
 
     /// The athlete's team, from the button below the profile.
-    @MainActor private func teamButton(in app: XCUIApplication, titled prefix: String) -> XCUIElement {
+    @MainActor private static func teamButton(in app: XCUIApplication, titled prefix: String) -> XCUIElement {
         app.cells.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
     }
 
