@@ -8,7 +8,7 @@ import { ProviderTokens } from "../src/providerTokens";
 import { SubrequestBudget } from "../src/subrequests";
 import { buildPayload } from "../src/payload";
 import { PushLots } from "../src/pushLots";
-import { drainOutbox } from "../src/watcher";
+import { claimCronRun, drainOutbox } from "../src/watcher";
 import { makeD1 } from "./d1";
 import { pushSenders } from "./pushSenders";
 
@@ -1049,6 +1049,35 @@ describe("alerts", () => {
     expect(lots).toEqual([50, 50, 20]);
     expect(devicePushes(sent).length).toBe(120);
     expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([]);
+  });
+
+  it("runs the cron once per scheduled minute, though Cloudflare sometimes fires it twice", async () => {
+    const env = await makeEnv();
+    const minute = Date.parse("2026-11-26T14:45:00Z");
+
+    expect(await claimCronRun(env.DB, minute)).toBe(true);
+    // Fired again for the same minute, at once or a little later.
+    expect(await claimCronRun(env.DB, minute)).toBe(false);
+    expect(await claimCronRun(env.DB, minute + 900)).toBe(false);
+    expect(await claimCronRun(env.DB, minute + 60_000)).toBe(true);
+    // A late run of an earlier minute.
+    expect(await claimCronRun(env.DB, minute)).toBe(false);
+  });
+
+  it("sends each lot from a Durable Object of its own, which no overlapping run shares", async () => {
+    // Concurrent requests to one object share its 50 subrequests: measured on 2026-10-25, when
+    // Cloudflare fired the cron twice within a second.
+    const env = await makeEnv();
+    const objects: string[] = [];
+    env.PUSH_SENDER = pushSenders([], { objects });
+    await queue(env, Array.from({ length: 60 }, (_, index) => `a${index}`));
+    stubNetwork();
+    await drainOutbox(env, NOW);
+    await queue(env, Array.from({ length: 60 }, (_, index) => `b${index}`));
+    await drainOutbox(env, NOW);
+
+    expect(objects.length).toBe(4);
+    expect(new Set(objects).size).toBe(4);
   });
 
   it("builds each alert in the device's language and time zone", async () => {

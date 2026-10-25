@@ -67,25 +67,27 @@ export class PushLots {
   private async sendAll(environment: APNsEnvironment, items: Pending[]): Promise<void> {
     const pushes = items.map(({ push }) => push);
     const outcomes = await this.tokens.token(environment).then(
-      (providerToken) => this.lots(environment, providerToken, pushes),
+      (providerToken) => this.lots(providerToken, pushes),
       (error: unknown) => pushes.map(() => retry(error)),
     );
     const expired = outcomes.flatMap((outcome, index) => (outcome.kind === "expiredProviderToken" ? [index] : []));
     const renewed = expired.length > 0 ? await this.tokens.renew(environment).catch(() => undefined) : undefined;
     if (renewed) {
-      const retried = await this.lots(environment, renewed, expired.map((index) => items[index]!.push));
+      const retried = await this.lots(renewed, expired.map((index) => items[index]!.push));
       expired.forEach((index, position) => (outcomes[index] = retried[position]!));
     }
     items.forEach(({ resolve }, index) => resolve(outcomes[index]!));
   }
 
-  private async lots(environment: APNsEnvironment, providerToken: string, pushes: LotPush[]): Promise<PushOutcome[]> {
+  private async lots(providerToken: string, pushes: LotPush[]): Promise<PushOutcome[]> {
     const lots = Array.from({ length: Math.ceil(pushes.length / LOT_SIZE) }, (_, index) =>
       pushes.slice(index * LOT_SIZE, (index + 1) * LOT_SIZE),
     );
     const outcomes = await Promise.all(
-      lots.map((lot, index) =>
-        this.env.PUSH_SENDER.getByName(`${environment}-${index}`)
+      lots.map((lot) =>
+        // A new object for each lot: concurrent requests to one object share its subrequests,
+        // and Cloudflare sometimes fires the cron twice at once (measured on 2026-10-25).
+        this.env.PUSH_SENDER.get(this.env.PUSH_SENDER.newUniqueId())
           .send(lot, providerToken)
           .catch((error: unknown) => lot.map(() => retry(error))),
       ),
