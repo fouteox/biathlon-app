@@ -6,7 +6,7 @@ struct HomeView: View {
     @Environment(\.ibu) private var ibu
     @State private var loader = Loader<HomeFeed>()
     @Query private var favorites: [Favorite]
-    @State private var showsSettings = false
+    @Environment(SettingsPresentation.self) private var settingsPresentation
 
     var body: some View {
         LoadableView(state: loader.state, retry: load) { feed in
@@ -74,14 +74,11 @@ struct HomeView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
-                    showsSettings = true
+                    settingsPresentation.isPresented = true
                 } label: {
                     Label("Settings", systemImage: "gearshape")
                 }
             }
-        }
-        .sheet(isPresented: $showsSettings) {
-            NavigationStack { SettingsView() }
         }
         .task { await load() }
         .refreshingWhileLive(loader.state.value?.live != nil, action: load)

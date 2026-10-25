@@ -4,6 +4,8 @@
 <dict>
 	<key>BiathlonServerURL</key>
 	<string>$(BIATHLON_SERVER_URL)</string>
+	<key>BiathlonPrivacyPolicyURL</key>
+	<string>$(BIATHLON_PRIVACY_POLICY_URL)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

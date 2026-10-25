@@ -3,9 +3,11 @@ import UIKit
 import UserNotifications
 import os
 
-/// Receives the APNs device token and notifications delivered while the app is open.
+/// Receives the APNs device token, notifications delivered while the app is open, and the
+/// system's requests to show the notification settings.
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     let settings = NotificationSettings()
+    let settingsPresentation = SettingsPresentation()
     /// The notification server, `nil` for a build without one.
     let server: ServerClient?
     let push: PushRegistration
@@ -68,6 +70,14 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     // Tapping an alert needs no handling: the app becomes active, which refreshes the reminders.
+
+    /// Called from the button iOS shows in Settings > Notifications, which the app asks for with
+    /// `providesAppNotificationSettings`.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter, openSettingsFor notification: UNNotification?
+    ) {
+        Task { @MainActor in self.settingsPresentation.isPresented = true }
+    }
 
     /// Applies every change of the preferences, wherever it is made, after a short pause
     /// that coalesces quick successive changes. Syncs run one after another with the
