@@ -217,7 +217,7 @@ function startPush(env: Env, race: RaceSnapshot, claimed: Claim, now: number): L
 
 /**
  * Gives the starts that didn't go through back to a later run, and forgets the tokens APNs no
- * longer knows, in at most three D1 queries, whatever the number of starts.
+ * longer knows, in one D1 batch of at most three statements, whatever the number of starts.
  */
 async function settle(env: Env, raceId: string, claims: Claim[], outcomes: (PushOutcome | Deferred)[]): Promise<void> {
   const unsent: Claim[] = [];
@@ -323,9 +323,9 @@ interface Claim extends PendingToken {
 /**
  * Claims the start of the race on its channel for each device's install, while the channel is
  * open and the stored token still has a favorite among the entrants `lists`, over a check the
- * previous entrants started nothing for. One transaction of two queries, whatever the number
- * of devices: the Workers Free plan allows 50 D1 queries per invocation, each statement of a
- * batch counting (https://developers.cloudflare.com/d1/platform/limits/).
+ * previous entrants started nothing for. One batch of two set-based statements, whatever the
+ * number of devices: a transaction, and one of the 50 D1 queries per invocation the Workers
+ * Free plan allows (https://developers.cloudflare.com/d1/platform/limits/).
  */
 async function claim(
   env: Env,

@@ -10,8 +10,8 @@ export const LOT_SIZE = SUBREQUESTS_PER_RUN;
  * The pushes a run sends at most: 15,000 recipients of one alert in the 30 minutes it stays
  * useful (`OUTBOX_MAX_AGE_MS`). Each lot is one Durable Object request (100,000 a day on the
  * Free plan) and one of the run's 1,000 subrequests to Cloudflare services. The run's D1
- * queries, 50 at most on that plan, don't grow with its pushes: they are claimed and settled
- * with a few set-based statements.
+ * queries, 50 at most on that plan, a batch counting as one, don't grow with its pushes: they
+ * are claimed and settled with a few batches of set-based statements.
  */
 export const MAX_PUSHES_PER_RUN = 500;
 
