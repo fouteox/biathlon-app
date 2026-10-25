@@ -15,6 +15,26 @@ const EVENTS_TTL_MS = 6 * 60 * 60 * 1000;
 const OUTBOX_MAX_AGE_MS = 30 * 60 * 1000;
 
 /**
+ * Whether the run scheduled at `scheduledTime` is the first for its minute, and records it.
+ * Cloudflare sometimes fires the cron twice for one minute (3 times in a day, measured on
+ * 2026-10-25): the second run would send the same alerts again. A run of an earlier minute
+ * than one already started is skipped too, the later run doing its work.
+ */
+export async function claimCronRun(db: D1Database, scheduledTime: number): Promise<boolean> {
+  const minute = Math.floor(scheduledTime / 60_000);
+  const claimed = await db
+    .prepare(
+      `INSERT INTO settings (key, value, updated_at) VALUES ('cron_minute', ?1, ?2)
+       ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+         WHERE CAST(settings.value AS INTEGER) < CAST(excluded.value AS INTEGER)
+       RETURNING key`,
+    )
+    .bind(String(minute), scheduledTime)
+    .first();
+  return claimed !== null;
+}
+
+/**
  * One cron run: detect race changes and queue alerts, send a batch of alerts, then
  * update the races' Live Activities with the subrequests left, and start those of the
  * favorites' races. Device pushes go out in lots (`PushLots`), outside the run's budget.

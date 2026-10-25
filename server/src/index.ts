@@ -13,7 +13,7 @@ import { isPurpose, issueChallenge } from "./challenges";
 import { authorize, pruneKeys, registerKey } from "./keys";
 import { channelFor } from "./live";
 import { TV_COVERAGE } from "./tvCoverage";
-import { runCron } from "./watcher";
+import { claimCronRun, runCron } from "./watcher";
 
 export { PushSender } from "./pushSender";
 
@@ -63,6 +63,7 @@ export default {
   },
 
   async scheduled(controller, env, ctx): Promise<void> {
+    if (!(await claimCronRun(env.DB, controller.scheduledTime))) return;
     try {
       await runCron(env, controller.scheduledTime);
     } finally {
