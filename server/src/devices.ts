@@ -20,10 +20,8 @@ export function isDeviceToken(value: unknown): value is string {
   return typeof value === "string" && TOKEN_PATTERN.test(value);
 }
 
-/** Validates the JSON body of `PUT /v1/devices/:token`. */
+/** Validates the JSON body of `PUT /v1/devices/:token`, for a token `isDeviceToken` accepted. */
 export function parseRegistration(token: string, body: unknown): DeviceRegistration | string {
-  const normalized = token.toLowerCase();
-  if (!isDeviceToken(normalized)) return "invalid device token";
   if (typeof body !== "object" || body === null) return "body must be a JSON object";
   const input = body as Record<string, unknown>;
   if (!isEnvironment(input.environment)) return "invalid environment";
@@ -36,7 +34,7 @@ export function parseRegistration(token: string, body: unknown): DeviceRegistrat
   const locale = typeof input.locale === "string" && input.locale.length <= 35 ? input.locale : "en";
   const timeZone = typeof input.timeZone === "string" && input.timeZone.length <= 64 ? input.timeZone : "UTC";
   return {
-    token: normalized,
+    token,
     environment: input.environment,
     categories: [...new Set(input.categories as Category[])],
     cancellation: input.cancellation,
@@ -78,7 +76,7 @@ export async function saveDevice(
       .bind(
         device.token,
         device.environment,
-        device.categories.join(","),
+        JSON.stringify(device.categories),
         device.cancellation ? 1 : 0,
         device.rescheduling ? 1 : 0,
         device.locale,

@@ -18,9 +18,24 @@
       "migrations_dir": "migrations",
     },
   ],
-  // Sends the device pushes in lots, each Durable Object invocation having its own subrequests (src/pushSender.ts).
-  "durable_objects": { "bindings": [{ "name": "PUSH_SENDER", "class_name": "PushSender" }] },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["PushSender"] }],
+  "durable_objects": {
+    "bindings": [
+      // Sends the device pushes in lots, each Durable Object invocation having its own subrequests (src/pushSender.ts).
+      { "name": "PUSH_SENDER", "class_name": "PushSender" },
+      // One per race, named after it, for its Live Activity (src/raceActivity.ts).
+      { "name": "RACE_ACTIVITY", "class_name": "RaceActivity" },
+    ],
+  },
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["PushSender"] },
+    { "tag": "v2", "new_sqlite_classes": ["RaceActivity"] },
+  ],
+  // Requests per minute and client IP address, counted in each Cloudflare location (src/index.ts):
+  // the IBU API requests the cache can't answer, and the App Attest challenges.
+  "ratelimits": [
+    { "name": "IBU_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 60, "period": 60 } },
+    { "name": "CHALLENGE_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
+  ],
   "vars": {
     "APNS_TOPIC": "com.fouteox.biathlon",
     // Oldest app build (CFBundleVersion) App Attest accepts: raise it to shut out builds before a fix.

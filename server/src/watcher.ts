@@ -5,13 +5,13 @@ import {
   activeEvents,
   fetchIBU,
   seasonId,
+  seasonStart,
   snapshot,
   type IBUCompetition,
   type IBUEvent,
   type RaceSnapshot,
 } from "./ibu";
 import { syncLiveActivities } from "./live";
-import { startFavoriteActivities } from "./liveStarts";
 import type { AlertInput } from "./payload";
 import { ProviderTokens } from "./providerTokens";
 import { MAX_SEND_ATTEMPTS, PushLots } from "./pushLots";
@@ -43,24 +43,23 @@ export async function claimCronRun(db: D1Database, scheduledTime: number): Promi
 }
 
 /**
- * One cron run: detect race changes and queue alerts, send a batch of alerts, then
- * update the races' Live Activities with the subrequests left, and start those of the
- * favorites' races. Device pushes go out in lots (`PushLots`), outside the run's budget.
+ * One cron run: detect race changes and queue alerts, send a batch of alerts, then hand
+ * each race to its Live Activity's Durable Object, which has its own subrequests. Alerts
+ * go out in lots (`PushLots`), outside the run's budget.
  */
 export async function runCron(env: Env, now: number): Promise<void> {
   const budget = new SubrequestBudget();
-  const lots = new PushLots(env, new ProviderTokens(env, now, budget));
+  const tokens = new ProviderTokens(env, now, budget);
   let races: RaceSnapshot[] | undefined;
   try {
     ({ races } = await pollRaces(env, now, budget));
   } finally {
-    // Alerts queued by earlier runs and ended activities still go out while the IBU API is down.
+    // Alerts queued by earlier runs still go out while the IBU API is down, and ended
+    // activities through their objects' alarms.
     try {
-      await drainOutbox(env, now, lots);
+      await drainOutbox(env, now, new PushLots(env, tokens));
     } finally {
-      await syncLiveActivities(env, races, now, budget);
-      // After the channels it subscribes the new activities to.
-      if (races) await startFavoriteActivities(env, races, now, budget, lots);
+      if (races) await syncLiveActivities(env, races, now, tokens);
     }
   }
 }
@@ -115,6 +114,20 @@ export async function pollRaces(
   return { changes, races: current };
 }
 
+/**
+ * Deletes the races of past seasons, which the watcher no longer polls, but those a Live
+ * Activity's channel or start still references.
+ */
+export async function pruneRaces(db: D1Database, now: number): Promise<void> {
+  await db
+    .prepare(
+      `DELETE FROM races WHERE start_time < ?1
+       AND id NOT IN (SELECT race_id FROM live_channels) AND id NOT IN (SELECT race_id FROM live_starts)`,
+    )
+    .bind(seasonStart(new Date(now)).toISOString())
+    .run();
+}
+
 /** Queues one alert per device subscribed to the race's category and to this kind of change. */
 function enqueue(db: D1Database, change: RaceChange, now: number): D1PreparedStatement {
   const preference = change.kind === "cancelled" ? "cancellation" : "rescheduling";
@@ -122,7 +135,7 @@ function enqueue(db: D1Database, change: RaceChange, now: number): D1PreparedSta
     .prepare(
       `INSERT INTO outbox (token, environment, kind, race_id, race_name, start_time, locale, time_zone, created_at)
        SELECT token, environment, ?1, ?2, ?3, ?4, locale, time_zone, ?5 FROM devices
-       WHERE ${preference} = 1 AND (',' || categories || ',') LIKE ('%,' || ?6 || ',%')`,
+       WHERE ${preference} = 1 AND ?6 IN (SELECT value FROM json_each(categories))`,
     )
     .bind(change.kind, change.race.id, change.race.name, change.race.startTime, now, change.race.category);
 }

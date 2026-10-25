@@ -8,39 +8,27 @@ import Testing
 /// `content-state`, which ActivityKit decodes with a plain `JSONDecoder`, with its
 /// `relevance-score`, which the app's local updates give as well.
 struct RaceLiveStateTests {
-    struct Case: CustomTestStringConvertible {
+    struct Case: Decodable, CustomTestStringConvertible {
         let name: String
-        let state: Data
+        let state: RaceLiveState?
         let relevanceScore: Double?
         var testDescription: String { name }
     }
 
-    static let cases: [Case] = {
-        let url = Bundle.module.url(forResource: "live-activity", withExtension: "json", subdirectory: "Fixtures")!
-        let objects = try! JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [[String: Any]]
-        return objects.map { object in
-            let json = { (key: String) in
-                try! JSONSerialization.data(withJSONObject: object[key]!, options: .fragmentsAllowed)
-            }
-            return Case(
-                name: object["name"] as! String, state: json("state"),
-                relevanceScore: object["relevanceScore"] as? Double)
-        }
-    }()
-
-    /// As ActivityKit reads it: default decoding strategies.
-    private static func decode(_ state: Data) throws -> RaceLiveState? {
-        try JSONDecoder().decode(RaceLiveState?.self, from: state)
+    /// As ActivityKit reads a `content-state`: default decoding strategies.
+    static func cases() throws -> [Case] {
+        let url = try #require(
+            Bundle.module.url(forResource: "live-activity", withExtension: "json", subdirectory: "Fixtures"))
+        return try JSONDecoder().decode([Case].self, from: Data(contentsOf: url))
     }
 
-    @Test(arguments: cases)
-    func decodesTheServersState(_ example: Case) throws {
-        let state = try Self.decode(example.state)
-        #expect(state?.relevanceScore == example.relevanceScore)
+    @Test(arguments: try cases())
+    func decodesTheServersState(_ example: Case) {
+        #expect(example.state?.relevanceScore == example.relevanceScore)
     }
 
     @Test func roundTripsThroughDefaultCoding() throws {
-        let state = try #require(Self.cases.compactMap { try? Self.decode($0.state) }.first)
+        let state = try #require(Self.cases().compactMap(\.state).first)
         let data = try JSONEncoder().encode(state)
         #expect(try JSONDecoder().decode(RaceLiveState.self, from: data) == state)
     }
@@ -69,26 +57,14 @@ struct RaceLiveStateTests {
         let soon = date("2026-11-26T15:00:00Z")
         #expect(race.needsNewActivity(scheduledStart: date("2026-11-26T15:30:00Z"), isPending: true, now: soon))
         #expect(!race.needsNewActivity(scheduledStart: shownAt, isPending: false, now: soon))
-        // A race that is over only ends its activity.
-        var cancelled = race
-        cancelled.phase = .cancelled
-        #expect(!cancelled.needsNewActivity(scheduledStart: date("2026-11-26T12:30:00Z"), isPending: true, now: now))
     }
 
-    #if DEBUG
-        @Test func theDemoShowsEveryStateOfARaceInOrder() {
-            let start = date("2026-11-26T15:15:00Z")
-            let demo = RaceLiveState.demo(startTime: start)
-            #expect(demo.map(\.phase) == [.scheduled, .live, .live, .live, .finished, .cancelled])
-            #expect(Set(demo.map(\.startTime)) == [start])
-            #expect(demo.map(\.leaders.count) == [0, 0, 3, 3, 3, 0])
-            // The podium changes as a broadcast would, and the result keeps the last one.
-            #expect(demo[2].leaders != demo[3].leaders)
-            #expect(demo[4].leaders == demo[3].leaders)
-        }
-    #endif
-
-    @Test func onlyLiveAndUpcomingRacesCanBeFollowed() {
-        #expect(Competition.State.allCases.filter(\.canBeFollowedLive) == [.scheduled, .live])
+    /// A race that is over only ends its activity, even one waiting to show at an old start.
+    @Test(arguments: [Competition.State.finished, .cancelled])
+    func anEndedRaceNeverNeedsANewActivity(phase: Competition.State) {
+        let now = date("2026-11-26T09:00:00Z")
+        let race = RaceLiveState(phase: phase, startTime: date("2026-11-26T15:15:00Z"), leaders: [])
+        #expect(!race.needsNewActivity(scheduledStart: date("2026-11-26T12:30:00Z"), isPending: true, now: now))
+        #expect(!race.needsNewActivity(scheduledStart: nil, isPending: false, now: now))
     }
 }

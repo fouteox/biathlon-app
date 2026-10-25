@@ -1,9 +1,10 @@
-import { describe, expect, it } from "vite-plus/test";
-import { classify, makeProviderToken } from "../src/apns";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { classify, makeProviderToken, sendPush } from "../src/apns";
 import { detectChange } from "../src/changes";
 import { parseRegistration } from "../src/devices";
 import { activeEvents, seasonId, snapshot, type RaceSnapshot } from "../src/ibu";
 import { buildPayload, formatStart, raceTitleKey } from "../src/payload";
+import { answer } from "./network";
 
 // Shape of a real `Competitions?EventId=BT2627SWRLCP01` row, fetched 2026-10-19.
 const scheduled = {
@@ -80,11 +81,10 @@ describe("device registration", () => {
   };
 
   it("accepts a valid registration", () => {
-    expect(parseRegistration(token.toUpperCase(), body)).toMatchObject({ token, categories: ["SM", "SW"] });
+    expect(parseRegistration(token, body)).toMatchObject({ token, categories: ["SM", "SW"] });
   });
 
   it("rejects bad input", () => {
-    expect(parseRegistration("xyz", body)).toBe("invalid device token");
     expect(parseRegistration(token, { ...body, environment: "dev" })).toBe("invalid environment");
     expect(parseRegistration(token, { ...body, categories: ["XX"] })).toBe("invalid categories");
   });
@@ -170,5 +170,28 @@ describe("APNs", () => {
     expect(classify(403, "InvalidProviderToken").kind).toBe("expiredProviderToken");
     expect(classify(429, "TooManyRequests").kind).toBe("retry");
     expect(classify(400, "BadTopic").kind).toBe("failed");
+  });
+
+  it("stops listening for the deadline once the rejection's reason is read", async () => {
+    const deadline = new AbortController();
+    const heard = vi.fn();
+    // Spied on from the answer, past the listener of the network's mock `fetch`.
+    answer(() => {
+      const listen = deadline.signal.addEventListener.bind(deadline.signal);
+      vi.spyOn(deadline.signal, "addEventListener").mockImplementation((type, listener, options) =>
+        listen(
+          type,
+          (event) => (heard(), typeof listener === "function" ? listener(event) : listener.handleEvent(event)),
+          options,
+        ),
+      );
+      return Response.json({ reason: "BadTopic" }, { status: 400 });
+    });
+    const push = { deviceToken: "token", environment: "sandbox", topic: "topic", payload: {}, expiration: 0 } as const;
+
+    expect(await sendPush(push, "provider token", deadline.signal)).toEqual({ kind: "failed", reason: "400 BadTopic" });
+    deadline.abort();
+
+    expect(heard).not.toHaveBeenCalled();
   });
 });

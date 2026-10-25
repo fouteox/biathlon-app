@@ -1,16 +1,18 @@
+import { createExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vite-plus/test";
-import { fromBase64, rawSignature, sha256, toBase64, verifyAssertion, verifyAttestation } from "../src/attestation";
-import { decode } from "../src/cbor";
+import { AsnEcSignatureFormatter } from "@peculiar/x509";
+import { decode, encode } from "cborg";
+import { AttestationError, fromBase64, sha256, toBase64, verifyAssertion, verifyAttestation } from "../src/attestation";
 import { deleteOwnedDevice } from "../src/devices";
-import { DERError, parseCertificate, readNode } from "../src/der";
 import worker from "../src/index";
 import { checkChallenge, issueChallenge } from "../src/challenges";
 import { clientData, HEADERS, pruneKeys } from "../src/keys";
-import { makeD1 } from "./d1";
 import sample from "./fixtures/apple-attestation-sample.json";
 
-// Apple's sample was attested on 2026-04-20; its credential certificate expires on 2026-04-23.
-const sampleTime = Date.parse("2026-04-21T00:00:00Z");
+// Apple's sample was attested on 2026-04-20; its credential certificate expires on 2026-04-23,
+// and its receipt, created at 2026-04-21T18:13:12Z, is accepted for five minutes.
+const sampleTime = Date.parse("2026-04-21T18:14:00Z");
 // Apple's sample passed the raw challenge as clientDataHash (its "expected clientDataHash"
 // ends with the challenge's bytes); the app passes the SHA-256 of the challenge.
 const sampleInput = {
@@ -69,8 +71,7 @@ describe("attestation", () => {
 
   it("rejects a chain that doesn't lead to Apple's root", async () => {
     // The intermediate certificate as root: the intermediate's issuer then doesn't match.
-    const x5c = (decode(sampleInput.attestation) as Map<string, Map<string, Uint8Array[]>>).get("attStmt")!.get("x5c")!;
-    await expect(verifyAttestation({ ...sampleInput, root: x5c[1] })).rejects.toThrow("chain");
+    await expect(verifyAttestation({ ...sampleInput, root: sampleCertificates()[1] })).rejects.toThrow("chain");
   });
 
   it("rejects tampered authenticator data", async () => {
@@ -80,16 +81,27 @@ describe("attestation", () => {
     await expect(verifyAttestation({ ...sampleInput, attestation: tampered })).rejects.toThrow("nonce mismatch");
   });
 
-  it("rejects a certificate with an empty signature algorithm", () => {
-    const x5c = (decode(sampleInput.attestation) as Map<string, Map<string, Uint8Array[]>>).get("attStmt")!.get("x5c")!;
-    const leaf = x5c[0]!;
-    const outer = readNode(leaf);
-    const tbs = readNode(outer.contents);
-    const algorithm = readNode(outer.contents, tbs.bytes.length);
-    const signature = outer.contents.subarray(tbs.bytes.length + algorithm.bytes.length);
-    const contents = new Uint8Array([...tbs.bytes, 0x30, 0x00, ...signature]);
-    const forged = new Uint8Array([0x30, 0x82, contents.length >> 8, contents.length & 0xff, ...contents]);
-    expect(() => parseCertificate(forged)).toThrow(DERError);
+  it("rejects a credential certificate whose signature doesn't match", async () => {
+    const attestation = decode(sampleInput.attestation, { useMaps: true }) as Map<string, unknown>;
+    const [leaf, intermediate] = sampleCertificates();
+    const tampered = new Uint8Array(leaf!);
+    // Last byte of the signature value.
+    tampered[tampered.length - 1] = tampered[tampered.length - 1]! ^ 1;
+    const statement = new Map(attestation.get("attStmt") as Map<string, unknown>).set("x5c", [tampered, intermediate]);
+    await expect(
+      verifyAttestation({ ...sampleInput, attestation: encode(new Map(attestation).set("attStmt", statement)) }),
+    ).rejects.toThrow("invalid certificate signature");
+  });
+
+  it("rejects a malformed certificate", async () => {
+    const attestation = decode(sampleInput.attestation, { useMaps: true }) as Map<string, unknown>;
+    const statement = new Map(attestation.get("attStmt") as Map<string, unknown>).set("x5c", [
+      Uint8Array.from([0x30, 0x00]),
+      sampleCertificates()[1],
+    ]);
+    await expect(
+      verifyAttestation({ ...sampleInput, attestation: encode(new Map(attestation).set("attStmt", statement)) }),
+    ).rejects.toThrow("malformed input");
   });
 
   it("rejects garbage", async () => {
@@ -97,7 +109,7 @@ describe("attestation", () => {
   });
 });
 
-const appId = "TEAM123456.com.fouteox.biathlon";
+const appId = env.APP_ATTEST_APP_ID;
 
 /** A device-side App Attest key, signing like DCAppAttestService.generateAssertion. */
 async function makeDevice() {
@@ -121,28 +133,27 @@ async function makeDevice() {
     authenticatorData.set(extensions, 37);
     const nonce = await sha256(new Uint8Array([...authenticatorData, ...(await sha256(data))]));
     const raw = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, pair.privateKey, nonce));
-    return cborMap({ signature: derSignature(raw), authenticatorData });
+    // App Attest encodes signatures in DER.
+    const signature = new Uint8Array(
+      new AsnEcSignatureFormatter().toAsnSignature({ name: "ECDSA", namedCurve: "P-256" }, raw)!,
+    );
+    return encode({ signature, authenticatorData });
   };
   return { publicKey, keyId, assert };
 }
 
 /** Apple's extensions map: the validation category (little-endian UInt32) and the bundle version. */
 function buildExtensions(category: number, version: string): Uint8Array {
-  const text = (value: string) => {
-    const bytes = new TextEncoder().encode(value);
-    return [bytes.length < 24 ? 0x60 | bytes.length : 0x78, ...(bytes.length < 24 ? [] : [bytes.length]), ...bytes];
-  };
-  return Uint8Array.from([
-    0xa2,
-    ...text("apple_validation_category_01"),
-    0x44,
-    category,
-    0,
-    0,
-    0,
-    ...text("apple_bundle_version_01"),
-    ...text(version),
-  ]);
+  return encode({
+    apple_validation_category_01: Uint8Array.from([category, 0, 0, 0]),
+    apple_bundle_version_01: version,
+  });
+}
+
+/** The credential and intermediate certificates of Apple's sample. */
+function sampleCertificates(): Uint8Array[] {
+  const attestation = decode(sampleInput.attestation, { useMaps: true }) as Map<string, Map<string, Uint8Array[]>>;
+  return attestation.get("attStmt")!.get("x5c")!;
 }
 
 describe("assertion", () => {
@@ -199,18 +210,13 @@ describe("assertion", () => {
     );
   });
 
-  it("rejects malformed CBOR text as a verification failure", async () => {
+  it("rejects malformed CBOR as a verification failure", async () => {
     // { "fmt": <text with an invalid UTF-8 byte> }
     const bad = Uint8Array.from([0xa1, 0x63, 0x66, 0x6d, 0x74, 0x61, 0xff]);
-    await expect(verifyAttestation({ ...sampleInput, attestation: bad })).rejects.toThrow("invalid UTF-8 text");
-  });
-
-  it("converts DER signatures with and without leading zeros", () => {
-    const der = Uint8Array.from([0x30, 0x07, 0x02, 0x02, 0x00, 0x80, 0x02, 0x01, 0x01]);
-    const raw = rawSignature(der, 32);
-    expect(raw[31]).toBe(0x80);
-    expect(raw[63]).toBe(0x01);
-    expect(raw.slice(0, 31).every((byte) => byte === 0)).toBe(true);
+    await expect(verifyAttestation({ ...sampleInput, attestation: bad })).rejects.toThrow(AttestationError);
+    // The same map twice: cborg rejects duplicate keys.
+    const duplicate = Uint8Array.from([0xa2, 0x61, 0x61, 0x01, 0x61, 0x61, 0x02]);
+    await expect(verifyAttestation({ ...sampleInput, attestation: duplicate })).rejects.toThrow("malformed input");
   });
 });
 
@@ -218,17 +224,14 @@ describe("assertion", () => {
  * An attested device calling the worker, with its requests to `prefix` + token signed
  * the way the app signs them (AppAttest.swift), and the tokens stored in `table`.
  */
-async function setUp(
-  env = { DB: makeD1(), APP_ATTEST_APP_ID: appId, APP_ATTEST_SECRET: "test secret" } as unknown as Env,
-  { prefix = "/v1/devices/", table = "devices" } = {},
-) {
+async function setUp({ prefix = "/v1/devices/", table = "devices" } = {}) {
   const device = await makeDevice();
   await env.DB.prepare(
     "INSERT INTO app_attest_keys (key_id, public_key, environment, counter, receipt, created_at) VALUES (?1, ?2, 'development', 0, '', 0)",
   )
     .bind(device.keyId, toBase64(device.publicKey))
     .run();
-  const call = (request: Request) => worker.fetch!(request as never, env, {} as ExecutionContext);
+  const call = (request: Request) => worker.fetch(request as never, env, createExecutionContext());
   const challenge = async () => {
     const response = await call(
       new Request("https://server.test/v1/app-attest/challenges?purpose=assert", { method: "POST" }),
@@ -253,7 +256,7 @@ async function setUp(
   };
   const tokens = async () =>
     (await env.DB.prepare(`SELECT token FROM ${table}`).all<{ token: string }>()).results.map((row) => row.token);
-  return { env, call, signed, tokens };
+  return { call, signed, tokens };
 }
 
 describe("device registration endpoint", () => {
@@ -304,7 +307,7 @@ describe("device registration endpoint", () => {
   });
 
   it("deletes keys no device has used for 30 days", async () => {
-    const { env, call, signed } = await setUp();
+    const { call, signed } = await setUp();
     const keys = async () =>
       (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;
     await call(await signed("PUT", token, registration));
@@ -318,7 +321,7 @@ describe("device registration endpoint", () => {
 
   it("lets only the key that registered a token change it", async () => {
     const owner = await setUp();
-    const other = await setUp(owner.env);
+    const other = await setUp();
     await owner.call(await owner.signed("PUT", token, registration));
     const put = await other.call(await other.signed("PUT", token, registration));
     expect(put.status).toBe(403);
@@ -327,17 +330,17 @@ describe("device registration endpoint", () => {
   });
 
   it("lets a key claim a token registered before App Attest", async () => {
-    const { env, call, signed } = await setUp();
+    const { call, signed } = await setUp();
     await call(await signed("PUT", token, registration));
     await env.DB.prepare("UPDATE devices SET app_attest_key_id = NULL").run();
-    const other = await setUp(env);
+    const other = await setUp();
     expect((await other.call(await other.signed("PUT", token, registration))).status).toBe(204);
     expect((await call(await signed("DELETE", token))).status).toBe(403);
     expect(await other.tokens()).toEqual([token]);
   });
 
   it("checks ownership in the delete itself", async () => {
-    const { env, call, signed, tokens } = await setUp();
+    const { call, signed, tokens } = await setUp();
     await call(await signed("PUT", token, registration));
     const owner = (await env.DB.prepare("SELECT app_attest_key_id AS keyId FROM devices").first<{ keyId: string }>())!
       .keyId;
@@ -353,15 +356,26 @@ describe("device registration endpoint", () => {
     await call(await signed("PUT", "cd".repeat(32), registration));
     expect(await tokens()).toEqual(["cd".repeat(32)]);
   });
+
+  it("stores the token in lowercase and rejects one that isn't hex", async () => {
+    const { call, signed, tokens } = await setUp();
+    expect((await call(await signed("PUT", token.toUpperCase(), registration))).status).toBe(204);
+    expect(await tokens()).toEqual([token]);
+    for (const method of ["PUT", "DELETE"] as const) {
+      const response = await call(await signed(method, "not-a-token", method === "PUT" ? registration : undefined));
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "invalid token" });
+    }
+  });
 });
 
 describe("Live Activity start endpoint", () => {
   const token = "ef".repeat(32);
   const favorites = { environment: "production", athletes: ["BTFRA00000000001"], nations: ["NOR"] };
-  const live = (env?: Env) => setUp(env, { prefix: "/v1/live-activity-starts/", table: "live_start_tokens" });
+  const live = () => setUp({ prefix: "/v1/live-activity-starts/", table: "live_start_tokens" });
 
   it("saves and forgets the favorites with a valid assertion", async () => {
-    const { env, call, signed, tokens } = await live();
+    const { call, signed, tokens } = await live();
     expect((await call(await signed("PUT", token, favorites))).status).toBe(204);
     const row = await env.DB.prepare("SELECT environment, athletes, nations FROM live_start_tokens").first();
     expect(row).toEqual({ environment: "production", athletes: '["BTFRA00000000001"]', nations: '["NOR"]' });
@@ -391,7 +405,7 @@ describe("Live Activity start endpoint", () => {
 
   it("lets only the key that saved a token change it, and keeps one token per key", async () => {
     const owner = await live();
-    const other = await live(owner.env);
+    const other = await live();
     await owner.call(await owner.signed("PUT", token, favorites));
     expect((await other.call(await other.signed("PUT", token, favorites))).status).toBe(403);
     expect((await other.call(await other.signed("DELETE", token))).status).toBe(403);
@@ -409,7 +423,7 @@ describe("Live Activity start endpoint", () => {
   });
 
   it("keeps the keys of saved favorites", async () => {
-    const { env, call, signed } = await live();
+    const { call, signed } = await live();
     const keys = async () =>
       (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;
     await call(await signed("PUT", token, favorites));
@@ -424,6 +438,25 @@ describe("Live Activity start endpoint", () => {
 
 describe("challenges", () => {
   const now = Date.parse("2026-11-26T12:00:00Z");
+
+  it("answers 429 to an IP address past 30 challenges a minute", async () => {
+    const issue = (ip: string) =>
+      worker.fetch(
+        new Request("https://server.test/v1/app-attest/challenges?purpose=attest", {
+          method: "POST",
+          headers: { "cf-connecting-ip": ip },
+        }) as never,
+        env,
+        createExecutionContext(),
+      );
+    for (let index = 0; index < 30; index += 1) expect((await issue("192.0.2.1")).status).toBe(201);
+
+    const limited = await issue("192.0.2.1");
+
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    expect((await issue("192.0.2.2")).status).toBe(201);
+  });
 
   it("accepts a fresh challenge for its purpose only", async () => {
     const challenge = await issueChallenge("secret", "assert", now);
@@ -449,32 +482,3 @@ describe("challenges", () => {
     expect(await checkChallenge("secret", "a.b.c.!!", "assert", now)).toBe(false);
   });
 });
-
-/** Encodes a CBOR map with text keys and byte string values. */
-function cborMap(entries: Record<string, Uint8Array>): Uint8Array {
-  const head = (major: number, length: number) =>
-    length < 24
-      ? [(major << 5) | length]
-      : length < 256
-        ? [(major << 5) | 24, length]
-        : [(major << 5) | 25, length >> 8, length & 0xff];
-  const bytes = [...head(5, Object.keys(entries).length)];
-  for (const [key, value] of Object.entries(entries)) {
-    const text = new TextEncoder().encode(key);
-    bytes.push(...head(3, text.length), ...text, ...head(2, value.length), ...value);
-  }
-  return Uint8Array.from(bytes);
-}
-
-/** r || s to DER, as App Attest encodes signatures. */
-function derSignature(raw: Uint8Array): Uint8Array {
-  const integer = (value: Uint8Array) => {
-    let start = 0;
-    while (start < value.length - 1 && value[start] === 0) start++;
-    const trimmed = [...value.subarray(start)];
-    if (trimmed[0]! & 0x80) trimmed.unshift(0);
-    return [0x02, trimmed.length, ...trimmed];
-  };
-  const body = [...integer(raw.subarray(0, 32)), ...integer(raw.subarray(32))];
-  return Uint8Array.from([0x30, body.length, ...body]);
-}

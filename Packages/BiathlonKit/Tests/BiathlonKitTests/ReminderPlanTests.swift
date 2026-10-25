@@ -39,4 +39,18 @@ struct ReminderPlanTests {
         let races = try await client.upcomingRaces(now: now, horizon: ReminderPlan.horizon)
         #expect(races.map(\.id) == ["soon"])
     }
+
+    @Test(.timeLimit(.minutes(1)))
+    func loadsTheRacesOfEveryEventTogetherInCalendarOrder() async throws {
+        let client = rendezvousClient(
+            [
+                "Events?Level=1&SeasonId=2627": "["
+                    + event("first", start: "2026-11-23T12:00:00Z", end: "2026-11-29T12:00:00Z") + ","
+                    + event("second", start: "2026-11-30T12:00:00Z", end: "2026-12-06T12:00:00Z") + "]",
+                "Competitions?EventId=first": "[" + race("A", start: "2026-11-27T11:00:00Z") + "]",
+                "Competitions?EventId=second": "[" + race("B", start: "2026-12-02T11:00:00Z") + "]",
+            ], together: [["Competitions?EventId=first", "Competitions?EventId=second"]])
+        let races = try await client.upcomingRaces(now: now, horizon: ReminderPlan.horizon)
+        #expect(races.map(\.id) == ["A", "B"])
+    }
 }

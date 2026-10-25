@@ -14,23 +14,24 @@ struct BiathlonApp: App {
                 .environment(appDelegate.liveActivities)
                 .environment(appDelegate.liveActivityStarts)
                 .environment(\.ibu, appDelegate.client)
+                .environment(\.server, appDelegate.server)
+                // Cancelled and run again at each change of phase.
                 .task(id: scenePhase) {
                     guard scenePhase == .active else { return }
+                    // Start times can move: rebuild the local reminders whenever the app comes back.
+                    appDelegate.refreshReminders()
                     await appDelegate.liveActivities.reconcileWhileActive()
                 }
         }
         .modelContainer(for: Favorite.self)
-        .onChange(of: scenePhase) { _, phase in
-            // Start times can move: rebuild the local reminders whenever the app comes back.
-            guard phase == .active else { return }
-            appDelegate.refreshReminders()
-        }
     }
 }
 
 extension EnvironmentValues {
     /// The app injects the delegate's client, so screens and reminders share one.
     @Entry var ibu = IBUClient()
+    /// The notification server, `nil` for a build without one.
+    @Entry var server: ServerClient? = nil
 }
 
 struct RootView: View {

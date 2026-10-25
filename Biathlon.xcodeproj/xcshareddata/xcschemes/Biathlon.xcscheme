@@ -42,6 +42,17 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
+               BlueprintIdentifier = "CF6497E2B2E48E0EFEB27D02"
+               BuildableName = "BiathlonTests.xctest"
+               BlueprintName = "BiathlonTests"
+               ReferencedContainer = "container:Biathlon.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
                BlueprintIdentifier = "BiathlonKitTests"
                BuildableName = "BiathlonKitTests"
                BlueprintName = "BiathlonKitTests"

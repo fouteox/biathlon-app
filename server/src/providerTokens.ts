@@ -5,10 +5,14 @@ import type { SubrequestBudget } from "./subrequests";
 export type Deferred = { kind: "deferred" };
 export const DEFERRED: Deferred = { kind: "deferred" };
 
+/** The provider tokens, per APNs environment, a cron run hands to the Durable Objects it calls. */
+export type ProviderTokenSet = Partial<Record<APNsEnvironment, string>>;
+
 /**
  * The APNs provider tokens of one cron run, one per environment, as Apple
  * recommends for team-scoped keys. A token is reused from D1 while it is younger
- * than its lifetime. Each request spends one subrequest of the run's budget.
+ * than its lifetime, or taken from the cron run that `given` them. Each request spends
+ * one subrequest of the budget.
  */
 export class ProviderTokens {
   private readonly tokens = new Map<APNsEnvironment, string>();
@@ -17,25 +21,26 @@ export class ProviderTokens {
   constructor(
     private readonly env: Env,
     private readonly now: number,
-    private readonly budget: SubrequestBudget,
+    readonly budget: SubrequestBudget,
+    private readonly given?: ProviderTokenSet,
   ) {}
 
   /**
-   * Runs `request` with the environment's token. When APNs rejects the token, signs
+   * Runs `request` with the environment's token and the budget's signal. When APNs rejects the token, signs
    * a new one and retries, at most once per run: APNs rejects updates more frequent
    * than every 20 minutes. "deferred" once the run has no subrequest left.
    */
   async send<Outcome extends { kind: string }>(
     environment: APNsEnvironment,
-    request: (token: string) => Promise<Outcome>,
+    request: (token: string, signal?: AbortSignal) => Promise<Outcome>,
   ): Promise<Outcome | Deferred> {
     if (!this.budget.take()) return DEFERRED;
-    const outcome = await request(await this.token(environment));
+    const outcome = await request(await this.token(environment), this.budget.signal());
     if (outcome.kind !== "expiredProviderToken") return outcome;
     const token = await this.renew(environment);
     if (!token) return outcome;
     if (!this.budget.take()) return DEFERRED;
-    return request(token);
+    return request(token, this.budget.signal());
   }
 
   /**
@@ -48,9 +53,9 @@ export class ProviderTokens {
     return this.token(environment, true);
   }
 
-  /** The environment's token, signed or read from D1 at the first request of the run. */
+  /** The environment's token, given, or signed or read from D1 at the first request of the run. */
   async token(environment: APNsEnvironment, forceRefresh = false): Promise<string> {
-    const current = this.tokens.get(environment);
+    const current = this.tokens.get(environment) ?? this.given?.[environment];
     if (current && !forceRefresh) return current;
     const token = await this.load(environment, forceRefresh);
     this.tokens.set(environment, token);

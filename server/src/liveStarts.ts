@@ -1,12 +1,10 @@
 import { isEnvironment, type APNsEnvironment, type PushOutcome } from "./apns";
-import { isDeviceToken } from "./devices";
-import { fetchIBU, parseIBUDate, type RaceSnapshot } from "./ibu";
+import { parseIBUDate, type RaceSnapshot } from "./ibu";
 import { isFollowable, relevanceScore, type IBUResults, type LiveState } from "./live";
 import { LOC_KEYS, raceTitleKey } from "./payload";
-import { ProviderTokens, type Deferred } from "./providerTokens";
-import { MAX_SEND_ATTEMPTS, PushLots } from "./pushLots";
+import type { Deferred } from "./providerTokens";
+import { MAX_SEND_ATTEMPTS, type PushLots } from "./pushLots";
 import type { LotPush } from "./pushSender";
-import { SubrequestBudget } from "./subrequests";
 
 /**
  * Live Activities started by the server when a favorite races, for the devices that turned
@@ -15,7 +13,7 @@ import { SubrequestBudget } from "./subrequests";
  * Activity for each of the team's games" ("Starting and updating Live Activities with
  * ActivityKit push notifications"). The app sends its push-to-start token with its
  * favorites; shortly before a race, each device with a favorite on the start list gets a
- * start push subscribing the new activity to the race's broadcast channel (live.ts).
+ * start push subscribing the new activity to the race's broadcast channel (raceActivity.ts).
  */
 
 export interface StartRegistration {
@@ -42,10 +40,8 @@ const ATTRIBUTES_TYPE = "RaceActivityAttributes";
 const ATHLETE_PATTERN = /^[A-Z0-9]{1,32}$/;
 const NATION_PATTERN = /^[A-Z]{3}$/;
 
-/** Validates the JSON body of `PUT /v1/live-activity-starts/:token`. */
+/** Validates the JSON body of `PUT /v1/live-activity-starts/:token`, for a token `isDeviceToken` accepted. */
 export function parseStartRegistration(token: string, body: unknown): StartRegistration | string {
-  const normalized = token.toLowerCase();
-  if (!isDeviceToken(normalized)) return "invalid push-to-start token";
   if (typeof body !== "object" || body === null) return "body must be a JSON object";
   const input = body as Record<string, unknown>;
   if (!isEnvironment(input.environment)) return "invalid environment";
@@ -54,7 +50,7 @@ export function parseStartRegistration(token: string, body: unknown): StartRegis
   if (!athletes || !nations) return "athletes and nations must be arrays of IBU ids and IOC codes";
   // Without favorites, the app deletes its token instead.
   if (athletes.length + nations.length === 0) return "no favorites";
-  return { token: normalized, environment: input.environment, athletes, nations };
+  return { token, environment: input.environment, athletes, nations };
 }
 
 function codes(value: unknown, pattern: RegExp): string[] | undefined {
@@ -125,90 +121,89 @@ interface PendingToken {
 }
 
 /**
- * Whether the check `s` of race ?1 started the activity of the install of `t` on the race's
- * current channel: one replacing a dropped or ended channel starts it again, the activity
+ * Whether the check `s` started the activity of its install on one of the race's open channels
+ * ?3 (a JSON array): one replacing a dropped or ended channel starts it again, the activity
  * getting none of the new channel's broadcasts.
  */
-const STARTED = `s.channel_id IN (SELECT channel_id FROM live_channels
-  WHERE race_id = ?1 AND environment = t.environment AND ended_at IS NULL AND deleted_at IS NULL)`;
+const STARTED = "s.channel_id IN (SELECT value FROM json_each(?3))";
 
 /** Whether the start of the check `s` failed too many times to be sent again. */
 const EXHAUSTED = `s.attempts >= ${MAX_SEND_ATTEMPTS}`;
 
 /**
  * The tokens `t` of the environments ?2 (a JSON array) whose install race ?1 started nothing
- * for, unless it was checked against the entrants ?5 (their `digest`) or its start was given up.
+ * for, unless it was checked against the entrants ?6 (their `digest`) or its start was given up.
  */
 const UNCHECKED = `t.environment IN (SELECT value FROM json_each(?2))
   AND t.app_attest_key_id NOT IN (
-    SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR s.entrants = ?5 OR ${EXHAUSTED}))`;
+    SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR s.entrants = ?6 OR ${EXHAUSTED}))`;
 
-/** Whether one of the favorites of `t` is among the athletes ?3 or the nations ?4 (JSON arrays). */
-const ENTERED = `(EXISTS (SELECT 1 FROM json_each(t.athletes) WHERE value IN (SELECT value FROM json_each(?3)))
-  OR EXISTS (SELECT 1 FROM json_each(t.nations) WHERE value IN (SELECT value FROM json_each(?4))))`;
+/** Whether one of the favorites of `t` is among the athletes ?4 or the nations ?5 (JSON arrays). */
+const ENTERED = `(EXISTS (SELECT 1 FROM json_each(t.athletes) WHERE value IN (SELECT value FROM json_each(?4)))
+  OR EXISTS (SELECT 1 FROM json_each(t.nations) WHERE value IN (SELECT value FROM json_each(?5))))`;
+
+/** One of the race's open channels, with the state last published on it. */
+export interface OpenChannel {
+  environment: APNsEnvironment;
+  channelId: string;
+  state: LiveState;
+}
 
 /**
- * Starts the activity of each race due within `START_LEAD_MS`, until it is over, on the
- * devices whose favorites are on its start list and that it wasn't checked for. A race
- * waits for its channel, and for its start list; what the budget or the run's pushes can't
- * cover, for the next run.
+ * Starts the race's activity, once it is due within `START_LEAD_MS` and until it is over, on
+ * the devices whose favorites are on its start list and that it wasn't checked for, on its
+ * open `channels`. Called by the race's Durable Object, one update at a time: the starts of a
+ * race never overlap. A race waits for its start list; what the run's pushes can't cover, for
+ * the next run.
  */
 export async function startFavoriteActivities(
   env: Env,
-  races: RaceSnapshot[],
+  race: RaceSnapshot,
+  channels: OpenChannel[],
+  results: () => Promise<IBUResults>,
   now: number,
-  budget = new SubrequestBudget(),
-  lots = new PushLots(env, new ProviderTokens(env, now, budget)),
+  lots: PushLots,
 ): Promise<void> {
-  const due = races.filter((race) => isFollowable(race) && now >= parseIBUDate(race.startTime) - START_LEAD_MS);
-  for (const race of due) {
-    const { results: channels } = await env.DB.prepare(
-      `SELECT environment, channel_id AS channelId FROM live_channels
-       WHERE race_id = ?1 AND ended_at IS NULL AND deleted_at IS NULL`,
-    )
-      .bind(race.id)
-      .all<{ environment: APNsEnvironment; channelId: string }>();
-    const environments = JSON.stringify(channels.map((channel) => channel.environment));
-    // Until the race starts, its start list can change: the installs it started nothing for
-    // are checked again against each new one. Its entrants are then known.
-    const unchecked = await env.DB.prepare(
-      `SELECT 1 FROM live_start_tokens t WHERE t.environment IN (SELECT value FROM json_each(?2))
-         AND t.app_attest_key_id NOT IN (
-           SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR (s.entrants IS NOT NULL AND ?3) OR ${EXHAUSTED}))
-       LIMIT 1`,
-    )
-      .bind(race.id, environments, race.status === "scheduled" ? 0 : 1)
-      .first();
-    if (!unchecked) continue;
-    if (!budget.has(1) || lots.room === 0) return;
-    const entrants = await startList(race, budget);
-    if (!entrants) continue;
+  if (!isFollowable(race) || now < parseIBUDate(race.startTime) - START_LEAD_MS || channels.length === 0) return;
+  const environments = JSON.stringify(channels.map((channel) => channel.environment));
+  const channelIds = JSON.stringify(channels.map((channel) => channel.channelId));
+  // Until the race starts, its start list can change: the installs it started nothing for
+  // are checked again against each new one. Its entrants are then known.
+  const unchecked = await env.DB.prepare(
+    `SELECT 1 FROM live_start_tokens t WHERE t.environment IN (SELECT value FROM json_each(?2))
+       AND t.app_attest_key_id NOT IN (
+         SELECT s.app_attest_key_id FROM live_starts s WHERE s.race_id = ?1 AND (${STARTED} OR (s.entrants IS NOT NULL AND ?4) OR ${EXHAUSTED}))
+     LIMIT 1`,
+  )
+    .bind(race.id, environments, channelIds, race.status === "scheduled" ? 0 : 1)
+    .first();
+  if (!unchecked || lots.room === 0) return;
+  const entrants = await startList(race, results);
+  if (!entrants) return;
 
-    // Matched in D1 against the favorites stored when each statement runs: one write for all
-    // the installs none of whose favorites races, then each start claimed only if it still matches.
-    const lists = [JSON.stringify(entrants.athletes), JSON.stringify(entrants.nations)];
-    const checked = await digest(lists);
-    await env.DB.prepare(
-      `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
-       SELECT ?1, t.app_attest_key_id, NULL, ?5 FROM live_start_tokens t WHERE ${UNCHECKED} AND NOT ${ENTERED}
-       ON CONFLICT DO UPDATE SET channel_id = NULL, entrants = excluded.entrants`,
-    )
-      .bind(race.id, environments, ...lists, checked)
-      .run();
-    const { results: pending } = await env.DB.prepare(
-      `SELECT token, environment, app_attest_key_id AS keyId FROM live_start_tokens t
-       WHERE ${UNCHECKED} AND ${ENTERED} ORDER BY updated_at, token`,
-    )
-      .bind(race.id, environments, ...lists, checked)
-      .all<PendingToken>();
+  // Matched in D1 against the favorites stored when each statement runs: one write for all
+  // the installs none of whose favorites races, then each start claimed only if it still matches.
+  const lists = [JSON.stringify(entrants.athletes), JSON.stringify(entrants.nations)];
+  const checked = await digest(lists);
+  await env.DB.prepare(
+    `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
+     SELECT ?1, t.app_attest_key_id, NULL, ?6 FROM live_start_tokens t WHERE ${UNCHECKED} AND NOT ${ENTERED}
+     ON CONFLICT DO UPDATE SET channel_id = NULL, entrants = excluded.entrants`,
+  )
+    .bind(race.id, environments, channelIds, ...lists, checked)
+    .run();
+  const { results: pending } = await env.DB.prepare(
+    `SELECT token, environment, app_attest_key_id AS keyId FROM live_start_tokens t
+     WHERE ${UNCHECKED} AND ${ENTERED} ORDER BY updated_at, token`,
+  )
+    .bind(race.id, environments, channelIds, ...lists, checked)
+    .all<PendingToken>();
 
-    // Claimed before the pushes, in one transaction: an overlapping run that read the same
-    // tokens skips them, and so does a device whose favorites or opt-out were saved meanwhile.
-    const claims = await claim(env, race.id, channels, pending.slice(0, lots.room), lists);
-    const outcomes = claims.map((claimed) => lots.send(startPush(env, race, claimed, now)));
-    await lots.flush();
-    await settle(env, race.id, claims, await Promise.all(outcomes));
-  }
+  // Claimed before the pushes: a device whose favorites or opt-out were saved meanwhile is skipped.
+  const claims = await claim(env, race.id, channels, pending.slice(0, lots.room), lists);
+  const outcomes = claims.map((claimed) => lots.send(startPush(env, race, claimed, now)));
+  await lots.flush();
+  await settle(env, race.id, claims, await Promise.all(outcomes));
 }
 
 function startPush(env: Env, race: RaceSnapshot, claimed: Claim, now: number): LotPush {
@@ -274,13 +269,13 @@ async function settle(env: Env, raceId: string, claims: Claim[], outcomes: (Push
  */
 async function startList(
   race: RaceSnapshot,
-  budget: SubrequestBudget,
+  results: () => Promise<IBUResults>,
 ): Promise<{ athletes: string[]; nations: string[] } | undefined> {
   try {
-    const results = await fetchIBU<IBUResults>("Results", { RaceId: race.id }, budget);
-    const rows = results.Results ?? [];
+    const list = await results();
+    const rows = list.Results ?? [];
     // Before the race, rows may be preliminary until they are the start list.
-    if (rows.length === 0 || (race.status === "scheduled" && !results.IsStartList)) return undefined;
+    if (rows.length === 0 || (race.status === "scheduled" && !list.IsStartList)) return undefined;
     return {
       // Sorted, for their `digest`.
       athletes: [...new Set(rows.flatMap((row) => (row.IBUId ? [row.IBUId] : [])))].sort(),
@@ -332,47 +327,34 @@ interface Claim extends PendingToken {
 }
 
 /**
- * Claims the start of the race on its channel for each device's install, while the channel is
- * open and the stored token still has a favorite among the entrants `lists`, over a check the
- * previous entrants started nothing for. One batch of two set-based statements, whatever the
- * number of devices: a transaction, and one of the 50 D1 queries per invocation the Workers
- * Free plan allows (https://developers.cloudflare.com/d1/platform/limits/).
+ * Claims the start of the race on its channel for each device's install, while the stored
+ * token still has a favorite among the entrants `lists`. One set-based statement, whatever
+ * the number of devices: one of the 50 D1 queries per invocation the Workers Free plan
+ * allows (https://developers.cloudflare.com/d1/platform/limits/).
  */
 async function claim(
   env: Env,
   raceId: string,
-  channels: { environment: APNsEnvironment; channelId: string }[],
+  channels: OpenChannel[],
   devices: PendingToken[],
   lists: string[],
 ): Promise<Claim[]> {
   if (devices.length === 0) return [];
-  const channelIds = JSON.stringify(channels.map((channel) => channel.channelId));
-  const [claimed, read] = await env.DB.batch([
-    env.DB.prepare(
-      `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
-       SELECT ?1, t.app_attest_key_id, c.channel_id, NULL FROM live_start_tokens t
-       JOIN live_channels c ON c.race_id = ?1 AND c.environment = t.environment
-         AND c.channel_id IN (SELECT value FROM json_each(?2)) AND c.ended_at IS NULL AND c.deleted_at IS NULL
-       WHERE t.token IN (SELECT value FROM json_each(?5)) AND ${ENTERED}
-       ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL
-         WHERE live_starts.channel_id IS NOT excluded.channel_id
-       RETURNING app_attest_key_id AS keyId`,
-    ).bind(raceId, channelIds, ...lists, JSON.stringify(devices.map((device) => device.token))),
-    // In the same transaction as the claims.
-    env.DB.prepare(
-      `SELECT environment, state FROM live_channels
-       WHERE race_id = ?1 AND channel_id IN (SELECT value FROM json_each(?2))`,
-    ).bind(raceId, channelIds),
-  ]);
-  const keys = new Set((claimed!.results as { keyId: string }[]).map((row) => row.keyId));
-  const states = new Map(
-    (read!.results as { environment: APNsEnvironment; state: string }[]).map((row) => [row.environment, row.state]),
-  );
+  const byEnvironment = Object.fromEntries(channels.map((channel) => [channel.environment, channel.channelId]));
+  const { results } = await env.DB.prepare(
+    `INSERT INTO live_starts (race_id, app_attest_key_id, channel_id, entrants)
+     SELECT ?1, t.app_attest_key_id, ?2 ->> t.environment, NULL FROM live_start_tokens t
+     WHERE t.token IN (SELECT value FROM json_each(?3)) AND ${ENTERED}
+     ON CONFLICT DO UPDATE SET channel_id = excluded.channel_id, entrants = NULL
+     RETURNING app_attest_key_id AS keyId`,
+  )
+    .bind(raceId, JSON.stringify(byEnvironment), JSON.stringify(devices.map((device) => device.token)), ...lists)
+    .all<{ keyId: string }>();
+  const keys = new Set(results.map((row) => row.keyId));
   return devices.flatMap((device) => {
-    const state = states.get(device.environment);
-    if (!keys.has(device.keyId) || !state) return [];
-    const channelId = channels.find((channel) => channel.environment === device.environment)!.channelId;
-    return [{ ...device, raceId, channelId, state: JSON.parse(state) as LiveState }];
+    const channel = channels.find((open) => open.environment === device.environment);
+    if (!keys.has(device.keyId) || !channel) return [];
+    return [{ ...device, raceId, channelId: channel.channelId, state: channel.state }];
   });
 }
 
@@ -403,14 +385,12 @@ export async function pruneStarts(db: D1Database, now: number): Promise<void> {
 
 /**
  * Gives the starts `claims` of the race that didn't go through back to a later run, counting
- * the `failed` send, unless their channel was replaced meanwhile: the claim is then a newer
- * run's, on the new channel. Their rows are kept, for one write rather than a delete and an
- * insert at each retry.
+ * the `failed` send. Their rows are kept, for one write rather than a delete and an insert at
+ * each retry.
  */
 function release(env: Env, raceId: string, claims: Claim[], failed: 0 | 1): D1PreparedStatement {
   return env.DB.prepare(
     `UPDATE live_starts SET channel_id = NULL, attempts = attempts + ?3
-     WHERE race_id = ?1 AND (app_attest_key_id, channel_id) IN (
-       SELECT value ->> '$[0]', value ->> '$[1]' FROM json_each(?2))`,
-  ).bind(raceId, JSON.stringify(claims.map((claimed) => [claimed.keyId, claimed.channelId])), failed);
+     WHERE race_id = ?1 AND app_attest_key_id IN (SELECT value FROM json_each(?2))`,
+  ).bind(raceId, JSON.stringify(claims.map((claimed) => claimed.keyId)), failed);
 }

@@ -82,7 +82,11 @@ export type PushOutcome =
   | { kind: "retry"; reason: string }
   | { kind: "failed"; reason: string };
 
-export async function sendPush(request: PushRequest, providerToken: string): Promise<PushOutcome> {
+export async function sendPush(
+  request: PushRequest,
+  providerToken: string,
+  signal?: AbortSignal,
+): Promise<PushOutcome> {
   const headers: Record<string, string> = {
     "apns-push-type": request.pushType ?? "alert",
     "apns-topic": request.topic,
@@ -95,6 +99,7 @@ export async function sendPush(request: PushRequest, providerToken: string): Pro
     "POST",
     headers,
     providerToken,
+    signal,
     request.payload,
   );
   return outcome;
@@ -113,7 +118,11 @@ export interface BroadcastRequest {
  * Priority 10: each broadcast carries a change people follow the race for. Channels
  * store no messages, which only accept an expiration of 0.
  */
-export async function broadcast(request: BroadcastRequest, providerToken: string): Promise<PushOutcome> {
+export async function broadcast(
+  request: BroadcastRequest,
+  providerToken: string,
+  signal?: AbortSignal,
+): Promise<PushOutcome> {
   const headers = {
     "apns-push-type": "liveactivity",
     "apns-channel-id": request.channelId,
@@ -121,7 +130,7 @@ export async function broadcast(request: BroadcastRequest, providerToken: string
     "apns-expiration": "0",
   };
   const url = `${HOSTS[request.environment]}/4/broadcasts/apps/${request.bundleId}`;
-  return (await apnsRequest(url, "POST", headers, providerToken, request.payload)).outcome;
+  return (await apnsRequest(url, "POST", headers, providerToken, signal, request.payload)).outcome;
 }
 
 export type ChannelOutcome = { kind: "created"; channelId: string } | Exclude<PushOutcome, { kind: "sent" }>;
@@ -134,10 +143,11 @@ export async function createChannel(
   environment: APNsEnvironment,
   bundleId: string,
   providerToken: string,
+  signal?: AbortSignal,
 ): Promise<ChannelOutcome> {
   const url = `${CHANNEL_HOSTS[environment]}/1/apps/${bundleId}/channels`;
   const body = { "message-storage-policy": 0, "push-type": "LiveActivity" };
-  const { outcome, response } = await apnsRequest(url, "POST", {}, providerToken, body);
+  const { outcome, response } = await apnsRequest(url, "POST", {}, providerToken, signal, body);
   if (outcome.kind !== "sent") return outcome;
   const channelId = response?.headers.get("apns-channel-id");
   return channelId ? { kind: "created", channelId } : { kind: "failed", reason: "no apns-channel-id header" };
@@ -149,17 +159,19 @@ export async function deleteChannel(
   bundleId: string,
   channelId: string,
   providerToken: string,
+  signal?: AbortSignal,
 ): Promise<PushOutcome> {
   const url = `${CHANNEL_HOSTS[environment]}/1/apps/${bundleId}/channels`;
-  return (await apnsRequest(url, "DELETE", { "apns-channel-id": channelId }, providerToken)).outcome;
+  return (await apnsRequest(url, "DELETE", { "apns-channel-id": channelId }, providerToken, signal)).outcome;
 }
 
-/** Sends one authenticated request; any 2xx status is a success. */
+/** Sends one authenticated request; any 2xx status is a success, and one aborted by `signal` a retry. */
 async function apnsRequest(
   url: string,
   method: "POST" | "DELETE",
   headers: Record<string, string>,
   providerToken: string,
+  signal: AbortSignal | undefined,
   payload?: unknown,
 ): Promise<{ outcome: PushOutcome; response?: Response }> {
   let response: Response;
@@ -168,12 +180,16 @@ async function apnsRequest(
       method,
       headers: { ...headers, authorization: `bearer ${providerToken}` },
       body: payload === undefined ? undefined : JSON.stringify(payload),
+      signal,
     });
   } catch (error) {
     return { outcome: { kind: "retry", reason: String(error) } };
   }
   if (response.ok) return { outcome: { kind: "sent" }, response };
-  return { outcome: classify(response.status, await errorReason(response)), response };
+  const reason = await errorReason(response, signal);
+  // A rejection whose reason arrives too late may be an expired provider token: tried again.
+  if (signal?.aborted) return { outcome: { kind: "retry", reason: String(signal.reason) } };
+  return { outcome: classify(response.status, reason), response };
 }
 
 const UNREGISTERED_REASONS = new Set([
@@ -219,13 +235,28 @@ async function probeURL(url: string, method: string, headers: Record<string, str
   }
 }
 
-async function errorReason(response: Response): Promise<string> {
+/** The reason APNs gives in the response's body, or "" when it can't be read before `signal` aborts. */
+async function errorReason(response: Response, signal?: AbortSignal): Promise<string> {
+  const settled = new AbortController();
   try {
-    const body = await response.json<{ reason?: string }>();
+    const body = await Promise.race([
+      response.json<{ reason?: string }>(),
+      ...(signal ? [whenAborted(signal, settled.signal)] : []),
+    ]);
     return body.reason ?? "";
   } catch {
     return "";
+  } finally {
+    settled.abort();
   }
+}
+
+/** Rejects once `signal` aborts, which a body still being read may not notice, unless `until` aborts first. */
+function whenAborted(signal: AbortSignal, until: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal.aborted) reject(signal.reason);
+    else signal.addEventListener("abort", () => reject(signal.reason), { once: true, signal: until });
+  });
 }
 
 function pemToDer(pem: string): ArrayBuffer {

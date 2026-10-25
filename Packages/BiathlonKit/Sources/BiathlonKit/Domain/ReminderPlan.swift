@@ -32,10 +32,6 @@ extension IBUClient {
         let end = now.addingTimeInterval(horizon)
         let events = try await events(season: SeasonID.containing(now))
             .filter { $0.endDate >= now && $0.startDate <= end }
-        var races: [Competition] = []
-        for event in events {
-            races += try await competitions(eventID: event.id)
-        }
-        return races.filter { $0.startTime > now && $0.startTime <= end }
+        return try await competitions(of: events).filter { $0.startTime > now && $0.startTime <= end }
     }
 }

@@ -9,7 +9,8 @@ import Testing
 
 struct IBUClientTests {
     @Test func buildsSortedQuery() async throws {
-        let client = IBUClient(baseURL: IBUClient.ibuBaseURL) { url in
+        let client = IBUClient(baseURL: IBUClient.ibuBaseURL) { request in
+            let url = try #require(request.url)
             #expect(url.absoluteString == IBUClient.ibuBaseURL.absoluteString + "Events?Level=1&SeasonId=2627")
             return (Data("[]".utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
@@ -20,7 +21,8 @@ struct IBUClientTests {
     @Test(arguments: ["https://example.workers.dev", "https://example.workers.dev/"])
     func usesTheServerCacheWithTheSamePaths(server: String) async throws {
         let baseURL = URL(string: server)!.appending(path: "ibu/")
-        let client = IBUClient(baseURL: baseURL) { url in
+        let client = IBUClient(baseURL: baseURL) { request in
+            let url = try #require(request.url)
             #expect(url.absoluteString == "https://example.workers.dev/ibu/Events?Level=1&SeasonId=2627")
             return (Data("[]".utf8), HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
@@ -29,27 +31,21 @@ struct IBUClientTests {
 
     @Test func httpErrorCarriesTheStatus() async {
         let client = stubClient(["Results?RaceId=R1": "{}"], status: 503)
-        await #expect(throws: IBUError.self) {
-            try await client.results(raceID: "R1")
+        let error = await #expect(throws: IBUError.self) { try await client.results(raceID: "R1") }
+        guard case .http(let status)? = error else {
+            Issue.record("Expected an HTTP error, got \(String(describing: error))")
+            return
         }
-        do {
-            _ = try await client.results(raceID: "R1")
-        } catch let IBUError.http(code) {
-            #expect(code == 503)
-        } catch {
-            Issue.record("Unexpected error \(error)")
-        }
+        #expect(status == 503)
     }
 
     @Test func decodingErrorNamesTheEndpoint() async {
         let client = stubClient(["Results?RaceId=R1": "not json"])
-        do {
-            _ = try await client.results(raceID: "R1")
-            Issue.record("Expected a decoding error")
-        } catch let IBUError.decoding(path, _) {
-            #expect(path == "Results")
-        } catch {
-            Issue.record("Unexpected error \(error)")
+        let error = await #expect(throws: IBUError.self) { try await client.results(raceID: "R1") }
+        guard case .decoding(let path, _)? = error else {
+            Issue.record("Expected a decoding error, got \(String(describing: error))")
+            return
         }
+        #expect(path == "Results")
     }
 }

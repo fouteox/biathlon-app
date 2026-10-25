@@ -21,7 +21,6 @@ final class LiveActivityStarts {
     /// is stored, for the deletion.
     private(set) var token: String? = Activity<RaceActivityAttributes>.pushToStartToken.map(LiveActivityStarts.hex)
 
-    @ObservationIgnored private let serverURL = Bundle.main.serverURL
     @ObservationIgnored private let appAttest: AppAttest?
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private var tokenUpdates: Task<Void, Never>?
@@ -67,43 +66,25 @@ final class LiveActivityStarts {
     }
 
     private func send(_ registration: Registration) async {
-        guard let serverURL, let appAttest else { return }
+        guard let appAttest else { return }
         let favorites = registration.favorites
         let wanted = registration.isEnabled && !favorites.isEmpty
         // A deletion names the token the favorites were sent with: ActivityKit gives none
         // while Live Activities are turned off in Settings.
         let token = wanted ? registration.token : defaults.string(forKey: Keys.registeredToken)
         guard let token else { return }
-        var request = URLRequest(url: serverURL.appending(path: "v1/live-activity-starts/\(token)"))
-        request.httpMethod = wanted ? "PUT" : "DELETE"
-        if wanted {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            do {
-                request.httpBody = try JSONEncoder().encode(
-                    Body(
-                        environment: APNsEnvironment.current.rawValue,
-                        athletes: favorites.athleteIDs.sorted(),
-                        nations: favorites.nations.sorted()))
-            } catch {
-                Logger.notifications.fault(
-                    "Encoding the favorites failed: \(String(describing: error), privacy: .public)")
-                return
-            }
-        }
-        // Set before the PUT: the server may store it even if its answer is lost.
-        if wanted { defaults.set(token, forKey: Keys.registeredToken) }
         do {
-            let response = try await appAttest.send(request)
-            guard (200..<300).contains(response.statusCode) else {
-                Logger.notifications.error(
-                    "Server answered \(response.statusCode) to the Live Activity favorites")
-                return
-            }
+            let request = try SignedRequest.liveActivityStarts(
+                token: token,
+                wanted ? LiveActivityStartsRegistration(environment: .current, favorites: favorites) : nil)
+            // Set before the PUT: the server may store it even if its answer is lost.
+            if wanted { defaults.set(token, forKey: Keys.registeredToken) }
+            try await appAttest.send(request)
             if !wanted { defaults.removeObject(forKey: Keys.registeredToken) }
         } catch AppAttest.Failure.unsupported {
             Logger.notifications.notice("App Attest is unavailable, Live Activities for favorites stay off")
         } catch {
-            // Private: the request URL in the error carries the token.
+            // Private: the error can carry the token.
             Logger.notifications.error(
                 "Sending the Live Activity favorites failed: \(String(describing: error), privacy: .private)")
         }
@@ -111,12 +92,6 @@ final class LiveActivityStarts {
 
     private nonisolated static func hex(_ token: Data) -> String {
         token.map { String(format: "%02x", $0) }.joined()
-    }
-
-    private struct Body: Encodable {
-        let environment: String
-        let athletes: [String]
-        let nations: [String]
     }
 
     private enum Keys {

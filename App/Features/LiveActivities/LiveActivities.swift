@@ -16,7 +16,6 @@ final class LiveActivities {
         case noChannel
         /// The race's activity is over, with its final state.
         case ended(RaceLiveState)
-        case server(status: Int)
     }
 
     /// Races with an activity on the Lock Screen or scheduled to show there, and races
@@ -28,12 +27,15 @@ final class LiveActivities {
     /// Whether the user allows Live Activities for the app (Settings).
     private(set) var areEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
 
-    @ObservationIgnored private let serverURL = Bundle.main.serverURL
+    @ObservationIgnored private let server: ServerClient?
     @ObservationIgnored private var observers: [Task<Void, Never>] = []
+    /// Each activity's observation, by activity identifier, until the activity ends.
+    @ObservationIgnored private let activityObservers = KeyedTasks<String>()
 
-    var isAvailable: Bool { serverURL != nil && areEnabled }
+    var isAvailable: Bool { server != nil && areEnabled }
 
-    init() {
+    init(server: ServerClient?) {
+        self.server = server
         refresh()
         observers = [
             Task { [weak self] in
@@ -119,13 +121,13 @@ final class LiveActivities {
         guard let name = Self.activities(of: raceID).first?.attributes.name else { return false }
         var outdated: [String] = []
         var missed: [String] = []
-        var latest: Channel?
+        var latest: LiveChannel?
         var requested = false
-        var full: Channel?
+        var full: LiveChannel?
         let checked = try await withChannel(raceID: raceID) { channel in
             let shown = Self.activities(of: raceID).filter { Self.shownStates.contains($0.activityState) }
             let isCurrent = { (activity: Activity<RaceActivityAttributes>) in
-                activity.attributes.channelID == channel.channelId
+                activity.attributes.channelID == channel.id
                     && !channel.state.needsNewActivity(
                         scheduledStart: activity.attributes.scheduledStart,
                         isPending: activity.activityState == .pending, now: .now)
@@ -169,7 +171,7 @@ final class LiveActivities {
     /// Runs `body` with the race's channel, unless `stopFollowing` cancels the request
     /// during the lookup; `false` then.
     @discardableResult
-    private func withChannel(raceID: String, _ body: (Channel) throws -> Void) async throws -> Bool {
+    private func withChannel(raceID: String, _ body: (LiveChannel) throws -> Void) async throws -> Bool {
         try await whileRequested(raceID: raceID) { isCurrent in
             let channel = try await self.channel(raceID: raceID)
             guard isCurrent() else { return false }
@@ -194,8 +196,8 @@ final class LiveActivities {
 
     /// Requests the race's activity on `channel`, from the state last published on it:
     /// the channel stores no messages, and the app's cached results could lag behind.
-    private static func request(raceID: String, name: String, on channel: Channel) throws {
-        try request(raceID: raceID, name: name, channelID: channel.channelId, state: channel.state)
+    private static func request(raceID: String, name: String, on channel: LiveChannel) throws {
+        try request(raceID: raceID, name: name, channelID: channel.id, state: channel.state)
     }
 
     /// Requests the race's activity on the channel `channelID`, showing `state`.
@@ -258,48 +260,36 @@ final class LiveActivities {
     }
 
     /// Ended and dismissed activities leave `followedRaceIDs`, wherever they end, and a
-    /// broadcast that moves the race reschedules its activity while the app runs.
+    /// broadcast that moves the race reschedules its activity while the app runs. The
+    /// observation stops once the activity ends: it won't update its content anymore.
     private func observeState(of activity: Activity<RaceActivityAttributes>) {
         let raceID = activity.attributes.raceID
         let scheduledStart = activity.attributes.scheduledStart
-        observers.append(contentsOf: [
-            Task { [weak self] in
-                for await _ in activity.activityStateUpdates { self?.refresh() }
+        activityObservers.run(
+            activity.id,
+            { [weak self] in
+                for await state in activity.activityStateUpdates {
+                    self?.refresh()
+                    guard Self.shownStates.contains(state) else { return }
+                }
             },
-            Task { [weak self] in
+            { [weak self] in
                 for await content in activity.contentUpdates
                 where content.state.needsNewActivity(
                     scheduledStart: scheduledStart, isPending: activity.activityState == .pending, now: .now)
                 {
                     await self?.reconcile(raceID: raceID)
                 }
-            },
-        ])
+            })
     }
 
-    private func channel(raceID: String) async throws -> Channel {
-        guard let serverURL else { throw Failure.noChannel }
-        let url = serverURL.appending(path: "v1/races/\(raceID)/channels/\(APNsEnvironment.current.rawValue)")
-        let (data, response) = try await URLSession.shared.data(from: url)
-        switch (response as? HTTPURLResponse)?.statusCode {
-        // Default strategies, like ActivityKit's for the `content-state` of the broadcasts.
-        case 200: return try JSONDecoder().decode(Channel.self, from: data)
-        case 404: throw Failure.noChannel
-        case 410: throw Failure.ended(try JSONDecoder().decode(Ended.self, from: data).state)
-        case let status: throw Failure.server(status: status ?? 0)
+    private func channel(raceID: String) async throws -> LiveChannel {
+        guard let server else { throw Failure.noChannel }
+        switch try await server.liveChannel(raceID: raceID, environment: .current) {
+        case .open(let channel): return channel
+        case .notOpen: throw Failure.noChannel
+        case .ended(let finalState): throw Failure.ended(finalState)
         }
-    }
-
-    private struct Channel: Decodable {
-        let channelId: String
-        let state: RaceLiveState
-        /// The `timestamp` of the broadcast that published `state`, in seconds since 1970 like
-        /// that of an ActivityKit push.
-        let timestamp: TimeInterval
-    }
-
-    private struct Ended: Decodable {
-        let state: RaceLiveState
     }
 }
 
