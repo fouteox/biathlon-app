@@ -83,7 +83,7 @@ private struct StandingRow: View {
         let content = HStack(spacing: 12) {
             RankText(rank: row.rank).frame(width: rankWidth, alignment: .leading)
             NationMark(code: row.isNation ? row.nation ?? row.name : row.nation)
-            Text(row.shortName ?? row.name)
+            Text(row.isNation ? Nation.localizedName(row.nation ?? row.name) : row.shortName ?? row.name)
             if row.bibColors.contains("yellow") {
                 // The leader's bib is yellow: here the color is the information.
                 Image(systemName: "tshirt.fill")
@@ -101,7 +101,7 @@ private struct StandingRow: View {
                 Text(score).font(.subheadline.monospacedDigit().bold())
             }
             if row.isNation, let nation = row.nation {
-                FavoriteButton(kind: .nation, key: nation, name: row.name, nation: nation)
+                FavoriteButton(kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation)
                     .labelStyle(.iconOnly)
             }
         }

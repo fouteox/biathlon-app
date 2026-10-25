@@ -12,6 +12,8 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
     /// `Functions` is "Deceased" instead of "Athlete" once the IBU records an athlete's death
     /// (Sivert Guttorm Bakken, Linas Banys); a retirement isn't recorded.
     public let isDeceased: Bool
+    /// `nil` when the IBU doesn't give it.
+    public let gender: Gender?
 
     enum CodingKeys: String, CodingKey {
         case id = "IBUId"
@@ -22,6 +24,7 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
         case birthdate = "Birthdate"
         case photoURL = "PhotoURI"
         case functions = "Functions"
+        case gender = "GenderId"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -36,7 +39,14 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
         birthdate = try? c.decodeIfPresent(Date.self, forKey: .birthdate)
         photoURL = (try? c.decodeIfPresent(String.self, forKey: .photoURL)).flatMap { URL(string: $0) }
         isDeceased = try c.decodeIfPresent(String.self, forKey: .functions) == "Deceased"
+        gender = try c.decodeIfPresent(String.self, forKey: .gender).flatMap(Gender.init(rawValue:))
     }
+}
+
+/// An athlete's gender, as `GenderId` gives it.
+public enum Gender: String, Sendable {
+    case man = "M"
+    case woman = "W"
 }
 
 /// One row of `AllResults?IBUId=`: an athlete's history.

@@ -15,6 +15,8 @@ final class Favorite {
     var addedAt: Date
     /// From the IBU profile (`update(from:)`).
     var isDeceased = false
+    /// From the IBU profile (`update(from:)`), for "Deceased" to agree in French.
+    var genderRaw: String?
 
     init(kind: Kind, key: String, name: String, nation: String? = nil) {
         kindRaw = kind.rawValue
@@ -34,6 +36,13 @@ final class Favorite {
 
     enum Kind: String {
         case athlete, nation
+    }
+
+    var gender: Gender? { genderRaw.flatMap(Gender.init(rawValue:)) }
+
+    /// A nation reads in the app's language whatever name it was saved under.
+    var title: String {
+        kindRaw == Kind.nation.rawValue ? Nation.localizedName(key) : name
     }
 }
 
@@ -64,6 +73,7 @@ extension Favorite {
         if name != bio.fullName { name = bio.fullName }
         if nation != bio.nation { nation = bio.nation }
         if isDeceased != bio.isDeceased { isDeceased = bio.isDeceased }
+        if genderRaw != bio.gender?.rawValue { genderRaw = bio.gender?.rawValue }
     }
 }
 

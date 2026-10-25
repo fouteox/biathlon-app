@@ -100,9 +100,9 @@ struct FavoritesView: View {
     private func row(_ favorite: Favorite) -> some View {
         let label = Label {
             VStack(alignment: .leading) {
-                Text(favorite.name)
+                Text(favorite.title)
                 if favorite.isDeceased {
-                    Text("Deceased").font(.subheadline).foregroundStyle(.secondary)
+                    Text(.deceased(favorite.gender)).font(.subheadline).foregroundStyle(.secondary)
                 }
             }
         } icon: {
