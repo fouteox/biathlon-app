@@ -1,12 +1,13 @@
 import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
 
 /** In-memory stand-in for the slice of the D1 API the Worker uses, with the real migrations. */
 export function makeD1(): D1Database {
   const sqlite = new DatabaseSync(":memory:");
   sqlite.exec("PRAGMA foreign_keys = ON");
-  const dir = new URL("../migrations/", import.meta.url);
-  for (const file of readdirSync(dir).sort()) sqlite.exec(readFileSync(new URL(file, dir), "utf8"));
+  const dir = join(import.meta.dirname, "../migrations");
+  for (const file of readdirSync(dir).sort()) sqlite.exec(readFileSync(join(dir, file), "utf8"));
 
   const statement = (sql: string, params: SQLInputValue[] = []) => ({
     bind: (...values: unknown[]) => statement(sql, values as SQLInputValue[]),

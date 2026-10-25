@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { join } from "node:path";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import worker from "../src/index";
 import { snapshot, type IBUCompetition, type RaceSnapshot } from "../src/ibu";
 import { liveState, relevanceScore, syncLiveActivities, type IBUResults, type LiveState } from "../src/live";
@@ -16,7 +17,7 @@ import { pushSenders } from "./pushSenders";
 // ActivityKit's default strategies and give its local updates the same relevance score.
 const cases: { name: string; results: IBUResults; state: unknown; relevanceScore?: number }[] = JSON.parse(
   readFileSync(
-    new URL("../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/live-activity.json", import.meta.url),
+    join(import.meta.dirname, "../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/live-activity.json"),
     "utf8",
   ),
 );
@@ -76,7 +77,7 @@ function stubNetwork(
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = String(input);
     const headers = Object.fromEntries(new Headers(init.headers).entries());
-    sent.push({ method: init.method ?? "GET", url, headers, body: init.body ? JSON.parse(String(init.body)) : undefined });
+    sent.push({ method: init.method ?? "GET", url, headers, body: typeof init.body === "string" ? JSON.parse(init.body) : undefined });
     if (url.includes("biathlonresults.com")) {
       await options.duringResults?.();
       return Response.json(options.results ?? live.results, { status: options.resultsStatus ?? 200 });
@@ -933,7 +934,7 @@ describe("GET /v1/races/:id/channels/:environment", () => {
 
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(200);
-    const { aps } = broadcasts(sent)[0]?.body as { aps: { timestamp: number } };
+    const { aps } = broadcasts(sent)[0]!.body as { aps: { timestamp: number } };
     expect(await response.json()).toEqual({ channelId: "channel-2", state: live.state, timestamp: aps.timestamp });
   });
 
@@ -1198,7 +1199,7 @@ describe("Live Activities started for favorites", () => {
       // Kept by APNs until a while after the race starts, for a device offline meanwhile.
       "apns-expiration": String(START / 1000 + 15 * 60),
     });
-    expect(startOn(sent, "https://api.push.apple.com")?.body).toEqual({
+    expect(startOn(sent, "https://api.push.apple.com")!.body).toEqual({
       aps: {
         timestamp: DUE / 1000,
         event: "start",
@@ -1214,7 +1215,7 @@ describe("Live Activities started for favorites", () => {
         },
       },
     });
-    expect((startOn(sent, "https://api.sandbox.push.apple.com")?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe(sandbox!.channelId);
+    expect((startOn(sent, "https://api.sandbox.push.apple.com")!.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe(sandbox!.channelId);
 
     // Each device is checked once per race.
     const later = stub();
@@ -1357,7 +1358,7 @@ describe("Live Activities started for favorites", () => {
     const sent = stub();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
     expect(startUrls(sent)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
-    expect((starts(sent)[0]?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe("replacement");
+    expect((starts(sent)[0]!.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe("replacement");
   });
 
   it("forgets the favorites no launch of the app sent again for a year", async () => {
@@ -1379,7 +1380,7 @@ describe("Live Activities started for favorites", () => {
       },
     });
     await startFavoriteActivities(env, [race()], DUE);
-    expect((startOn(sent, "https://api.push.apple.com")?.body as { aps: { "content-state": unknown } }).aps["content-state"]).toEqual(
+    expect((startOn(sent, "https://api.push.apple.com")!.body as { aps: { "content-state": unknown } }).aps["content-state"]).toEqual(
       published,
     );
   });
@@ -1416,7 +1417,7 @@ describe("Live Activities started for favorites", () => {
     await startFavoriteActivities(env, [race()], DUE + 2 * 60_000);
     const [production] = await channels(env);
     const channelOf = (host: string) =>
-      (startOn(sent, host)?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"];
+      (startOn(sent, host)!.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"];
     expect(starts(sent).length).toBe(2);
     expect(channelOf("https://api.push.apple.com")).toBe(production!.channelId);
   });

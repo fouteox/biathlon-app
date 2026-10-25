@@ -1,0 +1,13 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /server
+    schedule:
+      interval: weekly
+  - package-ecosystem: github-actions
+    # The workflows, and the composite actions they share.
+    directories:
+      - /
+      - /.github/actions/*
+    schedule:
+      interval: weekly

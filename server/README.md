@@ -65,7 +65,8 @@ The run's own subrequests go, in this order, to the IBU calendar, then Live Acti
 
 ```sh
 npm ci
-npm test
+npm run check        # as in CI: generated types, format, lint, type check (vp check), tests
+npx vp check --fix   # format and apply the lint fixes
 npx wrangler d1 migrations apply biathlon --local
 cp .dev.vars.example .dev.vars   # fill in a key
 npx wrangler dev

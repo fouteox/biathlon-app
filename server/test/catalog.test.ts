@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { join } from "node:path";
+import { describe, expect, it } from "vite-plus/test";
 import { LOC_KEYS, RACE_KINDS, raceTitleKey } from "../src/payload";
 
 type StringUnit = { state?: string; value?: string };
 type Localization = { stringUnit?: StringUnit; variations?: { plural?: Record<string, { stringUnit?: StringUnit }> } };
 type Entry = { extractionState?: string; shouldTranslate?: boolean; localizations?: Record<string, Localization> };
 
-const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
+const read = (path: string) => readFileSync(join(import.meta.dirname, path), "utf8");
 const catalog: { sourceLanguage: string; strings: Record<string, Entry> } = JSON.parse(read("../../Shared/Localizable.xcstrings"));
 
 // The languages the app ships: the Xcode project's known regions, as Xcode lists

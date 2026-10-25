@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import worker from "../src/index";
 import { TV_COVERAGE } from "../src/tvCoverage";
 

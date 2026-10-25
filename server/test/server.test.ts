@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { classify, makeProviderToken } from "../src/apns";
 import { detectChange } from "../src/changes";
 import { parseRegistration } from "../src/devices";

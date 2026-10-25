@@ -62,7 +62,7 @@ export default {
     return new Response("Not found", { status: 404 });
   },
 
-  async scheduled(controller, env, ctx): Promise<void> {
+  async scheduled(controller, env): Promise<void> {
     if (!(await claimCronRun(env.DB, controller.scheduledTime))) return;
     try {
       await runCron(env, controller.scheduledTime);
