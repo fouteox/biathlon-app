@@ -37,10 +37,30 @@ public struct IBUClient: Sendable {
         try await get("Competitions", ["EventId": eventID])
     }
 
+    /// Races of each event, requested together, in the order of `events`.
+    func competitions(of events: [BiathlonEvent]) async throws -> [Competition] {
+        try await withThrowingTaskGroup { group in
+            for (index, event) in events.enumerated() {
+                group.addTask { (index, try await competitions(eventID: event.id)) }
+            }
+            var races = [[Competition]](repeating: [], count: events.count)
+            for try await (index, eventRaces) in group {
+                races[index] = eventRaces
+            }
+            return races.flatMap(\.self)
+        }
+    }
+
     // MARK: Results
 
     public func results(raceID: String) async throws -> RaceResults {
         try await get("Results", ["RaceId": raceID])
+    }
+
+    /// Results of `race`, if any.
+    func results(of race: Competition?) async throws -> RaceResults? {
+        guard let race else { return nil }
+        return try await results(raceID: race.id)
     }
 
     // MARK: Standings

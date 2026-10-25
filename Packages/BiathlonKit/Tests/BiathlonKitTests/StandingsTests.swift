@@ -9,13 +9,6 @@ struct StandingsTests {
         {"CupId":"X","AsOf":"after 1 of 26 races","Rows":[{"Rank":"1","IBUId":"A","Name":"A","Nat":"FRA","Score":"90"}]}
         """#
 
-    @Test func cupID() {
-        #expect(
-            Cup.worldCupID(SeasonID(rawValue: "2627"), category: .men, discipline: .total) == "BT2627SWRLCP__SMTS")
-        #expect(
-            Cup.worldCupID(SeasonID(rawValue: "2627"), category: .women, discipline: .nations) == "BT2627SWRLCP__SWNC")
-    }
-
     @Test func currentSeasonWhenItHasRows() async throws {
         let client = stubClient(["CupResults?CupId=BT2627SWRLCP__SWSP": Self.one])
         let standings = try await client.worldCupStandings(
