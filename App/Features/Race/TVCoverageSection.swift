@@ -40,13 +40,3 @@ struct TVCoverageSection: View {
         Nation.titled(Locale.current.localizedString(forRegionCode: country) ?? country, region: country)
     }
 }
-
-extension TVGuide {
-    /// The guide the server keeps, `nil` for a build without a server.
-    static func load() async throws -> TVGuide? {
-        guard let serverURL = Bundle.main.serverURL else { return nil }
-        let (data, response) = try await URLSession.shared.data(from: serverURL.appending(path: "v1/tv-coverage"))
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-        return try TVGuide(json: data)
-    }
-}

@@ -14,6 +14,7 @@ struct BiathlonApp: App {
                 .environment(appDelegate.liveActivities)
                 .environment(appDelegate.liveActivityStarts)
                 .environment(\.ibu, appDelegate.client)
+                .environment(\.server, appDelegate.server)
                 .task(id: scenePhase) {
                     guard scenePhase == .active else { return }
                     await appDelegate.liveActivities.reconcileWhileActive()
@@ -31,6 +32,8 @@ struct BiathlonApp: App {
 extension EnvironmentValues {
     /// The app injects the delegate's client, so screens and reminders share one.
     @Entry var ibu = IBUClient()
+    /// The notification server, `nil` for a build without one.
+    @Entry var server: ServerClient? = nil
 }
 
 struct RootView: View {

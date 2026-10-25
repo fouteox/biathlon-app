@@ -6,9 +6,12 @@ import os
 /// Receives the APNs device token and notifications delivered while the app is open.
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     let settings = NotificationSettings()
+    /// The notification server, `nil` for a build without one.
+    let server: ServerClient?
     let push: PushRegistration
-    let liveActivities = LiveActivities()
+    let liveActivities: LiveActivities
     let liveActivityStarts: LiveActivityStarts
+    private let notificationCenter = UNUserNotificationCenter.current()
     /// IBU data goes through the server's cache when there is a server, to spare the IBU API.
     let client = IBUClient(baseURL: Bundle.main.serverURL?.appending(path: "ibu/") ?? IBUClient.ibuBaseURL)
 
@@ -17,9 +20,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     private var reminderRefresh: Task<Void, Never>?
 
     override init() {
+        let server = Bundle.main.serverURL.map { ServerClient(baseURL: $0) }
+        self.server = server
         // One for every request to the server: it attests a single key for the install.
-        let appAttest = Bundle.main.serverURL.map { AppAttest(serverURL: $0) }
+        let appAttest = server.map { AppAttest(server: $0) }
         push = PushRegistration(appAttest: appAttest)
+        liveActivities = LiveActivities(server: server)
         liveActivityStarts = LiveActivityStarts(appAttest: appAttest)
         super.init()
     }
@@ -28,7 +34,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        UNUserNotificationCenter.current().delegate = self
+        notificationCenter.delegate = self
         push.register()
         observePreferences()
         return true
@@ -88,7 +94,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let previous = reminderRefresh
         reminderRefresh = Task {
             await previous?.value
-            await ReminderScheduler.refresh(settings.preferences, client: client)
+            await ReminderScheduler.refresh(settings.preferences, client: client, center: notificationCenter)
         }
     }
 }

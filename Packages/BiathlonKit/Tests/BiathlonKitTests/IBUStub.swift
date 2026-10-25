@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 
 @testable import BiathlonKit
 
@@ -12,8 +13,9 @@ func stubClient(_ routes: [String: String], status: Int = 200) -> IBUClient {
     IBUClient(baseURL: IBUClient.ibuBaseURL, transport: stubTransport(routes, status: status))
 }
 
-func stubTransport(_ routes: [String: String], status: Int = 200) -> IBUClient.Transport {
-    { url in
+func stubTransport(_ routes: [String: String], status: Int = 200) -> HTTPTransport {
+    { request in
+        let url = try #require(request.url)
         let key = routeKey(url)
         guard let body = routes[key] else { throw StubError.unknownRoute(key) }
         let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
@@ -49,11 +51,12 @@ actor Rendezvous {
 func rendezvousClient(_ routes: [String: String], together: [[String]]) -> IBUClient {
     let stub = stubTransport(routes)
     let meetings = together.map { keys in (keys: Set(keys), rendezvous: Rendezvous(count: keys.count)) }
-    return IBUClient(baseURL: IBUClient.ibuBaseURL) { url in
+    return IBUClient(baseURL: IBUClient.ibuBaseURL) { request in
+        let url = try #require(request.url)
         if let meeting = meetings.first(where: { $0.keys.contains(routeKey(url)) }) {
             try await meeting.rendezvous.arrive()
         }
-        return try await stub(url)
+        return try await stub(request)
     }
 }
 

@@ -1,8 +1,7 @@
-/// APNs environment matching the `aps-environment` entitlement Xcode signs the build
-/// with. The server keeps device tokens and Live Activity channels per environment.
-enum APNsEnvironment: String {
-    case sandbox, production
+import BiathlonKit
 
+extension APNsEnvironment {
+    /// The environment matching the `aps-environment` entitlement Xcode signs the build with.
     static var current: Self {
         #if DEBUG
             .sandbox
