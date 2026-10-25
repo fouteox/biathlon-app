@@ -1,3 +1,5 @@
+import { createExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vite-plus/test";
 import worker from "../src/index";
 import { TV_COVERAGE } from "../src/tvCoverage";
@@ -58,8 +60,8 @@ describe("GET /v1/tv-coverage", () => {
   it("serves the coverage to the app, cacheable for an hour", async () => {
     const response = await worker.fetch(
       new Request("https://server.test/v1/tv-coverage"),
-      {} as Env,
-      {} as ExecutionContext,
+      env,
+      createExecutionContext(),
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
