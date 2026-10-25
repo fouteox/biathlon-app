@@ -1230,12 +1230,6 @@ describe("alerts", () => {
       .bind("aa".repeat(32))
       .first();
     expect(stored).toEqual({ categories: '["SW","SM"]' });
-    // Written comma-separated by the server's previous version.
-    await env.DB.prepare(
-      "INSERT INTO devices (token, environment, categories, cancellation, rescheduling, locale, time_zone, updated_at) VALUES (?1, 'sandbox', ?2, 1, 1, 'fr', 'Europe/Paris', 0)",
-    )
-      .bind("dd".repeat(32), "MX,SM")
-      .run();
     answer(({ url }) =>
       url.includes("/Events")
         ? Response.json([{ EventId: RACE_ID.slice(0, 14), StartDate: "2026-11-23", EndDate: "2026-11-29" }])
@@ -1253,9 +1247,30 @@ describe("alerts", () => {
     await pollRaces(env, NOW);
 
     const queued = await env.DB.prepare("SELECT token, kind FROM outbox ORDER BY token").all();
-    expect(queued.results).toEqual([
-      { token: "aa".repeat(32), kind: "cancelled" },
-      { token: "dd".repeat(32), kind: "cancelled" },
+    expect(queued.results).toEqual([{ token: "aa".repeat(32), kind: "cancelled" }]);
+  });
+
+  it("converts the categories written comma-separated before they were JSON", async () => {
+    const env = await makeEnv();
+    const insert = env.DB.prepare(
+      "INSERT INTO devices (token, environment, categories, cancellation, rescheduling, locale, time_zone, updated_at) VALUES (?1, 'sandbox', ?2, 1, 1, 'fr', 'Europe/Paris', 0)",
+    );
+    await env.DB.batch([
+      insert.bind("aa".repeat(32), "MX,SM"),
+      insert.bind("bb".repeat(32), "SW"),
+      insert.bind("cc".repeat(32), ""),
+      insert.bind("dd".repeat(32), '["SM"]'),
+    ]);
+    const migration = testEnv.TEST_MIGRATIONS.find(({ name }) => name === "0006_device_categories_json.sql")!;
+
+    for (const query of migration.queries) await env.DB.prepare(query).run();
+
+    const { results } = await env.DB.prepare("SELECT categories FROM devices ORDER BY token").all();
+    expect(results).toEqual([
+      { categories: '["MX","SM"]' },
+      { categories: '["SW"]' },
+      { categories: "[]" },
+      { categories: '["SM"]' },
     ]);
   });
 
