@@ -68,14 +68,23 @@
                     }
 
                     Section {
-                        Button(role: .destructive) {
-                            Task {
-                                await LiveActivities.end(raceID: Self.raceID)
-                                self.startTime = nil
-                            }
+                        Button {
+                            end(
+                                LiveActivityEnd(
+                                    finalState: .demoResult(startTime: startTime), dismissalDate: Self.dismissal))
                         } label: {
-                            Text(verbatim: "End")
+                            Text(verbatim: "End with the result")
                         }
+                        Button(role: .destructive) {
+                            end(nil)
+                        } label: {
+                            Text(verbatim: "Remove")
+                        }
+                    } footer: {
+                        Text(
+                            verbatim:
+                                "Ending with the result keeps it on the Lock Screen for a minute, like a race's 30 minutes. Removing it is what turning off the race does."
+                        )
                     }
                 } else {
                     Section {
@@ -140,6 +149,17 @@
 
         private static let raceID = RaceActivityAttributes.demoRaceID
 
+        /// The demo's end stays a minute, not a race's 30 minutes (`dismissalDate` in
+        /// server/src/live.ts): long enough to see the result, short enough to see it go.
+        private static var dismissal: Date { .now + 60 }
+
+        private func end(_ end: LiveActivityEnd?) {
+            Task {
+                await LiveActivities.end(raceID: Self.raceID, end)
+                startTime = nil
+            }
+        }
+
         private func start(startTime: Date) {
             do {
                 try LiveActivities.request(
@@ -153,14 +173,17 @@
         }
 
         /// Copies a broadcast showing `state` for the console, as the server sends it: an end event
-        /// once the race is over, and a `content-state` with ActivityKit's default coding.
+        /// with its dismissal date once the race is over, and a `content-state` with ActivityKit's
+        /// default coding.
         private func copyPayload(_ state: RaceLiveState) {
+            let isEnd = !state.phase.canBeFollowedLive
             copy(
                 Push(
                     aps: .init(
                         timestamp: Int(Date.now.timeIntervalSince1970),
-                        event: state.phase.canBeFollowedLive ? "update" : "end",
-                        relevanceScore: state.relevanceScore, contentState: state)))
+                        event: isEnd ? "end" : "update",
+                        relevanceScore: state.relevanceScore, contentState: state,
+                        dismissalDate: isEnd ? Int(Self.dismissal.timeIntervalSince1970) : nil)))
         }
 
         /// Copies the start payload the server sends for a favorite's race 30 minutes before it,
@@ -203,6 +226,7 @@
                 let event: String
                 let relevanceScore: Double
                 let contentState: RaceLiveState
+                var dismissalDate: Int?
                 var attributesType: String?
                 var attributes: RaceActivityAttributes?
                 var inputPushChannel: String?
@@ -212,6 +236,7 @@
                     case timestamp, event, attributes, alert
                     case relevanceScore = "relevance-score"
                     case contentState = "content-state"
+                    case dismissalDate = "dismissal-date"
                     case attributesType = "attributes-type"
                     case inputPushChannel = "input-push-channel"
                 }
