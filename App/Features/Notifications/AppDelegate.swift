@@ -50,7 +50,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     /// UIKit expects the completion handler on the main thread. The async variants of the
-    /// delegate methods complete on a background executor, which crashed the app.
+    /// delegate methods complete on a background executor, which crashed the app: Apple
+    /// forums thread 796407 (https://developer.apple.com/forums/thread/796407, FB19519575),
+    /// with no confirmed fix. Re-test the async variants on a device under Xcode 27 before
+    /// removing this workaround.
     nonisolated func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,

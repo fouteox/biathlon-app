@@ -1,6 +1,7 @@
 import BiathlonKit
 import Foundation
 import SwiftData
+import os
 
 /// A favorite: an athlete (key = IBUId) or a nation (key = IOC code).
 @Model
@@ -23,7 +24,13 @@ final class Favorite {
         addedAt = .now
     }
 
-    var kind: Kind { Kind(rawValue: kindRaw) ?? .athlete }
+    /// `nil` for a kind this version doesn't know, saved by a newer one before a downgrade:
+    /// left out of the favorites rather than taken for another kind.
+    var kind: Kind? {
+        let kind = Kind(rawValue: kindRaw)
+        if kind == nil { Logger.data.error("Unknown favorite kind \(self.kindRaw, privacy: .public)") }
+        return kind
+    }
 
     enum Kind: String {
         case athlete, nation
@@ -34,10 +41,18 @@ extension ModelContext {
     func toggleFavorite(_ kind: Favorite.Kind, key: String, name: String, nation: String? = nil) {
         let raw = kind.rawValue
         let descriptor = FetchDescriptor<Favorite>(predicate: #Predicate { $0.kindRaw == raw && $0.key == key })
-        if let existing = try? fetch(descriptor), !existing.isEmpty {
-            for favorite in existing { delete(favorite) }
-        } else {
+        let existing: [Favorite]
+        do {
+            existing = try fetch(descriptor)
+        } catch {
+            // Inserting anyway could duplicate a favorite the fetch missed.
+            Logger.data.error("Looking up a favorite failed: \(String(describing: error), privacy: .public)")
+            return
+        }
+        if existing.isEmpty {
             insert(Favorite(kind: kind, key: key, name: name, nation: nation))
+        } else {
+            for favorite in existing { delete(favorite) }
         }
     }
 }
