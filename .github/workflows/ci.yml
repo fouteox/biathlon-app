@@ -21,7 +21,7 @@ jobs:
     container: swift:6.4
     steps:
       - uses: actions/checkout@v7
-      - run: swift format lint --strict --recursive App Shared Widgets Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
+      - run: swift format lint --strict --recursive App Shared Widgets BiathlonTests Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
 
   server:
     name: Server (Cloudflare Worker)
@@ -41,13 +41,17 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: xcodebuild -version && swift --version
-      - name: Build
+      # The scheme's tests: the app's (BiathlonTests), hosted by the app, and BiathlonKit's.
+      - name: Build and test
         run: |
           set -o pipefail
-          xcodebuild build \
+          # The image's newest iPhone simulator.
+          device=$(xcrun simctl list devices available --json \
+            | jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))] | last | .udid')
+          xcodebuild test \
             -project Biathlon.xcodeproj \
             -scheme Biathlon \
-            -destination 'generic/platform=iOS Simulator' \
+            -destination "id=$device" \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO | tee build.log
       # The concurrency and language settings come from Configs/*.xcconfig:

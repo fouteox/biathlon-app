@@ -7,6 +7,7 @@ import os
 struct RaceView: View {
     let race: Competition
     @Environment(\.ibu) private var ibu
+    @Environment(\.server) private var server
     @Environment(LiveActivities.self) private var liveActivities
     @State private var loader = Loader<RaceResults>()
     @State private var tvGuide = Loader<TVGuide?>()
@@ -78,7 +79,7 @@ struct RaceView: View {
             Text(liveActivityFailure)
         }
         .task { await load() }
-        .task { await tvGuide.load(TVGuide.load) }
+        .task { await tvGuide.load { try await server?.tvGuide() } }
         .refreshingWhileLive(isLive, action: load)
     }
 

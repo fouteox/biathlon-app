@@ -1,4 +1,5 @@
 import Foundation
+import Testing
 
 @testable import BiathlonKit
 
@@ -9,7 +10,8 @@ import Foundation
 /// An `IBUClient` answering from canned JSON, keyed by `Path?query` with the
 /// query items sorted as the client sends them (`Events?Level=1&SeasonId=2627`).
 func stubClient(_ routes: [String: String], status: Int = 200) -> IBUClient {
-    IBUClient(baseURL: IBUClient.ibuBaseURL) { url in
+    IBUClient(baseURL: IBUClient.ibuBaseURL) { request in
+        let url = try #require(request.url)
         let key = url.lastPathComponent + "?" + (url.query ?? "")
         guard let body = routes[key] else { throw StubError.unknownRoute(key) }
         let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!

@@ -10,8 +10,9 @@ import os
 enum ReminderScheduler {
     private static let identifierPrefix = "reminder."
 
-    static func refresh(_ preferences: NotificationPreferences, client: IBUClient, now: Date = .now) async {
-        let center = UNUserNotificationCenter.current()
+    static func refresh(
+        _ preferences: NotificationPreferences, client: IBUClient, center: any LocalNotificationCenter, now: Date = .now
+    ) async {
         var reminders: [Reminder] = []
         if preferences.reminderEnabled, !preferences.categories.isEmpty {
             let races: [Competition]
@@ -59,3 +60,12 @@ enum ReminderScheduler {
         return UNNotificationRequest(identifier: identifierPrefix + race.id, content: content, trigger: trigger)
     }
 }
+
+/// What `ReminderScheduler` uses of `UNUserNotificationCenter`, which tests replace.
+protocol LocalNotificationCenter {
+    func pendingNotificationRequests() async -> [UNNotificationRequest]
+    func removePendingNotificationRequests(withIdentifiers identifiers: [String])
+    func add(_ request: UNNotificationRequest) async throws
+}
+
+extension UNUserNotificationCenter: LocalNotificationCenter {}

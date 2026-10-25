@@ -1,3 +1,4 @@
+import BiathlonKit
 import CryptoKit
 import DeviceCheck
 import Foundation
@@ -11,11 +12,10 @@ import os
 final class AppAttest {
     enum Failure: Error {
         case unsupported
-        case server(status: Int)
     }
 
-    private let serverURL: URL
-    private let service = DCAppAttestService.shared
+    private let server: ServerClient
+    private let service: any AppAttestService
     private let defaults: UserDefaults
     /// The last send: sends run one at a time, so that a single key is attested and
     /// assertion counters grow in the order of the changes they carry.
@@ -41,38 +41,44 @@ final class AppAttest {
         var attestation: Data?
     }
 
-    init(serverURL: URL, defaults: UserDefaults = .standard) {
-        self.serverURL = serverURL
+    init(
+        server: ServerClient, service: any AppAttestService = DCAppAttestService.shared,
+        defaults: UserDefaults = .standard
+    ) {
+        self.server = server
+        self.service = service
         self.defaults = defaults
     }
 
     /// Sends `request` with an assertion over its method, path and body, attesting
     /// a new key first when there is none or the server no longer knows it.
-    func send(_ request: URLRequest) async throws -> HTTPURLResponse {
+    func send(_ request: SignedRequest) async throws {
         guard service.isSupported else { throw Failure.unsupported }
         let previous = queue
         let task = Task {
             await previous?.value
-            return try await sendSigned(request)
+            try await sendSigned(request)
         }
         queue = Task { _ = await task.result }
-        return try await task.value
+        try await task.value
     }
 
-    private func sendSigned(_ request: URLRequest) async throws -> HTTPURLResponse {
+    private func sendSigned(_ request: SignedRequest) async throws {
         var retried = false
         while true {
             do {
                 let keyID = try await attestedKey()
-                let (data, response) = try await URLSession.shared.data(for: try await signed(request, keyID: keyID))
-                guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
-                if http.statusCode == 401, !retried, Self.serverError(data) == "unknown key" {
-                    Logger.notifications.info("The server doesn't know the App Attest key, attesting a new one")
-                    defaults.removeObject(forKey: DefaultsKey.keyID)
-                    retried = true
-                    continue
+                try await server.send(request) { clientData in
+                    AppAttestAssertion(
+                        keyID: keyID,
+                        assertion: try await service.generateAssertion(
+                            keyID, clientDataHash: Data(SHA256.hash(data: clientData))))
                 }
-                return http
+                return
+            } catch ServerError.unknownKey where !retried {
+                Logger.notifications.info("The server doesn't know the App Attest key, attesting a new one")
+                defaults.removeObject(forKey: DefaultsKey.keyID)
+                retried = true
             } catch let error as DCError where error.code == .invalidKey && !retried {
                 // From the stored key, or from a pending one a restore brought back.
                 Logger.notifications.info("The App Attest key is no longer valid, attesting a new one")
@@ -94,15 +100,18 @@ final class AppAttest {
             pending = saved
         } else {
             // The challenge first: a failed fetch then leaves no unused key behind.
-            let challenge = try await fetchChallenge(purpose: "attest")
+            let challenge = try await server.challenge(for: .attest)
             pending = Pending(keyID: try await service.generateKey(), challenge: challenge)
             // Saved before attesting: if the app is terminated meanwhile, the next sync reuses this key.
             savePending(pending)
         }
 
-        if pending.attestation == nil {
+        let attestation: Data
+        if let attested = pending.attestation {
+            attestation = attested
+        } else {
             do {
-                pending.attestation = try await service.attestKey(
+                attestation = try await service.attestKey(
                     pending.keyID, clientDataHash: Data(SHA256.hash(data: Data(pending.challenge.utf8))))
             } catch let error as DCError where error.code == .serverUnavailable {
                 // The key stays pending: the next sync retries with the same key and hash.
@@ -112,31 +121,19 @@ final class AppAttest {
                 clearPending()
                 throw error
             }
+            pending.attestation = attestation
+            savePending(pending)
         }
-        savePending(pending)
 
-        var request = URLRequest(url: serverURL.appending(path: "v1/app-attest/keys"))
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONEncoder().encode(
-            KeyRegistration(
-                keyId: pending.keyID,
-                attestation: pending.attestation?.base64EncodedString() ?? "",
-                challenge: pending.challenge
-            ))
-        // A transport error keeps the key pending: the next sync sends the same attestation.
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        let error = Self.serverError(data)
-        // "key already attested": an earlier try was stored but its answer was lost.
-        guard status == 204 || error == "key already attested" else {
-            // Any other refusal, an expired challenge included, won't change: start over.
-            if (400..<500).contains(status) {
-                clearPending()
-                // A key saved by an earlier sync gets one immediate retry with a new key.
-                if saved != nil { return try await attestNewKey() }
-            }
-            throw Failure.server(status: status)
+        // A transport error or a server failure keeps the key pending: the next sync sends the same attestation.
+        do {
+            try await server.registerKey(id: pending.keyID, attestation: attestation, challenge: pending.challenge)
+        } catch let error as ServerError where error.isRefusal {
+            // Any refusal, an expired challenge included, won't change: start over.
+            clearPending()
+            // A key saved by an earlier sync gets one immediate retry with a new key.
+            if saved != nil { return try await attestNewKey() }
+            throw error
         }
         defaults.set(pending.keyID, forKey: DefaultsKey.keyID)
         clearPending()
@@ -154,49 +151,14 @@ final class AppAttest {
     private func clearPending() {
         defaults.removeObject(forKey: DefaultsKey.pending)
     }
-
-    /// Adds the assertion headers. The signed bytes are the challenge, the method and
-    /// path, then the body, exactly as `clientData` in server/src/keys.ts builds them.
-    private func signed(_ request: URLRequest, keyID: String) async throws -> URLRequest {
-        guard let url = request.url, let method = request.httpMethod else { throw URLError(.badURL) }
-        let challenge = try await fetchChallenge(purpose: "assert")
-        let clientData =
-            Data("\(challenge)\n\(method) \(url.path(percentEncoded: true))\n".utf8) + (request.httpBody ?? Data())
-        let assertion = try await service.generateAssertion(keyID, clientDataHash: Data(SHA256.hash(data: clientData)))
-        var signed = request
-        signed.setValue(keyID, forHTTPHeaderField: "X-App-Attest-Key-Id")
-        signed.setValue(assertion.base64EncodedString(), forHTTPHeaderField: "X-App-Attest-Assertion")
-        signed.setValue(challenge, forHTTPHeaderField: "X-App-Attest-Challenge")
-        return signed
-    }
-
-    private func fetchChallenge(purpose: String) async throws -> String {
-        var request = URLRequest(
-            url: serverURL.appending(path: "v1/app-attest/challenges").appending(queryItems: [
-                URLQueryItem(name: "purpose", value: purpose)
-            ]))
-        request.httpMethod = "POST"
-        let (data, response) = try await URLSession.shared.data(for: request)
-        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status == 201 else { throw Failure.server(status: status) }
-        return try JSONDecoder().decode(Challenge.self, from: data).challenge
-    }
-
-    private static func serverError(_ data: Data) -> String? {
-        (try? JSONDecoder().decode(ServerError.self, from: data))?.error
-    }
-
-    private struct KeyRegistration: Encodable {
-        let keyId: String
-        let attestation: String
-        let challenge: String
-    }
-
-    private struct Challenge: Decodable {
-        let challenge: String
-    }
-
-    private struct ServerError: Decodable {
-        let error: String
-    }
 }
+
+/// What `AppAttest` uses of `DCAppAttestService`, which tests replace.
+protocol AppAttestService {
+    var isSupported: Bool { get }
+    func generateKey() async throws -> String
+    func attestKey(_ keyId: String, clientDataHash: Data) async throws -> Data
+    func generateAssertion(_ keyId: String, clientDataHash: Data) async throws -> Data
+}
+
+extension DCAppAttestService: AppAttestService {}
