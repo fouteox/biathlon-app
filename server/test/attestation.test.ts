@@ -1,3 +1,5 @@
+import { createExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vite-plus/test";
 import { fromBase64, rawSignature, sha256, toBase64, verifyAssertion, verifyAttestation } from "../src/attestation";
 import { decode } from "../src/cbor";
@@ -6,7 +8,6 @@ import { DERError, parseCertificate, readNode } from "../src/der";
 import worker from "../src/index";
 import { checkChallenge, issueChallenge } from "../src/challenges";
 import { clientData, HEADERS, pruneKeys } from "../src/keys";
-import { makeD1 } from "./d1";
 import sample from "./fixtures/apple-attestation-sample.json";
 
 // Apple's sample was attested on 2026-04-20; its credential certificate expires on 2026-04-23.
@@ -97,7 +98,7 @@ describe("attestation", () => {
   });
 });
 
-const appId = "TEAM123456.com.fouteox.biathlon";
+const appId = env.APP_ATTEST_APP_ID;
 
 /** A device-side App Attest key, signing like DCAppAttestService.generateAssertion. */
 async function makeDevice() {
@@ -218,17 +219,14 @@ describe("assertion", () => {
  * An attested device calling the worker, with its requests to `prefix` + token signed
  * the way the app signs them (AppAttest.swift), and the tokens stored in `table`.
  */
-async function setUp(
-  env = { DB: makeD1(), APP_ATTEST_APP_ID: appId, APP_ATTEST_SECRET: "test secret" } as unknown as Env,
-  { prefix = "/v1/devices/", table = "devices" } = {},
-) {
+async function setUp({ prefix = "/v1/devices/", table = "devices" } = {}) {
   const device = await makeDevice();
   await env.DB.prepare(
     "INSERT INTO app_attest_keys (key_id, public_key, environment, counter, receipt, created_at) VALUES (?1, ?2, 'development', 0, '', 0)",
   )
     .bind(device.keyId, toBase64(device.publicKey))
     .run();
-  const call = (request: Request) => worker.fetch!(request as never, env, {} as ExecutionContext);
+  const call = (request: Request) => worker.fetch(request as never, env, createExecutionContext());
   const challenge = async () => {
     const response = await call(
       new Request("https://server.test/v1/app-attest/challenges?purpose=assert", { method: "POST" }),
@@ -253,7 +251,7 @@ async function setUp(
   };
   const tokens = async () =>
     (await env.DB.prepare(`SELECT token FROM ${table}`).all<{ token: string }>()).results.map((row) => row.token);
-  return { env, call, signed, tokens };
+  return { call, signed, tokens };
 }
 
 describe("device registration endpoint", () => {
@@ -304,7 +302,7 @@ describe("device registration endpoint", () => {
   });
 
   it("deletes keys no device has used for 30 days", async () => {
-    const { env, call, signed } = await setUp();
+    const { call, signed } = await setUp();
     const keys = async () =>
       (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;
     await call(await signed("PUT", token, registration));
@@ -318,7 +316,7 @@ describe("device registration endpoint", () => {
 
   it("lets only the key that registered a token change it", async () => {
     const owner = await setUp();
-    const other = await setUp(owner.env);
+    const other = await setUp();
     await owner.call(await owner.signed("PUT", token, registration));
     const put = await other.call(await other.signed("PUT", token, registration));
     expect(put.status).toBe(403);
@@ -327,17 +325,17 @@ describe("device registration endpoint", () => {
   });
 
   it("lets a key claim a token registered before App Attest", async () => {
-    const { env, call, signed } = await setUp();
+    const { call, signed } = await setUp();
     await call(await signed("PUT", token, registration));
     await env.DB.prepare("UPDATE devices SET app_attest_key_id = NULL").run();
-    const other = await setUp(env);
+    const other = await setUp();
     expect((await other.call(await other.signed("PUT", token, registration))).status).toBe(204);
     expect((await call(await signed("DELETE", token))).status).toBe(403);
     expect(await other.tokens()).toEqual([token]);
   });
 
   it("checks ownership in the delete itself", async () => {
-    const { env, call, signed, tokens } = await setUp();
+    const { call, signed, tokens } = await setUp();
     await call(await signed("PUT", token, registration));
     const owner = (await env.DB.prepare("SELECT app_attest_key_id AS keyId FROM devices").first<{ keyId: string }>())!
       .keyId;
@@ -358,10 +356,10 @@ describe("device registration endpoint", () => {
 describe("Live Activity start endpoint", () => {
   const token = "ef".repeat(32);
   const favorites = { environment: "production", athletes: ["BTFRA00000000001"], nations: ["NOR"] };
-  const live = (env?: Env) => setUp(env, { prefix: "/v1/live-activity-starts/", table: "live_start_tokens" });
+  const live = () => setUp({ prefix: "/v1/live-activity-starts/", table: "live_start_tokens" });
 
   it("saves and forgets the favorites with a valid assertion", async () => {
-    const { env, call, signed, tokens } = await live();
+    const { call, signed, tokens } = await live();
     expect((await call(await signed("PUT", token, favorites))).status).toBe(204);
     const row = await env.DB.prepare("SELECT environment, athletes, nations FROM live_start_tokens").first();
     expect(row).toEqual({ environment: "production", athletes: '["BTFRA00000000001"]', nations: '["NOR"]' });
@@ -391,7 +389,7 @@ describe("Live Activity start endpoint", () => {
 
   it("lets only the key that saved a token change it, and keeps one token per key", async () => {
     const owner = await live();
-    const other = await live(owner.env);
+    const other = await live();
     await owner.call(await owner.signed("PUT", token, favorites));
     expect((await other.call(await other.signed("PUT", token, favorites))).status).toBe(403);
     expect((await other.call(await other.signed("DELETE", token))).status).toBe(403);
@@ -409,7 +407,7 @@ describe("Live Activity start endpoint", () => {
   });
 
   it("keeps the keys of saved favorites", async () => {
-    const { env, call, signed } = await live();
+    const { call, signed } = await live();
     const keys = async () =>
       (await env.DB.prepare("SELECT COUNT(*) AS n FROM app_attest_keys").first<{ n: number }>())!.n;
     await call(await signed("PUT", token, favorites));

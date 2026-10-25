@@ -45,17 +45,11 @@ extension IBUClient {
         }
         let featured = [started, upcoming].compactMap(\.self)
 
-        var races: [Competition] = []
-        for event in featured {
-            races += try await competitions(eventID: event.id)
-        }
-        var feed = HomeFeed(events: featured, races: races)
-        if let live = feed.live {
-            feed.liveResults = try await results(raceID: live.id)
-        }
-        if let finished = feed.latestFinished {
-            feed.latestResults = try await results(raceID: finished.id)
-        }
+        var feed = HomeFeed(events: featured, races: try await competitions(of: featured))
+        let (live, finished) = (feed.live, feed.latestFinished)
+        async let liveResults = results(of: live)
+        async let latestResults = results(of: finished)
+        (feed.liveResults, feed.latestResults) = try await (liveResults, latestResults)
         return feed
     }
 }

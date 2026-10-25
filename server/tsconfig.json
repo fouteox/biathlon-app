@@ -8,7 +8,7 @@
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["./worker-configuration.d.ts", "node"]
+    "types": ["./worker-configuration.d.ts", "node", "@cloudflare/vitest-plugin/types"]
   },
   "include": ["src", "test", "worker-configuration.d.ts", "vite.config.ts"]
 }

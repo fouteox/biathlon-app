@@ -1,20 +1,18 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
+import project from "../../Biathlon.xcodeproj/project.pbxproj?raw";
+import raceKinds from "../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/race-kinds.json";
+import catalogText from "../../Shared/Localizable.xcstrings?raw";
 import { LOC_KEYS, RACE_KINDS, raceTitleKey } from "../src/payload";
 
 type StringUnit = { state?: string; value?: string };
 type Localization = { stringUnit?: StringUnit; variations?: { plural?: Record<string, { stringUnit?: StringUnit }> } };
 type Entry = { extractionState?: string; shouldTranslate?: boolean; localizations?: Record<string, Localization> };
 
-const read = (path: string) => readFileSync(join(import.meta.dirname, path), "utf8");
-const catalog: { sourceLanguage: string; strings: Record<string, Entry> } = JSON.parse(
-  read("../../Shared/Localizable.xcstrings"),
-);
+const catalog: { sourceLanguage: string; strings: Record<string, Entry> } = JSON.parse(catalogText);
 
 // The languages the app ships: the Xcode project's known regions, as Xcode lists
 // them once a language is added under Project > Info > Localizations.
-const languages = (read("../../Biathlon.xcodeproj/project.pbxproj").match(/knownRegions = \(([^)]*)\)/)?.[1] ?? "")
+const languages = (project.match(/knownRegions = \(([^)]*)\)/)?.[1] ?? "")
   .split(",")
   .map((region) => region.trim())
   .filter((region) => region !== "" && region !== "Base");
@@ -52,14 +50,11 @@ describe("app String Catalog", () => {
 
   // The app's BiathlonKit tests check its RaceKind against the same list.
   it("names every race kind the app knows", () => {
-    const kinds: string[] = JSON.parse(
-      read("../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/race-kinds.json"),
-    );
-    expect([...RACE_KINDS].sort()).toEqual(kinds);
+    expect([...RACE_KINDS].sort()).toEqual(raceKinds);
     expect(
       Object.keys(catalog.strings)
         .filter((key) => key.startsWith("race."))
         .sort(),
-    ).toEqual(kinds.map((kind) => `race.${kind}`));
+    ).toEqual(raceKinds.map((kind) => `race.${kind}`));
   });
 });

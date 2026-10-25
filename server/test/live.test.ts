@@ -1,6 +1,12 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
+import {
+  createExecutionContext,
+  createScheduledController,
+  listDurableObjectIds,
+  runInDurableObject,
+} from "cloudflare:test";
+import { env as testEnv } from "cloudflare:workers";
+import { describe, expect, it, vi } from "vite-plus/test";
+import fixture from "../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/live-activity.json";
 import worker from "../src/index";
 import { snapshot, type IBUCompetition, type RaceSnapshot } from "../src/ibu";
 import { liveState, relevanceScore, syncLiveActivities, type IBUResults, type LiveState } from "../src/live";
@@ -9,18 +15,13 @@ import { ProviderTokens } from "../src/providerTokens";
 import { SubrequestBudget } from "../src/subrequests";
 import { buildPayload } from "../src/payload";
 import { PushLots } from "../src/pushLots";
+import { PushSender } from "../src/pushSender";
 import { claimCronRun, drainOutbox } from "../src/watcher";
-import { makeD1 } from "./d1";
-import { pushSenders } from "./pushSenders";
+import { answer } from "./network";
 
 // Shared with the app's BiathlonKit tests, which decode each `content-state` with
 // ActivityKit's default strategies and give its local updates the same relevance score.
-const cases: { name: string; results: IBUResults; state: unknown; relevanceScore?: number }[] = JSON.parse(
-  readFileSync(
-    join(import.meta.dirname, "../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/live-activity.json"),
-    "utf8",
-  ),
-);
+const cases: { name: string; results: IBUResults; state: unknown; relevanceScore?: number }[] = fixture;
 
 describe("Live Activity state shared with the app", () => {
   for (const { name, results, state, relevanceScore: score } of cases) {
@@ -74,28 +75,23 @@ function stubNetwork(
 ): Sent[] {
   const sent: Sent[] = [];
   let channels = 0;
-  vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
-    const url = String(input);
-    const headers = Object.fromEntries(new Headers(init.headers).entries());
-    sent.push({
-      method: init.method ?? "GET",
-      url,
-      headers,
-      body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
-    });
+  answer(async (request) => {
+    const { method, url } = request;
+    const body = await request.text();
+    sent.push({ method, url, headers: Object.fromEntries(request.headers), body: body ? JSON.parse(body) : undefined });
     if (url.includes("biathlonresults.com")) {
       await options.duringResults?.();
       return Response.json(options.results ?? live.results, { status: options.resultsStatus ?? 200 });
     }
     if (options.failingHost && url.includes(options.failingHost)) return new Response(null, { status: 500 });
-    if (url.includes("api-manage-broadcast") && init.method === "POST") {
+    if (url.includes("api-manage-broadcast") && method === "POST") {
       channels += 1;
       return new Response(null, {
         status: 201,
         headers: { "apns-channel-id": `${options.channelPrefix ?? "channel"}-${channels}` },
       });
     }
-    if (url.includes("api-manage-broadcast") && init.method === "DELETE") return new Response(null, { status: 204 });
+    if (url.includes("api-manage-broadcast") && method === "DELETE") return new Response(null, { status: 204 });
     if (url.includes("/3/device/")) {
       const status = (await options.duringDevice?.()) ?? options.deviceStatus;
       if (status)
@@ -111,30 +107,9 @@ function stubNetwork(
   return sent;
 }
 
-let pem = "";
-beforeAll(async () => {
-  const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
-    "sign",
-  ])) as CryptoKeyPair;
-  const pkcs8 = new Uint8Array((await crypto.subtle.exportKey("pkcs8", pair.privateKey)) as ArrayBuffer);
-  pem = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...pkcs8))}\n-----END PRIVATE KEY-----`;
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
+/** The test's bindings, in a copy a test can change. */
 async function makeEnv(): Promise<Env> {
-  const env = {
-    DB: makeD1(),
-    APNS_TOPIC: "com.fouteox.biathlon",
-    APNS_TEAM_ID: "DEF123GHIJ",
-    APNS_SANDBOX_KEY: pem,
-    APNS_SANDBOX_KEY_ID: "ABC123DEFG",
-    APNS_PRODUCTION_KEY: pem,
-    APNS_PRODUCTION_KEY_ID: "HIJ456KLMN",
-    PUSH_SENDER: pushSenders(),
-  } as unknown as Env;
+  const env = { ...testEnv };
   // The watcher stores each race before its channels reference it.
   await env.DB.prepare(
     "INSERT INTO races (id, category, name, start_time, status, updated_at) VALUES (?1, 'SM', 'Men''s 20km Individual', '2026-11-26T15:15:00.000Z', 'scheduled', 0)",
@@ -142,6 +117,16 @@ async function makeEnv(): Promise<Env> {
     .bind(RACE_ID)
     .run();
   return env;
+}
+
+/** Puts `env.DB` behind the methods `replace` returns for the real database, which answers the others. */
+function replaceD1(env: Env, replace: (db: D1Database) => Partial<Pick<D1Database, "prepare" | "batch">>): void {
+  const db = env.DB;
+  env.DB = {
+    prepare: (sql: string) => db.prepare(sql),
+    batch: (statements: D1PreparedStatement[]) => db.batch(statements),
+    ...replace(db),
+  } as unknown as D1Database;
 }
 
 /** Counts the D1 queries made from now on: each `run`, `all`, `first` or `batch`. */
@@ -171,6 +156,12 @@ function countD1Queries(env: Env): () => number {
     },
   } as unknown as D1Database;
   return () => queries;
+}
+
+/** Records the size of each lot a `PushSender` Durable Object sends, in the order the lots go out. */
+function recordLots(): () => number[] {
+  const send = vi.spyOn(PushSender.prototype, "send");
+  return () => send.mock.calls.map(([pushes]) => pushes.length);
 }
 
 /** The pushes of one run, with room for `capacity` of them. */
@@ -408,13 +399,14 @@ describe("Live Activity channels", () => {
     await syncLiveActivities(env, cancelled, NOW);
     stubNetwork();
     // The other run replaces the row with an open channel just before this one retires the old channel.
-    const batch = env.DB.batch.bind(env.DB);
-    env.DB.batch = async (statements) => {
-      await env.DB.prepare(
-        "UPDATE live_channels SET channel_id = 'new-' || environment, ended_at = NULL, end_sent_at = NULL",
-      ).run();
-      return batch(statements);
-    };
+    replaceD1(env, (db) => ({
+      batch: async (statements) => {
+        await db
+          .prepare("UPDATE live_channels SET channel_id = 'new-' || environment, ended_at = NULL, end_sent_at = NULL")
+          .run();
+        return db.batch(statements);
+      },
+    }));
 
     await syncLiveActivities(env, cancelled, NOW + 60 * 60_000);
 
@@ -499,13 +491,12 @@ describe("Live Activity channels", () => {
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
     stubNetwork();
-    const fetchStub = globalThis.fetch;
     // The other run publishes and stores a newer state while this one is broadcasting.
-    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
-      if (String(input).includes("/4/broadcasts/")) {
+    answer(async (request) => {
+      if (request.url.includes("/4/broadcasts/")) {
         await env.DB.prepare("UPDATE live_channels SET state = '{\"newer\":true}'").run();
       }
-      return fetchStub(input, init);
+      return undefined;
     });
 
     await syncLiveActivities(env, [race({ IsLive: true })], NOW);
@@ -516,18 +507,17 @@ describe("Live Activity channels", () => {
   it("deletes the channels it opened when an overlapping run opened them first", async () => {
     const env = await makeEnv();
     const sent = stubNetwork();
-    const fetchStub = globalThis.fetch;
     // The other run records its channels while this one is creating its own.
-    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
-      if (init.method === "POST" && String(input).includes("api-manage-broadcast")) {
-        const environment = String(input).includes("sandbox") ? "sandbox" : "production";
+    answer(async (request) => {
+      if (request.method === "POST" && request.url.includes("api-manage-broadcast")) {
+        const environment = request.url.includes("sandbox") ? "sandbox" : "production";
         await env.DB.prepare(
           "INSERT INTO live_channels (race_id, environment, channel_id, state, published_at, created_at) VALUES (?1, ?2, 'other', '{}', 0, 0)",
         )
           .bind(RACE_ID, environment)
           .run();
       }
-      return fetchStub(input, init);
+      return undefined;
     });
 
     await syncLiveActivities(env, [race()], NOW);
@@ -695,8 +685,7 @@ describe("Live Activity channels", () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
-    vi.stubGlobal("fetch", async (input: string) => {
-      const url = String(input);
+    answer(async ({ url }) => {
       if (url.includes("biathlonresults.com")) return Response.json(live.results);
       // An overlapping run published a newer state first.
       await env.DB.prepare("UPDATE live_channels SET state = ?1").bind(JSON.stringify(live.state)).run();
@@ -748,11 +737,12 @@ describe("Live Activity channels", () => {
 
   it("deletes a channel at APNs when it can't record it", async () => {
     const env = await makeEnv();
-    const prepare = env.DB.prepare.bind(env.DB);
-    env.DB.prepare = (sql: string) => {
-      if (sql.startsWith("INSERT INTO live_channels")) throw new Error("D1 unavailable");
-      return prepare(sql);
-    };
+    replaceD1(env, (db) => ({
+      prepare: (sql) => {
+        if (sql.startsWith("INSERT INTO live_channels")) throw new Error("D1 unavailable");
+        return db.prepare(sql);
+      },
+    }));
     const sent = stubNetwork();
 
     await expect(syncLiveActivities(env, [race()], NOW)).rejects.toThrow("D1 unavailable");
@@ -767,8 +757,7 @@ describe("Live Activity channels", () => {
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
     const sent: string[] = [];
-    vi.stubGlobal("fetch", async (input: string) => {
-      const url = String(input);
+    answer(async ({ url }) => {
       sent.push(url);
       if (!url.includes("biathlonresults.com")) return new Response(null, { status: 200 });
       await env.DB.prepare("UPDATE live_channels SET state = ?1").bind(JSON.stringify(live.state)).run();
@@ -784,13 +773,14 @@ describe("Live Activity channels", () => {
 
   it("queues a channel it can't record for deletion when deleting it at once fails too", async () => {
     const env = await makeEnv();
-    const prepare = env.DB.prepare.bind(env.DB);
-    env.DB.prepare = (sql: string) => {
-      if (sql.startsWith("INSERT INTO live_channels")) throw new Error("D1 unavailable");
-      return prepare(sql);
-    };
-    vi.stubGlobal("fetch", async (_input: string, init: RequestInit = {}) =>
-      init.method === "POST"
+    replaceD1(env, (db) => ({
+      prepare: (sql) => {
+        if (sql.startsWith("INSERT INTO live_channels")) throw new Error("D1 unavailable");
+        return db.prepare(sql);
+      },
+    }));
+    answer(({ method }) =>
+      method === "POST"
         ? new Response(null, { status: 201, headers: { "apns-channel-id": "channel-1" } })
         : new Response(null, { status: 500 }),
     );
@@ -904,13 +894,12 @@ describe("Live Activity channels", () => {
 
     const newer = JSON.stringify({ ...relayFinal, phase: "live" });
     const sent = stubNetwork({ resultsStatus: 503 });
-    const fetch = globalThis.fetch;
-    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+    answer(async (request) => {
       // An overlapping run records newer leaders while this one creates the replacements.
-      if (String(input).includes("api-manage-broadcast") && init.method === "POST") {
+      if (request.url.includes("api-manage-broadcast") && request.method === "POST") {
         await env.DB.prepare("UPDATE live_channels SET state = ?1").bind(newer).run();
       }
-      return fetch(input, init);
+      return undefined;
     });
     await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
 
@@ -1006,7 +995,7 @@ describe("Live Activity channels", () => {
 
 describe("GET /v1/races/:id/channels/:environment", () => {
   const get = (env: Env, path: string) =>
-    worker.fetch(new Request(`https://server.test${path}`), env, {} as ExecutionContext);
+    worker.fetch(new Request(`https://server.test${path}`), env, createExecutionContext());
 
   it("gives the app the race's channel for its APNs environment, with its current state and the broadcast's timestamp", async () => {
     const env = await makeEnv();
@@ -1123,8 +1112,7 @@ describe("alerts", () => {
 
   it("sends a run's alerts in lots of 50 Durable Object calls, more than the run's own subrequests", async () => {
     const env = await makeEnv();
-    const lots: number[] = [];
-    env.PUSH_SENDER = pushSenders(lots);
+    const lots = recordLots();
     await queue(
       env,
       Array.from({ length: 120 }, (_, index) => `t${index}`),
@@ -1133,7 +1121,7 @@ describe("alerts", () => {
 
     await drainOutbox(env, NOW);
 
-    expect(lots).toEqual([50, 50, 20]);
+    expect(lots()).toEqual([50, 50, 20]);
     expect(devicePushes(sent).length).toBe(120);
     expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([]);
   });
@@ -1151,12 +1139,47 @@ describe("alerts", () => {
     expect(await claimCronRun(env.DB, minute)).toBe(false);
   });
 
+  it("sends a run's alerts once when Cloudflare fires the cron twice for one minute", async () => {
+    const env = await makeEnv();
+    await queue(env, ["a"]);
+    // APNs unavailable: the alert stays queued for the next run.
+    const sent = stubNetwork({ deviceStatus: 503 });
+    answer(({ url }) => (url.includes("/Events?") ? Response.json([]) : undefined));
+
+    for (const scheduledTime of [NOW, NOW + 900]) {
+      await worker.scheduled(createScheduledController({ scheduledTime, cron: "* * * * *" }), env);
+    }
+
+    expect(devicePushes(sent).length).toBe(1);
+    expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([{ token: "a", attempts: 1 }]);
+  });
+
+  it("sends a lot from its Durable Object, with the outcome of each push at its index", async () => {
+    const env = await makeEnv();
+    answer(({ url }) => new Response(null, { status: url.endsWith("/gone") ? 410 : 200 }));
+    const push = (deviceToken: string) => ({
+      deviceToken,
+      environment: "sandbox" as const,
+      topic: env.APNS_TOPIC,
+      payload: {},
+      expiration: 0,
+    });
+
+    const outcomes = await runInDurableObject(
+      env.PUSH_SENDER.get(env.PUSH_SENDER.newUniqueId()),
+      (sender: PushSender) => sender.send([push("kept"), push("gone"), push("also-kept")], "provider token"),
+    );
+
+    expect(outcomes).toEqual([{ kind: "sent" }, { kind: "unregistered" }, { kind: "sent" }]);
+  });
+
   it("sends each lot from a Durable Object of its own, which no overlapping run shares", async () => {
     // Concurrent requests to one object share its 50 subrequests: measured on 2026-10-25, when
     // Cloudflare fired the cron twice within a second.
     const env = await makeEnv();
-    const objects: string[] = [];
-    env.PUSH_SENDER = pushSenders([], { objects });
+    const lots = recordLots();
+    // Durable Objects outlive a test: count the objects this one creates.
+    const before = (await listDurableObjectIds(env.PUSH_SENDER)).length;
     await queue(
       env,
       Array.from({ length: 60 }, (_, index) => `a${index}`),
@@ -1169,8 +1192,8 @@ describe("alerts", () => {
     );
     await drainOutbox(env, NOW);
 
-    expect(objects.length).toBe(4);
-    expect(new Set(objects).size).toBe(4);
+    expect(lots().length).toBe(4);
+    expect((await listDurableObjectIds(env.PUSH_SENDER)).length - before).toBe(4);
   });
 
   it("builds each alert in the device's language and time zone", async () => {
@@ -1220,7 +1243,7 @@ describe("alerts", () => {
 
   it("tries the alerts of a lot that failed again", async () => {
     const env = await makeEnv();
-    env.PUSH_SENDER = pushSenders([], { failing: true });
+    vi.spyOn(PushSender.prototype, "send").mockRejectedValue(new Error("Durable Object unavailable"));
     await queue(env, ["a", "b"]);
     stubNetwork();
 
@@ -1332,8 +1355,7 @@ describe("Live Activities started for favorites", () => {
 
   it("starts more activities in one run than its own subrequests, in lots of 50", async () => {
     const env = await setUp();
-    const lots: number[] = [];
-    env.PUSH_SENDER = pushSenders(lots);
+    const lots = recordLots();
     const fans = Array.from({ length: 120 }, (_, index) => index.toString(16).padStart(64, "0"));
     for (const token of fans) await save(env, token, { athletes: [PERROT] });
     const sent = stub();
@@ -1342,8 +1364,8 @@ describe("Live Activities started for favorites", () => {
     await startFavoriteActivities(env, [race()], DUE, new SubrequestBudget(1));
 
     expect(starts(sent).length).toBe(122);
-    expect(Math.max(...lots)).toBe(50);
-    expect(lots.reduce((sum, size) => sum + size, 0)).toBe(122);
+    expect(Math.max(...lots())).toBe(50);
+    expect(lots().reduce((sum, size) => sum + size, 0)).toBe(122);
   });
 
   it("claims and settles a race's starts in a few D1 queries, whatever their number", async () => {
@@ -1366,15 +1388,16 @@ describe("Live Activities started for favorites", () => {
 
   it("claims nothing when D1 fails while claiming, for the next run to start them all", async () => {
     const env = await setUp();
-    const batch = env.DB.batch.bind(env.DB);
     let failing = true;
-    env.DB.batch = (async (statements: D1PreparedStatement[]) => {
-      if (failing) {
-        failing = false;
-        throw new Error("D1 unavailable");
-      }
-      return batch(statements);
-    }) as typeof env.DB.batch;
+    replaceD1(env, (db) => ({
+      batch: async (statements) => {
+        if (failing) {
+          failing = false;
+          throw new Error("D1 unavailable");
+        }
+        return db.batch(statements);
+      },
+    }));
     const failed = stub();
     await expect(startFavoriteActivities(env, [race()], DUE)).rejects.toThrow("D1 unavailable");
     expect(starts(failed)).toEqual([]);
@@ -1645,7 +1668,7 @@ describe("Live Activities started for favorites", () => {
     expect(starts(sent)).toEqual([]);
   });
 
-  it("forgets a token APNs no longer knows, and doesn't retry a start APNs refused", async () => {
+  it("forgets a token APNs no longer knows", async () => {
     const env = await setUp();
     stub({ deviceStatus: 410 });
     await startFavoriteActivities(env, [race()], DUE);
@@ -1653,12 +1676,14 @@ describe("Live Activities started for favorites", () => {
       token: string;
     }>();
     expect(results.map(({ token }) => token)).toEqual(["bb".repeat(32)]);
+  });
 
-    const other = await setUp();
+  it("doesn't retry a start APNs refused", async () => {
+    const env = await setUp();
     stub({ deviceStatus: 400 });
-    await startFavoriteActivities(other, [race()], DUE);
+    await startFavoriteActivities(env, [race()], DUE);
     const sent = stub();
-    await startFavoriteActivities(other, [race()], DUE + 60_000);
+    await startFavoriteActivities(env, [race()], DUE + 60_000);
     expect(starts(sent)).toEqual([]);
   });
 });

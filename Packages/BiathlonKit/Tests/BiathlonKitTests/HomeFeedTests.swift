@@ -6,26 +6,41 @@ import Testing
 struct HomeFeedTests {
     static let results = #"{"RaceId":"X","IsStartList":false,"IsResult":true,"Results":[]}"#
 
-    @Test func featuresTheLiveRaceTheNextOneAndTheLatestResult() async throws {
-        let client = stubClient([
-            "Events?Level=1&SeasonId=2627": "["
-                + event("E1", start: "2026-11-23T12:00:00Z", end: "2026-11-29T12:00:00Z") + ","
-                + event("E2", start: "2026-12-01T12:00:00Z", end: "2026-12-07T12:00:00Z") + "]",
-            "Competitions?EventId=E1": "["
-                + race("E1-SP", start: "2026-11-26T15:00:00Z", status: 11, scheduleStatus: "FINISHED") + ","
-                + race("E1-PU", start: "2026-11-27T11:00:00Z", isLive: true) + ","
-                + race("E1-MS", start: "2026-11-28T14:00:00Z") + "]",
-            "Competitions?EventId=E2": "[" + race("E2-SP", start: "2026-12-04T13:00:00Z") + "]",
-            "Results?RaceId=E1-PU": Self.results,
-            "Results?RaceId=E1-SP": Self.results,
-        ])
+    /// During an event, with a race live, one already finished and the next event announced.
+    static let duringAnEvent = [
+        "Events?Level=1&SeasonId=2627": "["
+            + event("E1", start: "2026-11-23T12:00:00Z", end: "2026-11-29T12:00:00Z") + ","
+            + event("E2", start: "2026-12-01T12:00:00Z", end: "2026-12-07T12:00:00Z") + "]",
+        "Competitions?EventId=E1": "["
+            + race("E1-SP", start: "2026-11-26T15:00:00Z", status: 11, scheduleStatus: "FINISHED") + ","
+            + race("E1-PU", start: "2026-11-27T11:00:00Z", isLive: true) + ","
+            + race("E1-MS", start: "2026-11-28T14:00:00Z") + "]",
+        "Competitions?EventId=E2": "[" + race("E2-SP", start: "2026-12-04T13:00:00Z") + "]",
+        "Results?RaceId=E1-PU": results,
+        "Results?RaceId=E1-SP": results,
+    ]
 
-        let feed = try await client.homeFeed(now: date("2026-11-27T11:30:00Z"))
+    @Test func featuresTheLiveRaceTheNextOneAndTheLatestResult() async throws {
+        let feed = try await stubClient(Self.duringAnEvent).homeFeed(now: date("2026-11-27T11:30:00Z"))
 
         #expect(feed.live?.id == "E1-PU")
         #expect(feed.next?.id == "E1-MS")
         #expect(feed.latestFinished?.id == "E1-SP")
         #expect(feed.event?.id == "E1")
+        #expect(feed.liveResults != nil)
+        #expect(feed.latestResults != nil)
+    }
+
+    /// The home screen waits for the slowest request of each step, not for their sum.
+    @Test(.timeLimit(.minutes(1)))
+    func sendsIndependentRequestsTogether() async throws {
+        let client = rendezvousClient(
+            Self.duringAnEvent,
+            together: [
+                ["Competitions?EventId=E1", "Competitions?EventId=E2"],
+                ["Results?RaceId=E1-PU", "Results?RaceId=E1-SP"],
+            ])
+        let feed = try await client.homeFeed(now: date("2026-11-27T11:30:00Z"))
         #expect(feed.liveResults != nil)
         #expect(feed.latestResults != nil)
     }

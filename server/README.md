@@ -67,6 +67,7 @@ The run's own subrequests go, in this order, to the IBU calendar, then Live Acti
 npm ci
 npm run check        # as in CI: generated types, format, lint, type check (vp check), tests
 npx vp check --fix   # format and apply the lint fixes
+npx vp test          # the tests alone; `npx vp test watch` reruns them on each change
 npx wrangler d1 migrations apply biathlon --local
 cp .dev.vars.example .dev.vars   # fill in a key
 npx wrangler dev
@@ -74,3 +75,5 @@ curl "http://localhost:8787/cdn-cgi/local/scheduled?format=json"
 ```
 
 Run `npx wrangler types` after editing `wrangler.jsonc`.
+
+The tests run in workerd, the Workers runtime, with [`@cloudflare/vitest-plugin`](https://developers.cloudflare.com/workers/testing/vitest-integration/) (`vite.config.ts`): the bindings of `wrangler.jsonc` with test values for its secrets, a local D1 database emptied and migrated with `migrations/*.sql` before each test (`test/setup.ts`), the `PushSender` Durable Object and the Cache API. Requests to APNs and the IBU API never reach the network: each test answers them with [MSW](https://developers.cloudflare.com/workers/testing/vitest-integration/mock-outbound-requests/) (`test/network.ts`), and an unanswered request fails the test. The full suite takes about 10 seconds.
