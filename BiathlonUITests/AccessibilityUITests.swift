@@ -51,6 +51,16 @@ final class AccessibilityUITests: XCTestCase {
         try assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
 
+        // The last season is over: its events all have their schedule, whatever today's date.
+        // The season picker in the toolbar reads the season shown, such as "2026-27".
+        let season = app.navigationBars.buttons.matching(
+            NSPredicate(format: "label MATCHES %@", ".*20[0-9]{2}-[0-9]{2}")
+        )
+        .firstMatch
+        let current = String(season.label.suffix(7))
+        season.tap()
+        app.buttons.matching(NSPredicate(format: "label == %@", Self.season(before: current))).firstMatch.tap()
+        XCTAssertTrue(firstRow(in: app).waitForExistence(timeout: Self.timeout))
         firstRow(in: app).tap()
         try assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
@@ -142,6 +152,12 @@ final class AccessibilityUITests: XCTestCase {
         snapshot.children.flatMap { child in
             child.elementType == .other && child.label.isEmpty ? readElements(of: child) : [child]
         }
+    }
+
+    /// "2025-26" for "2026-27".
+    private static func season(before season: String) -> String {
+        let start = Int(season.prefix(4)) ?? 0
+        return "\(start - 1)-\(String(start).suffix(2))"
     }
 
     /// Tab bar items are buttons, whatever the tab bar shows as on this iOS version.
