@@ -23,6 +23,7 @@ import { TV_COVERAGE } from "./tvCoverage";
 import { claimCronRun, pruneRaces, runCron } from "./watcher";
 
 export { PushSender } from "./pushSender";
+export { RaceActivity } from "./raceActivity";
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {

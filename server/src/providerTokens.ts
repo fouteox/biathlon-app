@@ -5,10 +5,14 @@ import type { SubrequestBudget } from "./subrequests";
 export type Deferred = { kind: "deferred" };
 export const DEFERRED: Deferred = { kind: "deferred" };
 
+/** The provider tokens, per APNs environment, a cron run hands to the Durable Objects it calls. */
+export type ProviderTokenSet = Partial<Record<APNsEnvironment, string>>;
+
 /**
  * The APNs provider tokens of one cron run, one per environment, as Apple
  * recommends for team-scoped keys. A token is reused from D1 while it is younger
- * than its lifetime. Each request spends one subrequest of the run's budget.
+ * than its lifetime, or taken from the cron run that `given` them. Each request spends
+ * one subrequest of the budget.
  */
 export class ProviderTokens {
   private readonly tokens = new Map<APNsEnvironment, string>();
@@ -18,6 +22,7 @@ export class ProviderTokens {
     private readonly env: Env,
     private readonly now: number,
     private readonly budget: SubrequestBudget,
+    private readonly given?: ProviderTokenSet,
   ) {}
 
   /**
@@ -48,9 +53,9 @@ export class ProviderTokens {
     return this.token(environment, true);
   }
 
-  /** The environment's token, signed or read from D1 at the first request of the run. */
+  /** The environment's token, given, or signed or read from D1 at the first request of the run. */
   async token(environment: APNsEnvironment, forceRefresh = false): Promise<string> {
-    const current = this.tokens.get(environment);
+    const current = this.tokens.get(environment) ?? this.given?.[environment];
     if (current && !forceRefresh) return current;
     const token = await this.load(environment, forceRefresh);
     this.tokens.set(environment, token);

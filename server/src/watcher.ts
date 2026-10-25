@@ -12,7 +12,6 @@ import {
   type RaceSnapshot,
 } from "./ibu";
 import { syncLiveActivities } from "./live";
-import { startFavoriteActivities } from "./liveStarts";
 import type { AlertInput } from "./payload";
 import { ProviderTokens } from "./providerTokens";
 import { MAX_SEND_ATTEMPTS, PushLots } from "./pushLots";
@@ -44,24 +43,23 @@ export async function claimCronRun(db: D1Database, scheduledTime: number): Promi
 }
 
 /**
- * One cron run: detect race changes and queue alerts, send a batch of alerts, then
- * update the races' Live Activities with the subrequests left, and start those of the
- * favorites' races. Device pushes go out in lots (`PushLots`), outside the run's budget.
+ * One cron run: detect race changes and queue alerts, send a batch of alerts, then hand
+ * each race to its Live Activity's Durable Object, which has its own subrequests. Alerts
+ * go out in lots (`PushLots`), outside the run's budget.
  */
 export async function runCron(env: Env, now: number): Promise<void> {
   const budget = new SubrequestBudget();
-  const lots = new PushLots(env, new ProviderTokens(env, now, budget));
+  const tokens = new ProviderTokens(env, now, budget);
   let races: RaceSnapshot[] | undefined;
   try {
     ({ races } = await pollRaces(env, now, budget));
   } finally {
-    // Alerts queued by earlier runs and ended activities still go out while the IBU API is down.
+    // Alerts queued by earlier runs still go out while the IBU API is down, and ended
+    // activities through their objects' alarms.
     try {
-      await drainOutbox(env, now, lots);
+      await drainOutbox(env, now, new PushLots(env, tokens));
     } finally {
-      await syncLiveActivities(env, races, now, budget);
-      // After the channels it subscribes the new activities to.
-      if (races) await startFavoriteActivities(env, races, now, budget, lots);
+      if (races) await syncLiveActivities(env, races, now, tokens);
     }
   }
 }
