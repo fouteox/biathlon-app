@@ -9,14 +9,22 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import fixture from "../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/live-activity.json";
 import worker from "../src/index";
 import { snapshot, type IBUCompetition, type RaceSnapshot } from "../src/ibu";
-import { liveState, relevanceScore, syncLiveActivities, type IBUResults, type LiveState } from "../src/live";
+import {
+  liveState,
+  pruneChannels,
+  relevanceScore,
+  syncLiveActivities,
+  type IBUResults,
+  type LiveState,
+} from "../src/live";
 import { parseStartRegistration, pruneStarts, saveStartToken, startFavoriteActivities } from "../src/liveStarts";
 import { ProviderTokens } from "../src/providerTokens";
 import { SubrequestBudget } from "../src/subrequests";
+import { parseRegistration, saveDevice } from "../src/devices";
 import { buildPayload } from "../src/payload";
 import { PushLots } from "../src/pushLots";
 import { PushSender } from "../src/pushSender";
-import { claimCronRun, drainOutbox } from "../src/watcher";
+import { claimCronRun, drainOutbox, pollRaces, pruneRaces } from "../src/watcher";
 import { answer } from "./network";
 
 // Shared with the app's BiathlonKit tests, which decode each `content-state` with
@@ -158,7 +166,7 @@ function countD1Queries(env: Env): () => number {
   return () => queries;
 }
 
-/** Records the size of each lot a `PushSender` Durable Object sends, in the order the lots go out. */
+/** Records the size of each lot a `PushSender` Durable Object sends, in no set order: the lots go out at once. */
 function recordLots(): () => number[] {
   const send = vi.spyOn(PushSender.prototype, "send");
   return () => send.mock.calls.map(([pushes]) => pushes.length);
@@ -993,6 +1001,75 @@ describe("Live Activity channels", () => {
   });
 });
 
+describe("pruning", () => {
+  const HOUR = 60 * 60_000;
+
+  it("forgets the channels deleted at APNs once no activity they ended can still be on screen", async () => {
+    const env = await makeEnv();
+    const ended = NOW - 12 * HOUR;
+    const insert = (environment: string, channelId: string, endedAt: number | null, deletedAt: number | null) =>
+      env.DB.prepare(
+        "INSERT INTO live_channels (race_id, environment, channel_id, state, published_at, created_at, ended_at, deleted_at) VALUES (?1, ?2, ?3, '{}', 0, 0, ?4, ?5)",
+      )
+        .bind(RACE_ID, environment, channelId, endedAt, deletedAt)
+        .run();
+    await insert("production", "over", ended - 1, ended);
+    await insert("sandbox", "not-deleted-at-APNs", ended - 1, null);
+
+    await pruneChannels(env.DB, NOW);
+
+    expect((await channels(env)).map(({ channelId }) => channelId)).toEqual(["not-deleted-at-APNs"]);
+
+    await env.DB.prepare("DELETE FROM live_channels").run();
+    await insert("production", "ended-lately", ended, ended);
+    await insert("sandbox", "followed", null, ended - 1);
+
+    await pruneChannels(env.DB, NOW);
+
+    expect((await channels(env)).map(({ channelId }) => channelId)).toEqual(["ended-lately", "followed"]);
+  });
+
+  it("forgets the races of past seasons, which the watcher no longer polls", async () => {
+    const env = await makeEnv();
+    const insert = (id: string, startTime: string) =>
+      env.DB.prepare(
+        "INSERT INTO races (id, category, name, start_time, status, updated_at) VALUES (?1, 'SM', 'x', ?2, 'finished', 0)",
+      )
+        .bind(id, startTime)
+        .run();
+    await insert("BT2526SWRLCP09SMMS", "2026-03-22T13:45:00.000Z");
+    // Still referenced by a channel whose deletion at APNs keeps failing.
+    await insert("BT2526SWRLCP09SWMS", "2026-03-22T11:00:00.000Z");
+    await env.DB.prepare(
+      "INSERT INTO live_channels (race_id, environment, channel_id, state, published_at, created_at, ended_at) VALUES ('BT2526SWRLCP09SWMS', 'production', 'c', '{}', 0, 0, 0)",
+    ).run();
+
+    await pruneRaces(env.DB, Date.parse("2026-07-01T03:00:00Z"));
+
+    const { results } = await env.DB.prepare("SELECT id FROM races ORDER BY id").all<{ id: string }>();
+    expect(results.map(({ id }) => id)).toEqual(["BT2526SWRLCP09SWMS", RACE_ID]);
+  });
+
+  it("prunes once a day, in the cron run of 03:00 UTC", async () => {
+    const env = await makeEnv();
+    await env.DB.prepare(
+      "INSERT INTO live_channels (race_id, environment, channel_id, state, published_at, created_at, ended_at, deleted_at) VALUES (?1, 'production', 'c', '{}', 0, 0, 0, 0)",
+    )
+      .bind(RACE_ID)
+      .run();
+    answer(() => Response.json([]));
+    const run = (time: string) =>
+      worker.scheduled(createScheduledController({ scheduledTime: Date.parse(time), cron: "* * * * *" }), env);
+
+    await run("2027-07-01T02:59:00Z");
+    expect((await env.DB.prepare("SELECT id FROM races").all()).results).toEqual([{ id: RACE_ID }]);
+
+    await run("2027-07-01T03:00:00Z");
+    expect(await channels(env)).toEqual([]);
+    expect((await env.DB.prepare("SELECT id FROM races").all()).results).toEqual([]);
+  });
+});
+
 describe("GET /v1/races/:id/channels/:environment", () => {
   const get = (env: Env, path: string) =>
     worker.fetch(new Request(`https://server.test${path}`), env, createExecutionContext());
@@ -1121,9 +1198,65 @@ describe("alerts", () => {
 
     await drainOutbox(env, NOW);
 
-    expect(lots()).toEqual([50, 50, 20]);
+    expect(lots().toSorted((a, b) => b - a)).toEqual([50, 50, 20]);
     expect(devicePushes(sent).length).toBe(120);
     expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([]);
+  });
+
+  it("queues an alert for the devices that follow the race's category and this kind of change", async () => {
+    const env = await makeEnv();
+    const register = async (token: string, categories: string[], cancellation = true) => {
+      const key = `key-${token}`;
+      await env.DB.prepare(
+        "INSERT INTO app_attest_keys (key_id, public_key, environment, counter, receipt, created_at) VALUES (?1, '', 'development', 0, '', 0)",
+      )
+        .bind(key)
+        .run();
+      const device = parseRegistration(token, {
+        environment: "sandbox",
+        categories,
+        cancellation,
+        rescheduling: true,
+        locale: "fr",
+        timeZone: "Europe/Paris",
+      });
+      if (typeof device === "string") throw new Error(device);
+      await saveDevice(env.DB, device, key, 0);
+    };
+    await register("aa".repeat(32), ["SW", "SM"]);
+    await register("bb".repeat(32), ["SW", "MX"]);
+    await register("cc".repeat(32), ["SM"], false);
+    const stored = await env.DB.prepare("SELECT categories FROM devices WHERE token = ?1")
+      .bind("aa".repeat(32))
+      .first();
+    expect(stored).toEqual({ categories: '["SW","SM"]' });
+    // Written comma-separated by the server's previous version.
+    await env.DB.prepare(
+      "INSERT INTO devices (token, environment, categories, cancellation, rescheduling, locale, time_zone, updated_at) VALUES (?1, 'sandbox', ?2, 1, 1, 'fr', 'Europe/Paris', 0)",
+    )
+      .bind("dd".repeat(32), "MX,SM")
+      .run();
+    answer(({ url }) =>
+      url.includes("/Events")
+        ? Response.json([{ EventId: RACE_ID.slice(0, 14), StartDate: "2026-11-23", EndDate: "2026-11-29" }])
+        : Response.json([
+            {
+              RaceId: RACE_ID,
+              catId: "SM",
+              ShortDescription: "Men's 20km Individual",
+              StartTime: "2026-11-26T15:15:00Z",
+              StatusId: 6,
+            },
+          ]),
+    );
+
+    await pollRaces(env, NOW);
+
+    const queued = await env.DB.prepare("SELECT token, kind FROM outbox ORDER BY token").all();
+    expect(queued.results).toEqual([
+      { token: "aa".repeat(32), kind: "cancelled" },
+      { token: "dd".repeat(32), kind: "cancelled" },
+    ]);
   });
 
   it("runs the cron once per scheduled minute, though Cloudflare sometimes fires it twice", async () => {
@@ -1171,6 +1304,34 @@ describe("alerts", () => {
     );
 
     expect(outcomes).toEqual([{ kind: "sent" }, { kind: "unregistered" }, { kind: "sent" }]);
+  });
+
+  it("sends a lot's pushes six at a time, the connections a Durable Object request may open at once", async () => {
+    const env = await makeEnv();
+    let inFlight = 0;
+    let most = 0;
+    answer(async () => {
+      inFlight += 1;
+      most = Math.max(most, inFlight);
+      await scheduler.wait(5);
+      inFlight -= 1;
+      return new Response(null, { status: 200 });
+    });
+    const pushes = Array.from({ length: 20 }, (_, index) => ({
+      deviceToken: `t${index}`,
+      environment: "sandbox" as const,
+      topic: env.APNS_TOPIC,
+      payload: {},
+      expiration: 0,
+    }));
+
+    const outcomes = await runInDurableObject(
+      env.PUSH_SENDER.get(env.PUSH_SENDER.newUniqueId()),
+      (sender: PushSender) => sender.send(pushes, "provider token"),
+    );
+
+    expect(outcomes).toEqual(pushes.map(() => ({ kind: "sent" })));
+    expect(most).toBe(6);
   });
 
   it("sends each lot from a Durable Object of its own, which no overlapping run shares", async () => {

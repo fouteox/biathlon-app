@@ -14,9 +14,13 @@ function stubIBU(status = 200): string[] {
   return requested;
 }
 
-async function get(path: string): Promise<Response> {
+async function get(path: string, ip = "192.0.2.1"): Promise<Response> {
   const ctx = createExecutionContext();
-  const response = await worker.fetch(new Request(`https://server.test${path}`), env, ctx);
+  const response = await worker.fetch(
+    new Request(`https://server.test${path}`, { headers: { "cf-connecting-ip": ip } }),
+    env,
+    ctx,
+  );
   // The cache is filled once the response is sent.
   await waitOnExecutionContext(ctx);
   return response;
@@ -55,5 +59,22 @@ describe("GET /ibu/*", () => {
     expect(response.status).toBe(404);
     await response.text();
     expect(requested).toEqual([]);
+  });
+
+  it("answers 429 to an IP address past 60 requests a minute the cache can't answer", async () => {
+    const requested = stubIBU();
+    for (let race = 1; race <= 60; race += 1) {
+      expect((await get(`/ibu/Results?RaceId=${race}`)).status).toBe(200);
+    }
+
+    const limited = await get("/ibu/Results?RaceId=61");
+
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    await limited.text();
+    expect(requested.length).toBe(60);
+    // The cache still answers that address, and other addresses still reach the IBU API.
+    expect((await get("/ibu/Results?RaceId=1")).status).toBe(200);
+    expect((await get("/ibu/Results?RaceId=61", "192.0.2.2")).status).toBe(200);
   });
 });

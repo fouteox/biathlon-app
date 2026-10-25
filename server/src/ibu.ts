@@ -49,12 +49,17 @@ export function eventId(raceId: string): string {
   return raceId.slice(0, 14);
 }
 
-/** IBU season id for a date, e.g. "2627" for winter 2026-27. Seasons start on July 1st. */
+/** IBU season id for a date, e.g. "2627" for winter 2026-27. */
 export function seasonId(date: Date): string {
-  const year = date.getUTCFullYear();
-  const start = date.getUTCMonth() >= 6 ? year : year - 1;
+  const start = seasonStart(date).getUTCFullYear();
   const two = (n: number) => String(n % 100).padStart(2, "0");
   return two(start) + two(start + 1);
+}
+
+/** The start of the IBU season of a date: seasons start on July 1st. */
+export function seasonStart(date: Date): Date {
+  const year = date.getUTCFullYear();
+  return new Date(Date.UTC(date.getUTCMonth() >= 6 ? year : year - 1, 6, 1));
 }
 
 /** IBU dates come with or without a trailing "Z"; both are UTC. */

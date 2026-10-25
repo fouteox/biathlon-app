@@ -53,7 +53,10 @@ export interface AttestedKey {
   /** X9.62 uncompressed P-256 point of the attested key. */
   publicKey: Uint8Array;
   environment: AttestEnvironment;
-  /** Kept for Apple's fraud metric, which this server doesn't query yet. */
+  /**
+   * Kept for Apple's fraud metric, which this server doesn't query yet. Not verified: Apple
+   * asks to check its signature, App ID, creation time and public key before trusting it.
+   */
   receipt: Uint8Array;
   /** `apple_validation_category_01`, when the device sends it. */
   validationCategory?: number;

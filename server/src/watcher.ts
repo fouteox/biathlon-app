@@ -5,6 +5,7 @@ import {
   activeEvents,
   fetchIBU,
   seasonId,
+  seasonStart,
   snapshot,
   type IBUCompetition,
   type IBUEvent,
@@ -115,6 +116,27 @@ export async function pollRaces(
   return { changes, races: current };
 }
 
+/**
+ * Deletes the races of past seasons, which the watcher no longer polls, but those a Live
+ * Activity's channel or start still references.
+ */
+export async function pruneRaces(db: D1Database, now: number): Promise<void> {
+  await db
+    .prepare(
+      `DELETE FROM races WHERE start_time < ?1
+       AND id NOT IN (SELECT race_id FROM live_channels) AND id NOT IN (SELECT race_id FROM live_starts)`,
+    )
+    .bind(seasonStart(new Date(now)).toISOString())
+    .run();
+}
+
+/**
+ * A device's categories, a JSON array. The server's previous version wrote them comma-separated,
+ * until the migration that converts its rows, applied once no running version writes that form.
+ */
+const CATEGORIES = `json_each(CASE WHEN json_valid(categories) THEN categories
+  ELSE '["' || replace(categories, ',', '","') || '"]' END)`;
+
 /** Queues one alert per device subscribed to the race's category and to this kind of change. */
 function enqueue(db: D1Database, change: RaceChange, now: number): D1PreparedStatement {
   const preference = change.kind === "cancelled" ? "cancellation" : "rescheduling";
@@ -122,7 +144,7 @@ function enqueue(db: D1Database, change: RaceChange, now: number): D1PreparedSta
     .prepare(
       `INSERT INTO outbox (token, environment, kind, race_id, race_name, start_time, locale, time_zone, created_at)
        SELECT token, environment, ?1, ?2, ?3, ?4, locale, time_zone, ?5 FROM devices
-       WHERE ${preference} = 1 AND (',' || categories || ',') LIKE ('%,' || ?6 || ',%')`,
+       WHERE ${preference} = 1 AND ?6 IN (SELECT value FROM ${CATEGORIES})`,
     )
     .bind(change.kind, change.race.id, change.race.name, change.race.startTime, now, change.race.category);
 }
