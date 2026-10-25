@@ -31,7 +31,12 @@
 	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
 	<true/>
 	<key>UILaunchScreen</key>
-	<dict/>
+	<dict>
+		<key>UINavigationBar</key>
+		<dict/>
+		<key>UITabBar</key>
+		<dict/>
+	</dict>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
