@@ -130,7 +130,7 @@ async function makeEnv(): Promise<Env> {
   return env;
 }
 
-/** Counts the D1 queries made from now on: each `run`, `all` or `first`, and each statement of a `batch`. */
+/** Counts the D1 queries made from now on: each `run`, `all`, `first` or `batch`. */
 function countD1Queries(env: Env): () => number {
   let queries = 0;
   const db = env.DB;
@@ -149,9 +149,10 @@ function countD1Queries(env: Env): () => number {
     }) as unknown as D1PreparedStatement;
   env.DB = {
     prepare: (sql: string) => statement(db.prepare(sql)),
-    // D1's limits apply to each statement of a batch (https://developers.cloudflare.com/d1/platform/limits/).
+    // A batch counts as one query against the limit per invocation, whatever its statements
+    // (https://developers.cloudflare.com/d1/platform/limits/).
     batch: (statements: D1PreparedStatement[]) => {
-      queries += statements.length;
+      queries += 1;
       return db.batch(statements.map((item) => (item as unknown as { raw: D1PreparedStatement }).raw));
     },
   } as unknown as D1Database;
@@ -1118,7 +1119,7 @@ describe("alerts", () => {
 
     await drainOutbox(env, NOW);
 
-    expect(calls()).toBeLessThanOrEqual(10);
+    expect(calls()).toBeLessThanOrEqual(5);
     expect((await env.DB.prepare(PERSISTED).all()).results).toEqual([]);
   });
 
@@ -1250,7 +1251,7 @@ describe("Live Activities started for favorites", () => {
     await startFavoriteActivities(env, [race()], DUE);
 
     // The race's reads, its two provider tokens, a claim and a settle.
-    expect(calls()).toBeLessThanOrEqual(12);
+    expect(calls()).toBeLessThanOrEqual(10);
     const sent = stub();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
     expect(starts(sent).length).toBe(122);
