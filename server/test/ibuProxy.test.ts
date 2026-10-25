@@ -61,7 +61,11 @@ describe("GET /ibu/*", () => {
     expect(requested).toEqual([]);
   });
 
-  it("answers 429 to an IP address past 60 requests a minute the cache can't answer", async () => {
+  it("answers 429 to an IP address past 60 requests a minute the cache can't answer", { timeout: 20_000 }, async () => {
+    // The local limiter counts in one-minute windows aligned to the clock (Miniflare's
+    // ratelimit-object.worker.js): requests that straddle two windows would never reach 61.
+    const left = 60_000 - (Date.now() % 60_000);
+    if (left < 10_000) await new Promise((resolve) => setTimeout(resolve, left));
     const requested = stubIBU();
     for (let race = 1; race <= 60; race += 1) {
       expect((await get(`/ibu/Results?RaceId=${race}`)).status).toBe(200);
