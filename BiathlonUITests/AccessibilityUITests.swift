@@ -32,11 +32,12 @@ final class AccessibilityUITests: XCTestCase {
     @MainActor func testAthleteScreenReadsTheProfileAndEachResultAsOneElement() throws {
         let app = launch()
         openFirstAthlete(in: app)
-        let profile = firstRow(in: app)
-        XCTAssertEqual(profile.images.count, 0)
-        // The results load on their own, after the profile.
+        // The results load on their own, after the profile; once they show, the list on screen is
+        // the athlete's, not the standings left behind.
         let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Latest results")).firstMatch
         XCTAssertTrue(results.waitForExistence(timeout: Self.timeout))
+        let profile = firstRow(in: app)
+        XCTAssertEqual(profile.images.count, 0, profile.debugDescription)
         try assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
     }
