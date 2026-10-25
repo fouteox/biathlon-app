@@ -1,14 +1,10 @@
-import { CBORError, decode, decodeItem, type CBORValue } from "./cbor";
-import {
-  children,
-  DERError,
-  firstChild,
-  isCertificateAuthority,
-  parseCertificate,
-  readSingle,
-  TAG,
-  type Certificate,
-} from "./der";
+// @peculiar/x509 needs the Reflect metadata API, which must load before it.
+import "reflect-metadata";
+import { AsnConvert } from "@peculiar/asn1-schema";
+import { SubjectPublicKeyInfo } from "@peculiar/asn1-x509";
+import { AsnEcSignatureFormatter, BasicConstraintsExtension, X509Certificate } from "@peculiar/x509";
+import { Constructed, OctetString, Sequence, verifySchema } from "asn1js";
+import { decode, decodeFirst, type DecodeOptions } from "cborg";
 
 /**
  * Apple App Attest verification, following "Validating apps that connect to
@@ -24,17 +20,26 @@ import {
 const APPLE_ROOT_CA =
   "MIICITCCAaegAwIBAgIQC/O+DvHN0uD7jG5yH2IXmDAKBggqhkjOPQQDAzBSMSYwJAYDVQQDDB1BcHBsZSBBcHAgQXR0ZXN0YXRpb24gUm9vdCBDQTETMBEGA1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTAeFw0yMDAzMTgxODMyNTNaFw00NTAzMTUwMDAwMDBaMFIxJjAkBgNVBAMMHUFwcGxlIEFwcCBBdHRlc3RhdGlvbiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJbmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAERTHhmLW07ATaFQIEVwTtT4dyctdhNbJhFs/Ii2FdCgAHGbpphY3+d8qjuDngIN3WVhQUBHAoMeQ/cLiP1sOUtgjqK9auYen1mMEvRq9Sk3Jm5X8U62H+xTD3FE9TgS41o0IwQDAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBSskRBTM72+aEH/pwyp5frq5eWKoTAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwMDaAAwZQIwQgFGnByvsiVbpTKwSga0kP0e8EeDS4+sQmTvb7vn53O5+FRXgeLhpJ06ysC5PrOyAjEAp5U4xDgEgllF7En3VcE3iexZZtKeYnpqtijVoyFraWVIyd/dganmrduC1bmTBGwD";
 
-/** Extension of the credential certificate that holds the nonce. */
+/** Extension of the credential certificate that holds the nonce: `SEQUENCE { [1] EXPLICIT OCTET STRING }`. */
 const NONCE_OID = "1.2.840.113635.100.8.2";
+const NONCE_SCHEMA = new Sequence({
+  value: [new Constructed({ idBlock: { tagClass: 3, tagNumber: 1 }, value: [new OctetString({ name: "nonce" })] })],
+});
 
-const SIGNATURE_HASHES: Record<string, string> = {
-  "1.2.840.10045.4.3.2": "SHA-256",
-  "1.2.840.10045.4.3.3": "SHA-384",
+/**
+ * Untrusted input: definite lengths, no duplicate keys, no tags (cborg's
+ * default), and maps as `Map` since COSE keys have integer keys.
+ */
+const CBOR_OPTIONS: DecodeOptions = {
+  useMaps: true,
+  rejectDuplicateMapKeys: true,
+  allowIndefinite: false,
+  allowUndefined: false,
+  allowBigInt: false,
 };
-const CURVES: Record<string, { name: string; size: number }> = {
-  "1.2.840.10045.3.1.7": { name: "P-256", size: 32 },
-  "1.3.132.0.34": { name: "P-384", size: 48 },
-};
+
+/** The algorithm of App Attest keys, which sign the assertions. */
+const KEY_ALGORITHM = { name: "ECDSA", namedCurve: "P-256" } as const;
 
 export type AttestEnvironment = "development" | "production";
 
@@ -88,7 +93,7 @@ export async function verifyAttestation(input: {
   minBundleVersion?: string;
 }): Promise<AttestedKey> {
   return guarded(async () => {
-    const object = asMap(decode(input.attestation));
+    const object = asMap(decode(input.attestation, CBOR_OPTIONS));
     if (object.get("fmt") !== "apple-appattest") throw new AttestationError("unexpected format");
     const statement = asMap(object.get("attStmt"));
     const x5c = statement.get("x5c");
@@ -103,22 +108,27 @@ export async function verifyAttestation(input: {
     if (!(leafBytes instanceof Uint8Array) || !(intermediateBytes instanceof Uint8Array)) {
       throw new AttestationError("missing certificates");
     }
-    const leaf = parseCertificate(leafBytes);
-    const intermediate = parseCertificate(intermediateBytes);
-    const root = parseCertificate(input.root ?? fromBase64(APPLE_ROOT_CA));
-    if (!isCertificateAuthority(intermediate)) throw new AttestationError("intermediate is not a CA");
+    const leaf = new X509Certificate(copy(leafBytes));
+    const intermediate = new X509Certificate(copy(intermediateBytes));
+    const root = new X509Certificate(input.root ? copy(input.root) : APPLE_ROOT_CA);
+    if (!intermediate.getExtension(BasicConstraintsExtension)?.ca) {
+      throw new AttestationError("intermediate is not a CA");
+    }
     await verifyIssued(leaf, intermediate, input.now);
     await verifyIssued(intermediate, root, input.now);
 
     // 2-4. nonce = SHA-256(authData || clientDataHash) is in the credential certificate.
     const nonce = await sha256(concat(authDataBytes, input.clientDataHash));
-    const extension = leaf.extensions.get(NONCE_OID);
+    const extension = leaf.getExtension(NONCE_OID);
     if (!extension) throw new AttestationError("missing nonce extension");
-    const octets = firstChild(firstChild(readSingle(extension, TAG.sequence)));
-    if (octets?.tag !== TAG.octetString || !equal(octets.contents, nonce)) throw new AttestationError("nonce mismatch");
+    const parsed = verifySchema(extension.value, NONCE_SCHEMA);
+    if (!parsed.verified || !equal(parsed.result.nonce.valueBlock.valueHexView, nonce)) {
+      throw new AttestationError("nonce mismatch");
+    }
 
     // 5. The key identifier is the SHA-256 of the certificate's public key.
-    if (!equal(await sha256(leaf.publicKey), input.keyId)) throw new AttestationError("key identifier mismatch");
+    const publicKey = new Uint8Array(AsnConvert.parse(leaf.publicKey.rawData, SubjectPublicKeyInfo).subjectPublicKey);
+    if (!equal(await sha256(publicKey), input.keyId)) throw new AttestationError("key identifier mismatch");
 
     const authData = parseAuthenticatorData(authDataBytes, true);
     // 6. RP ID is the SHA-256 of the App ID.
@@ -136,7 +146,7 @@ export async function verifyAttestation(input: {
     checkValidationCategory(authData, input.validationCategories);
     checkBundleVersion(authData, input.minBundleVersion);
     return {
-      publicKey: leaf.publicKey,
+      publicKey,
       environment,
       receipt,
       validationCategory: authData.validationCategory,
@@ -159,7 +169,7 @@ export async function verifyAssertion(input: {
   minBundleVersion?: string;
 }): Promise<number> {
   return guarded(async () => {
-    const object = asMap(decode(input.assertion));
+    const object = asMap(decode(input.assertion, CBOR_OPTIONS));
     const signature = object.get("signature");
     const authDataBytes = object.get("authenticatorData");
     if (!(signature instanceof Uint8Array) || !(authDataBytes instanceof Uint8Array)) {
@@ -168,19 +178,11 @@ export async function verifyAssertion(input: {
 
     // 1-3. The signature covers nonce = SHA-256(authenticatorData || SHA-256(clientData)).
     const nonce = await sha256(concat(authDataBytes, await sha256(input.clientData)));
-    const key = await crypto.subtle.importKey(
-      "raw",
-      copy(input.publicKey),
-      { name: "ECDSA", namedCurve: "P-256" },
-      false,
-      ["verify"],
-    );
-    const valid = await crypto.subtle.verify(
-      { name: "ECDSA", hash: "SHA-256" },
-      key,
-      copy(rawSignature(signature, 32)),
-      copy(nonce),
-    );
+    const key = await crypto.subtle.importKey("raw", copy(input.publicKey), KEY_ALGORITHM, false, ["verify"]);
+    // App Attest signatures are DER; WebCrypto wants r || s.
+    const raw = new AsnEcSignatureFormatter().toWebSignature(KEY_ALGORITHM, copy(signature));
+    if (!raw) throw new AttestationError("invalid signature encoding");
+    const valid = await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, raw, copy(nonce));
     if (!valid) throw new AttestationError("invalid signature");
 
     const authData = parseAuthenticatorData(authDataBytes, false);
@@ -215,12 +217,11 @@ function parseAuthenticatorData(data: Uint8Array, attested: boolean): Authentica
     const length = view.getUint16(53);
     result.credentialId = data.subarray(55, 55 + length);
     if (result.credentialId.length !== length) throw new AttestationError("authenticator data too short");
-    offset = decodeItem(data, 55 + length).end;
+    // Skips the COSE public key, the same key as the certificate's.
+    offset = data.length - decodeFirst(data.subarray(55 + length), CBOR_OPTIONS)[1].length;
   }
   if (offset < data.length) {
-    const { value, end } = decodeItem(data, offset);
-    if (end !== data.length) throw new AttestationError("trailing authenticator data");
-    const extensions = asMap(value);
+    const extensions = asMap(decode(data.subarray(offset), CBOR_OPTIONS));
     const category = extensions.get("apple_validation_category_01");
     if (category !== undefined) {
       if (!(category instanceof Uint8Array) || category.length !== 4)
@@ -277,44 +278,15 @@ function attestEnvironment(aaguid: Uint8Array): AttestEnvironment {
   throw new AttestationError("unknown aaguid");
 }
 
-async function verifyIssued(certificate: Certificate, issuer: Certificate, now: number): Promise<void> {
+async function verifyIssued(certificate: X509Certificate, issuer: X509Certificate, now: number): Promise<void> {
   for (const item of [certificate, issuer]) {
-    if (now < item.notBefore || now > item.notAfter)
+    if (now < item.notBefore.getTime() || now > item.notAfter.getTime())
       throw new AttestationError("certificate outside its validity period");
   }
-  if (!equal(certificate.issuer, issuer.subject)) throw new AttestationError("certificate chain mismatch");
-  const hash = SIGNATURE_HASHES[certificate.signatureAlgorithm];
-  const curve = CURVES[issuer.curve];
-  if (!hash || !curve) throw new AttestationError("unsupported certificate algorithm");
-  const key = await crypto.subtle.importKey(
-    "spki",
-    copy(issuer.spki),
-    { name: "ECDSA", namedCurve: curve.name },
-    false,
-    ["verify"],
-  );
-  const valid = await crypto.subtle.verify(
-    { name: "ECDSA", hash },
-    key,
-    copy(rawSignature(certificate.signature, curve.size)),
-    copy(certificate.tbs),
-  );
-  if (!valid) throw new AttestationError("invalid certificate signature");
-}
-
-/** DER `SEQUENCE { r INTEGER, s INTEGER }` to the r || s form WebCrypto expects. */
-export function rawSignature(der: Uint8Array, size: number): Uint8Array {
-  const parts = children(readSingle(der, TAG.sequence));
-  if (parts.length !== 2) throw new AttestationError("invalid signature encoding");
-  const result = new Uint8Array(size * 2);
-  parts.forEach((part, index) => {
-    if (part.tag !== TAG.integer) throw new AttestationError("invalid signature encoding");
-    let value = part.contents;
-    while (value.length > 1 && value[0] === 0) value = value.subarray(1);
-    if (value.length > size) throw new AttestationError("invalid signature encoding");
-    result.set(value, (index + 1) * size - value.length);
-  });
-  return result;
+  if (certificate.issuer !== issuer.subject) throw new AttestationError("certificate chain mismatch");
+  if (!(await certificate.verify({ publicKey: issuer, signatureOnly: true }))) {
+    throw new AttestationError("invalid certificate signature");
+  }
 }
 
 /**
@@ -326,12 +298,11 @@ async function guarded<T>(body: () => Promise<T>): Promise<T> {
     return await body();
   } catch (error) {
     if (error instanceof AttestationError) throw error;
-    if (error instanceof DERError || error instanceof CBORError) throw new AttestationError(error.message);
     throw new AttestationError(`malformed input: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-function asMap(value: CBORValue | undefined): Map<CBORValue, CBORValue> {
+function asMap(value: unknown): Map<unknown, unknown> {
   if (!(value instanceof Map)) throw new AttestationError("expected a CBOR map");
   return value;
 }
