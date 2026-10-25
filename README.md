@@ -8,7 +8,7 @@ App iOS gratuite de suivi de la Coupe du monde de biathlon : course en direct, c
 open Biathlon.xcodeproj
 ```
 
-Le projet Xcode est versionné et utilise des dossiers synchronisés : tout fichier ajouté sous `App/` fait partie de l'app, sous `Widgets/` de l'extension des Live Activities, sous `Shared/` des deux, et sous `BiathlonTests/` des tests de l'app, sans modifier `project.pbxproj`. Les réglages de compilation sont dans `Configs/Project.xcconfig` (communs), `Configs/Biathlon.xcconfig` (cible de l'app) et `Configs/BiathlonWidgets.xcconfig` (extension), `Configs/BiathlonTests.xcconfig` (tests de l'app), avec `Configs/Info.plist`, `Configs/BiathlonWidgets-Info.plist` et `Configs/Biathlon.entitlements`. Modifier ces fichiers plutôt que les réglages dans l'éditeur de projet d'Xcode.
+Le projet Xcode est versionné et utilise des dossiers synchronisés : tout fichier ajouté sous `App/` fait partie de l'app, sous `Widgets/` de l'extension des Live Activities, sous `Shared/` des deux, sous `BiathlonTests/` des tests de l'app et sous `BiathlonUITests/` de ses tests d'interface, sans modifier `project.pbxproj`. Les réglages de compilation sont dans `Configs/Project.xcconfig` (communs), `Configs/Biathlon.xcconfig` (cible de l'app) et `Configs/BiathlonWidgets.xcconfig` (extension), `Configs/BiathlonTests.xcconfig` (tests de l'app), `Configs/BiathlonUITests.xcconfig` (tests d'interface), avec `Configs/Info.plist`, `Configs/BiathlonWidgets-Info.plist` et `Configs/Biathlon.entitlements`. Modifier ces fichiers plutôt que les réglages dans l'éditeur de projet d'Xcode.
 
 Tests de `BiathlonKit` (sans Xcode) :
 
@@ -18,10 +18,12 @@ cd Packages/BiathlonKit && swift test
 
 Tests de l'app (cible `BiathlonTests`, Swift Testing, hébergée par l'app) et de `BiathlonKit` sur le simulateur : Product > Test (⌘U) dans Xcode, ou `xcodebuild test -scheme Biathlon -destination 'platform=iOS Simulator,name=<iPhone>'`. Le transport HTTP, App Attest et le centre de notifications y sont remplacés par des doublures : tout se teste sans serveur ni course.
 
+Tests d'interface (cible `BiathlonUITests`, XCTest) dans le même schéma : ils parcourent les listes de l'app et vérifient que VoiceOver lit chaque ligne d'un seul tenant, avec l'audit d'accessibilité de Xcode (`performAccessibilityAudit`). Ils lisent les vraies données par le cache du serveur, hors saison comme en saison : aucune course n'est nécessaire, mais le réseau l'est.
+
 Mise en forme du code Swift (`swift format`, inclus dans la toolchain Swift 6 ; règles dans `.swift-format`) :
 
 ```sh
-swift format --in-place --recursive App Shared Widgets BiathlonTests Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
+swift format --in-place --recursive App Shared Widgets BiathlonTests BiathlonUITests Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
 ```
 
 ## Xcode Cloud
@@ -46,6 +48,7 @@ La branche `main` est protégée par le ruleset `.github/rulesets/main.json` (à
 
 - `Packages/BiathlonKit` : modèles, client de l'API biathlonresults.com et client du serveur (`ServerClient`), testés avec Swift Testing.
 - `BiathlonTests` : les tests de l'app (App Attest, Live Activities des favoris, préférences, rappels).
+- `BiathlonUITests` : les tests d'interface (lecture des listes par VoiceOver, audit d'accessibilité).
 - `App` : l'app SwiftUI (iOS 26, Swift 6, isolation `MainActor` par défaut, Observation, SwiftData pour les favoris).
 - `Widgets` : l'extension WidgetKit qui affiche la Live Activity d'une course sur l'écran verrouillé et dans la Dynamic Island.
 - `Shared` : le code et le String Catalog communs à l'app et à l'extension.

@@ -81,25 +81,31 @@ private struct StandingRow: View {
 
     var body: some View {
         let content = HStack(spacing: 12) {
-            RankText(rank: row.rank).frame(width: rankWidth, alignment: .leading)
-            NationMark(code: row.isNation ? row.nation ?? row.name : row.nation)
-            Text(row.isNation ? Nation.localizedName(row.nation ?? row.name) : row.shortName ?? row.name)
-            if row.bibColors.contains("yellow") {
-                // The leader's bib is yellow: here the color is the information.
-                Image(systemName: "tshirt.fill")
-                    .foregroundStyle(.yellow)
-                    .accessibilityLabel("Yellow bib")
+            // VoiceOver reads the standing in one go; the star stays a button of its own.
+            HStack(spacing: 12) {
+                RankText(rank: row.rank).frame(width: rankWidth, alignment: .leading)
+                NationMark(code: row.isNation ? row.nation ?? row.name : row.nation)
+                Text(row.isNation ? Nation.localizedName(row.nation ?? row.name) : row.shortName ?? row.name)
+                if row.bibColors.contains("yellow") {
+                    // The leader's bib is yellow: here the color is the information.
+                    Image(systemName: "tshirt.fill")
+                        .foregroundStyle(.yellow)
+                        .accessibilityLabel("Yellow bib")
+                }
+                Spacer()
+                if let change = row.rankChange, change != 0 {
+                    Image(systemName: change < 0 ? "arrow.up" : "arrow.down")
+                        .font(.caption)
+                        .foregroundStyle(change < 0 ? .green : .red)
+                        .accessibilityLabel(change < 0 ? Text("Up") : Text("Down"))
+                }
+                if let score = row.score {
+                    Text(score)
+                        .font(.subheadline.monospacedDigit().bold())
+                        .accessibilityLabel(Int(score).map { Text("\($0) points") } ?? Text(score))
+                }
             }
-            Spacer()
-            if let change = row.rankChange, change != 0 {
-                Image(systemName: change < 0 ? "arrow.up" : "arrow.down")
-                    .font(.caption)
-                    .foregroundStyle(change < 0 ? .green : .red)
-                    .accessibilityLabel(change < 0 ? Text("Up") : Text("Down"))
-            }
-            if let score = row.score {
-                Text(score).font(.subheadline.monospacedDigit().bold())
-            }
+            .accessibilityElement(children: .combine)
             if row.isNation, let nation = row.nation {
                 FavoriteButton(kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation)
                     .labelStyle(.iconOnly)

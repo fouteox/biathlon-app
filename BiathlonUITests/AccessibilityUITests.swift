@@ -1,0 +1,169 @@
+import XCTest
+
+/// How VoiceOver reads the app's lists. The app runs on the data the server's cache serves at the
+/// time, off season as well: the tests look for the shape of each screen, never for a given name.
+final class AccessibilityUITests: XCTestCase {
+    /// What the audits leave to other changes: the layout at accessibility text sizes, and the
+    /// contrast of the system colors, which only a device shows faithfully.
+    private static let auditTypes = XCUIAccessibilityAuditType.all.subtracting([
+        .dynamicType, .textClipped, .contrast,
+    ])
+    /// Data comes from the network.
+    private static let timeout: TimeInterval = 30
+
+    @MainActor func testStandingsRowsReadAsOneElementWithTheirPoints() throws {
+        let app = launch()
+        Self.openTab("Standings", in: app)
+        try assertRowsReadAsOneElement(in: app)
+        assertFirstRowReadsItsPoints(in: app)
+        try app.performAccessibilityAudit(for: Self.auditTypes)
+
+        // A menu picker reads its title and its value: "Discipline, Overall".
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Discipline")).firstMatch.tap()
+        app.buttons["Nations"].tap()
+        // The star stays a button of its own beside the nation it adds.
+        XCTAssertTrue(firstRow(in: app).buttons["Add to favorites"].waitForExistence(timeout: Self.timeout))
+        try assertRowsReadAsOneElement(in: app)
+        assertFirstRowReadsItsPoints(in: app)
+        try app.performAccessibilityAudit(for: Self.auditTypes)
+    }
+
+    /// The photo says nothing the name beside it doesn't: VoiceOver skips it.
+    @MainActor func testAthleteScreenReadsTheProfileAndEachResultAsOneElement() throws {
+        let app = launch()
+        openFirstAthlete(in: app)
+        // The results load on their own, after the profile; once they show, the list on screen is
+        // the athlete's, not the standings left behind.
+        let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Latest results")).firstMatch
+        XCTAssertTrue(results.waitForExistence(timeout: Self.timeout))
+        // The profile reads its texts and nothing else: the photo, or the symbol shown in its
+        // place, adds no words of its own.
+        let profile = try XCTUnwrap(Self.readElements(of: try firstRow(in: app).snapshot()).first)
+        let texts = profile.children.filter { $0.elementType == .staticText }.map(\.label)
+        XCTAssertEqual(profile.label, texts.joined(separator: ", "))
+        try assertRowsReadAsOneElement(in: app)
+        try app.performAccessibilityAudit(for: Self.auditTypes)
+    }
+
+    @MainActor func testCalendarAndEventRowsReadAsOneElement() throws {
+        let app = launch()
+        Self.openTab("Calendar", in: app)
+        try assertRowsReadAsOneElement(in: app)
+        try app.performAccessibilityAudit(for: Self.auditTypes)
+
+        // The last season is over: its events all have their schedule, whatever today's date.
+        // The season picker in the toolbar reads the season shown, such as "2026-27".
+        let season = app.navigationBars.buttons.matching(
+            NSPredicate(format: "label MATCHES %@", ".*20[0-9]{2}-[0-9]{2}")
+        )
+        .firstMatch
+        let current = String(season.label.suffix(7))
+        season.tap()
+        app.buttons.matching(NSPredicate(format: "label == %@", Self.season(before: current))).firstMatch.tap()
+        XCTAssertTrue(firstRow(in: app).waitForExistence(timeout: Self.timeout))
+        firstRow(in: app).tap()
+        try assertRowsReadAsOneElement(in: app)
+        try app.performAccessibilityAudit(for: Self.auditTypes)
+    }
+
+    @MainActor func testFavoriteRowsReadAsOneElement() throws {
+        let app = launch()
+        openFirstAthlete(in: app)
+        let star = app.navigationBars.buttons["Add to favorites"]
+        XCTAssertTrue(star.waitForExistence(timeout: Self.timeout))
+        star.tap()
+        // Leaves the favorites as they were for the next run, even when a step below fails: the
+        // store persists on the simulator.
+        addTeardownBlock { @MainActor in
+            Self.openTab("Standings", in: app)
+            for remove in [
+                Self.teamButton(in: app, titled: "Remove "), app.navigationBars.buttons["Remove from favorites"],
+            ] where remove.exists {
+                remove.tap()
+            }
+        }
+        // The athlete's team shows with the profile, which can load after the toolbar's star.
+        let team = Self.teamButton(in: app, titled: "Add ")
+        XCTAssertTrue(team.waitForExistence(timeout: Self.timeout))
+        team.tap()
+
+        Self.openTab("Favorites", in: app)
+        try assertRowsReadAsOneElement(in: app)
+        try app.performAccessibilityAudit(for: Self.auditTypes)
+    }
+
+    @MainActor func testHomeRowsReadAsOneElement() throws {
+        let app = launch()
+        XCTAssertTrue(firstRow(in: app).waitForExistence(timeout: Self.timeout))
+        try assertRowsReadAsOneElement(in: app)
+        try app.performAccessibilityAudit(for: Self.auditTypes)
+    }
+
+    @MainActor private func launch() -> XCUIApplication {
+        let app = XCUIApplication()
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launch()
+        return app
+    }
+
+    @MainActor private func firstRow(in app: XCUIApplication) -> XCUIElement {
+        app.cells.firstMatch
+    }
+
+    @MainActor private func openFirstAthlete(in app: XCUIApplication) {
+        Self.openTab("Standings", in: app)
+        let row = firstRow(in: app)
+        XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
+        row.tap()
+        XCTAssertTrue(app.navigationBars.buttons["Add to favorites"].waitForExistence(timeout: Self.timeout))
+    }
+
+    /// The athlete's team, from the button below the profile.
+    @MainActor private static func teamButton(in app: XCUIApplication, titled prefix: String) -> XCUIElement {
+        app.cells.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
+    }
+
+    /// The score reads with its unit, not as a bare number.
+    @MainActor private func assertFirstRowReadsItsPoints(
+        in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line
+    ) {
+        let row = firstRow(in: app)
+        let points = row.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", " points"))
+        XCTAssertTrue(points.firstMatch.exists, row.debugDescription, file: file, line: line)
+    }
+
+    /// VoiceOver reads each visible row in one go: a row holds a single element (a text, or the
+    /// link it opens), beside its own buttons.
+    @MainActor private func assertRowsReadAsOneElement(
+        in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line
+    ) throws {
+        XCTAssertTrue(firstRow(in: app).waitForExistence(timeout: Self.timeout), file: file, line: line)
+        for index in 0..<min(app.cells.count, 8) {
+            let row = app.cells.element(boundBy: index)
+            let parts = Self.readElements(of: try row.snapshot()).filter { $0.elementType != .button }
+            XCTAssertLessThanOrEqual(
+                parts.count, 1, "Row read in \(parts.count) parts: \(row.debugDescription)", file: file, line: line)
+        }
+    }
+
+    /// The elements VoiceOver stops on: the outermost ones, since the tree also lists the texts
+    /// that a grouped element reads together.
+    @MainActor private static func readElements(of snapshot: any XCUIElementSnapshot) -> [any XCUIElementSnapshot] {
+        snapshot.children.flatMap { child in
+            child.elementType == .other && child.label.isEmpty ? readElements(of: child) : [child]
+        }
+    }
+
+    /// "2025-26" for "2026-27".
+    private static func season(before season: String) -> String {
+        let start = Int(season.prefix(4)) ?? 0
+        return "\(start - 1)-\(String(start).suffix(2))"
+    }
+
+    /// Tab bar items are buttons, whatever the tab bar shows as on this iOS version.
+    @MainActor private static func openTab(_ title: String, in app: XCUIApplication) {
+        let tab = app.buttons[title].firstMatch
+        XCTAssertTrue(tab.waitForExistence(timeout: timeout))
+        tab.tap()
+    }
+}
