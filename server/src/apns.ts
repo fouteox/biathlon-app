@@ -186,7 +186,10 @@ async function apnsRequest(
     return { outcome: { kind: "retry", reason: String(error) } };
   }
   if (response.ok) return { outcome: { kind: "sent" }, response };
-  return { outcome: classify(response.status, await errorReason(response)), response };
+  const reason = await errorReason(response, signal);
+  // A rejection whose reason arrives too late may be an expired provider token: tried again.
+  if (signal?.aborted) return { outcome: { kind: "retry", reason: String(signal.reason) } };
+  return { outcome: classify(response.status, reason), response };
 }
 
 const UNREGISTERED_REASONS = new Set([
@@ -232,13 +235,22 @@ async function probeURL(url: string, method: string, headers: Record<string, str
   }
 }
 
-async function errorReason(response: Response): Promise<string> {
+/** The reason APNs gives in the response's body, or "" when it can't be read before `signal` aborts. */
+async function errorReason(response: Response, signal?: AbortSignal): Promise<string> {
   try {
-    const body = await response.json<{ reason?: string }>();
+    const body = await Promise.race([response.json<{ reason?: string }>(), ...(signal ? [whenAborted(signal)] : [])]);
     return body.reason ?? "";
   } catch {
     return "";
   }
+}
+
+/** Rejects once `signal` aborts, which a body still being read may not notice. */
+function whenAborted(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal.aborted) reject(signal.reason);
+    else signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+  });
 }
 
 function pemToDer(pem: string): ArrayBuffer {

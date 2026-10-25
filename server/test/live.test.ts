@@ -1209,6 +1209,24 @@ describe("alerts", () => {
     expect(outcomes.map(({ kind }) => kind)).toEqual(["sent", "retry"]);
   });
 
+  it("tries again a push whose rejection APNs leaves unread at the deadline, which could be an expired provider token", async () => {
+    const env = await makeEnv();
+    // The status arrives, its reason never does.
+    answer(() => new Response(new ReadableStream(), { status: 403 }));
+
+    const outcomes = await runInDurableObject(
+      env.PUSH_SENDER.get(env.PUSH_SENDER.newUniqueId()),
+      (sender: PushSender) =>
+        sender.send(
+          [{ deviceToken: "token", environment: "sandbox", topic: env.APNS_TOPIC, payload: {}, expiration: 0 }],
+          "provider token",
+          Date.now() + 50,
+        ),
+    );
+
+    expect(outcomes.map(({ kind }) => kind)).toEqual(["retry"]);
+  });
+
   it("sends a lot's pushes six at a time, the connections a Durable Object request may open at once", async () => {
     const env = await makeEnv();
     let inFlight = 0;
