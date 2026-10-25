@@ -21,7 +21,7 @@ jobs:
     container: swift:6.4
     steps:
       - uses: actions/checkout@v7
-      - run: swift format lint --strict --recursive App Shared Widgets BiathlonTests Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
+      - run: swift format lint --strict --recursive App Shared Widgets BiathlonTests BiathlonUITests Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
 
   server:
     name: Server (Cloudflare Worker)
@@ -41,7 +41,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: xcodebuild -version && swift --version
-      # The scheme's tests: the app's (BiathlonTests), hosted by the app, and BiathlonKit's.
+      # The scheme's tests: the app's (BiathlonTests), hosted by the app, its UI tests
+      # (BiathlonUITests), and BiathlonKit's.
       - name: Build and test
         run: |
           set -o pipefail

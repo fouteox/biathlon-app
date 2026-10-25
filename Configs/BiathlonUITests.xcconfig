@@ -1,0 +1,8 @@
+// Settings of the BiathlonUITests target: UI tests that drive the app in its own process.
+
+PRODUCT_BUNDLE_IDENTIFIER = com.fouteox.biathlon.uitests
+TARGETED_DEVICE_FAMILY = 1
+CODE_SIGN_STYLE = Automatic
+GENERATE_INFOPLIST_FILE = YES
+
+TEST_TARGET_NAME = Biathlon
