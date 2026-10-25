@@ -18,7 +18,8 @@ final class AccessibilityUITests: XCTestCase {
         assertFirstRowReadsItsPoints(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
 
-        app.buttons["Discipline"].tap()
+        // A menu picker reads its title and its value: "Discipline, Overall".
+        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Discipline")).firstMatch.tap()
         app.buttons["Nations"].tap()
         // The star stays a button of its own beside the nation it adds.
         XCTAssertTrue(firstRow(in: app).buttons["Add to favorites"].waitForExistence(timeout: Self.timeout))

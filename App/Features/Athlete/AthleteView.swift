@@ -27,6 +27,8 @@ struct AthleteView: View {
                         }
                         .frame(width: photoSize, height: photoSize)
                         .clipShape(.circle)
+                        // The name beside it says who it is.
+                        .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(bio.fullName).font(.title3.bold())
@@ -43,6 +45,7 @@ struct AthleteView: View {
                             }
                         }
                     }
+                    .accessibilityElement(children: .combine)
                 }
                 if let nation = bio.nation {
                     Section {
@@ -64,6 +67,7 @@ struct AthleteView: View {
                                 Spacer()
                                 RankText(rank: result.rank)
                             }
+                            .accessibilityElement(children: .combine)
                         }
                     }
                 }

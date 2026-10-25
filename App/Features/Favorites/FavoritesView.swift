@@ -97,6 +97,7 @@ struct FavoritesView: View {
         } icon: {
             NationMark(code: favorite.nation ?? favorite.key)
         }
+        .accessibilityElement(children: .combine)
         switch favorite.kind {
         case .athlete:
             NavigationLink(value: Route.athlete(id: favorite.key, name: favorite.name)) { label }
