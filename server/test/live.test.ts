@@ -194,14 +194,20 @@ const activity = (raceId = RACE_ID) => testEnv.RACE_ACTIVITY.getByName(raceId);
  * Updates the race in its object with `env`, which a test can change: as a cron run listing
  * `race` does, with the provider tokens it loads with `cronEnv`, or as the object's alarm does without.
  */
-async function update(env: Env, now: number, race?: RaceSnapshot, cronEnv = env) {
+async function update(env: Env, now: number, race?: RaceSnapshot, cronEnv = env, deadline = Date.now() + 60_000) {
   const raceId = race?.id ?? RACE_ID;
   const listed = race && {
     race,
     providerTokens: await givenTokens(new ProviderTokens(cronEnv, now, new SubrequestBudget())),
   };
-  return runInDurableObject(activity(raceId), (_, state) => syncRace(env, state.storage, raceId, now, listed));
+  return runInDurableObject(activity(raceId), (_, state) =>
+    syncRace(env, state.storage, raceId, now, deadline, listed),
+  );
 }
+
+/** APNs takes the requests to `path` and never answers them, as a stalled connection does. */
+const unanswered = (path: string) =>
+  answer(({ url }) => (url.includes(path) ? new Promise<Response>(() => {}) : undefined));
 
 /** When the race's object is set to wake up. */
 const alarmOf = (raceId = RACE_ID) => runInDurableObject(activity(raceId), (_, state) => state.storage.getAlarm());
@@ -815,6 +821,35 @@ describe("Live Activity channels", () => {
     expect((await channels(env)).map(({ environment }) => environment)).toEqual(Array(5).fill("sandbox"));
   });
 
+  it("gives up the requests APNs leaves unanswered once the update's time is up, and sends them at the next run", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await sync(env, [race()], NOW);
+    const before = await channels(env);
+
+    stubNetwork();
+    unanswered("/4/broadcasts/");
+    // An update past 30 s would reset the object (blockConcurrencyWhile), and a subrequest has no time limit.
+    await update(env, NOW, race({ IsLive: true }), env, Date.now() + 50);
+    expect(await channels(env)).toEqual(before);
+
+    const sent = stubNetwork();
+    await update(env, NOW + 60_000, race({ IsLive: true }));
+    expect(broadcasts(sent)).toHaveLength(2);
+  });
+
+  it("gives up a race's results the IBU API leaves unanswered once the update's time is up", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await sync(env, [race()], NOW);
+
+    stubNetwork();
+    unanswered("biathlonresults.com");
+    await update(env, NOW, race({ IsLive: true }), env, Date.now() + 50);
+
+    expect((await channels(env)).map(({ state }) => (JSON.parse(state) as LiveState).phase)).toEqual(["live", "live"]);
+  });
+
   it("sends the end again while the calendar can't be read", async () => {
     const env = await makeEnv();
     stubNetwork();
@@ -1153,6 +1188,45 @@ describe("alerts", () => {
     expect(outcomes).toEqual([{ kind: "sent" }, { kind: "unregistered" }, { kind: "sent" }]);
   });
 
+  it("gives up the pushes of a lot APNs leaves unanswered at the deadline it is given, for a later run", async () => {
+    const env = await makeEnv();
+    answer(({ url }) =>
+      url.endsWith("/stalled") ? new Promise<Response>(() => {}) : new Response(null, { status: 200 }),
+    );
+    const push = (deviceToken: string) => ({
+      deviceToken,
+      environment: "sandbox" as const,
+      topic: env.APNS_TOPIC,
+      payload: {},
+      expiration: 0,
+    });
+
+    const outcomes = await runInDurableObject(
+      env.PUSH_SENDER.get(env.PUSH_SENDER.newUniqueId()),
+      (sender: PushSender) => sender.send([push("sent"), push("stalled")], "provider token", Date.now() + 50),
+    );
+
+    expect(outcomes.map(({ kind }) => kind)).toEqual(["sent", "retry"]);
+  });
+
+  it("tries again a push whose rejection APNs leaves unread at the deadline, which could be an expired provider token", async () => {
+    const env = await makeEnv();
+    // The status arrives, its reason never does.
+    answer(() => new Response(new ReadableStream(), { status: 403 }));
+
+    const outcomes = await runInDurableObject(
+      env.PUSH_SENDER.get(env.PUSH_SENDER.newUniqueId()),
+      (sender: PushSender) =>
+        sender.send(
+          [{ deviceToken: "token", environment: "sandbox", topic: env.APNS_TOPIC, payload: {}, expiration: 0 }],
+          "provider token",
+          Date.now() + 50,
+        ),
+    );
+
+    expect(outcomes.map(({ kind }) => kind)).toEqual(["retry"]);
+  });
+
   it("sends a lot's pushes six at a time, the connections a Durable Object request may open at once", async () => {
     const env = await makeEnv();
     let inFlight = 0;
@@ -1359,6 +1433,20 @@ describe("Live Activities started for favorites", () => {
     const later = stub();
     await sync(env, [race({ IsLive: true })], DUE + 20 * 60_000);
     expect(starts(later)).toEqual([]);
+  });
+
+  it("gives up the starts APNs leaves unanswered once the update's time is up, and sends them at the next run", async () => {
+    const env = await setUp();
+    stub();
+    unanswered("/3/device/");
+    await update(env, DUE, race(), env, Date.now() + 50);
+
+    const sent = stub();
+    await update(env, DUE + 60_000, race());
+    expect(startUrls(sent)).toEqual([
+      `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
+      `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
+    ]);
   });
 
   it("starts more activities in one update than its own subrequests, in lots of 50", async () => {

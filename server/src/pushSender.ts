@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { sendPush, type PushOutcome, type PushRequest } from "./apns";
 import { buildPayload, type AlertInput } from "./payload";
+import { deadlineSignal } from "./subrequests";
 
 /**
  * A device push of a lot: its payload, or the alert to build it from on the device's
@@ -21,15 +22,18 @@ const SIMULTANEOUS_CONNECTIONS = 6;
  * hands its pushes out in lots, and spends none of its own budget on them.
  */
 export class PushSender extends DurableObject<Env> {
-  /** Sends the pushes, `SIMULTANEOUS_CONNECTIONS` at a time, the outcome of each at its index. */
-  async send(pushes: LotPush[], providerToken: string): Promise<PushOutcome[]> {
+  /**
+   * Sends the pushes, `SIMULTANEOUS_CONNECTIONS` at a time, the outcome of each at its index;
+   * those still unanswered at `deadline`, if any, are retries.
+   */
+  async send(pushes: LotPush[], providerToken: string, deadline?: number): Promise<PushOutcome[]> {
     const outcomes: PushOutcome[] = [];
     let next = 0;
     const connection = async () => {
       for (let index = next++; index < pushes.length; index = next++) {
         const push = pushes[index]!;
         const payload = "alert" in push ? buildPayload(push.alert) : push.payload;
-        outcomes[index] = await sendPush({ ...push, payload }, providerToken);
+        outcomes[index] = await sendPush({ ...push, payload }, providerToken, deadlineSignal(deadline));
       }
     };
     await Promise.all(Array.from({ length: Math.min(SIMULTANEOUS_CONNECTIONS, pushes.length) }, connection));

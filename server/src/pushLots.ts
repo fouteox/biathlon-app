@@ -92,7 +92,7 @@ export class PushLots {
         // A new object for each lot: concurrent requests to one object share its subrequests,
         // and Cloudflare sometimes fires the cron twice at once (measured on 2026-10-25).
         this.env.PUSH_SENDER.get(this.env.PUSH_SENDER.newUniqueId())
-          .send(lot, providerToken)
+          .send(lot, providerToken, this.tokens.budget.deadline)
           .catch((error: unknown) => lot.map(() => retry(error))),
       ),
     );
