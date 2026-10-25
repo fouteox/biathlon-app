@@ -140,6 +140,19 @@ function replaceD1(env: Env, replace: (db: D1Database) => Partial<Pick<D1Databas
   } as unknown as D1Database;
 }
 
+/**
+ * Puts `env.PUSH_SENDER` behind stubs whose sends reject, as an unreachable Durable Object's
+ * do. The objects aren't made to throw: the Vitest integration reports every rejected Durable
+ * Object RPC as an unhandled rejection, even an awaited one (workers-sdk issue 14736).
+ */
+function unavailablePushSenders(env: Env): void {
+  const namespace = env.PUSH_SENDER;
+  env.PUSH_SENDER = {
+    newUniqueId: () => namespace.newUniqueId(),
+    get: () => ({ send: () => Promise.reject(new Error("Durable Object unavailable")) }),
+  } as unknown as DurableObjectNamespace<PushSender>;
+}
+
 /** Counts the D1 queries made from now on: each `run`, `all`, `first` or `batch`. */
 function countD1Queries(env: Env): () => number {
   let queries = 0;
@@ -1251,7 +1264,7 @@ describe("alerts", () => {
 
   it("tries the alerts of a lot that failed again", async () => {
     const env = await makeEnv();
-    vi.spyOn(PushSender.prototype, "send").mockRejectedValue(new Error("Durable Object unavailable"));
+    unavailablePushSenders(env);
     await queue(env, ["a", "b"]);
     stubNetwork();
 
