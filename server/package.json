@@ -20,5 +20,9 @@
     "vite-plus": "^1.4.0",
     "vitest": "5.0.5",
     "wrangler": "^4.152.0"
+  },
+  "overrides": {
+    "undici": "^7.30.1",
+    "zod": "^4.6.7"
   }
 }
