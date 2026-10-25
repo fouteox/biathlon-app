@@ -5,6 +5,7 @@ import {
   ACTIVITY_LIFETIME_MS,
   broadcastTimestamp,
   calendarFields,
+  dismissalDate,
   isFollowable,
   liveState,
   referenceMs,
@@ -229,7 +230,7 @@ async function publish(env: Env, tokens: ProviderTokens, row: ChannelRow, state:
   const stored = JSON.stringify(state);
   if (stored === row.state) return;
   if (!isDropped(row)) {
-    const outcome = await send(env, tokens, row, "update", state, now);
+    const outcome = await send(env, tokens, row, { event: "update" }, state, now);
     if (outcome === "unregistered") row.deletedAt = now;
     else if (outcome !== "sent") return;
   }
@@ -356,7 +357,14 @@ async function sendEnds(env: Env, tokens: ProviderTokens, rows: ChannelRow[], no
     if (row.endedAt === null || row.deletedAt !== null || endDue(row) > now) continue;
     const outcome = await (now - row.endedAt >= END_GRACE_MS
       ? deleteAtAPNs(env, tokens, row.environment, row.channelId)
-      : send(env, tokens, row, "end", JSON.parse(row.state) as LiveState, now));
+      : send(
+          env,
+          tokens,
+          row,
+          { event: "end", "dismissal-date": dismissalDate(row.endedAt) },
+          JSON.parse(row.state) as LiveState,
+          now,
+        ));
     if (outcome === "deferred") continue;
     if (outcome === "deleted" || outcome === "unregistered") row.deletedAt = now;
     else {
@@ -452,14 +460,14 @@ async function send(
   env: Env,
   tokens: ProviderTokens,
   row: ChannelRow,
-  event: "update" | "end",
+  event: { event: "update" } | { event: "end"; "dismissal-date": number },
   state: LiveState,
   now: number,
 ): Promise<"sent" | "unregistered" | "deferred" | "failed"> {
   const payload = {
     aps: {
       timestamp: broadcastTimestamp(now),
-      event,
+      ...event,
       "relevance-score": relevanceScore(state),
       "content-state": state,
     },

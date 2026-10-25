@@ -53,7 +53,9 @@ export default {
       // The channel can change at every cron run: no cache may answer for it, 404 and 410 included.
       const live = await channelFor(env.DB, raceId, environment);
       if (!live) return json({ error: "no channel for this race" }, 404, NO_STORE);
-      return "ended" in live ? json({ state: live.ended }, 410, NO_STORE) : json(live, 200, NO_STORE);
+      return "ended" in live
+        ? json({ state: live.ended, dismissalDate: live.dismissalDate }, 410, NO_STORE)
+        : json(live, 200, NO_STORE);
     }
 
     if (url.pathname === "/v1/tv-coverage" && request.method === "GET") {

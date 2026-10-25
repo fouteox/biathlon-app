@@ -9,6 +9,7 @@ struct FavoritesView: View {
     @Environment(\.ibu) private var ibu
     @Environment(LiveActivities.self) private var liveActivities
     @Environment(LiveActivityStarts.self) private var liveActivityStarts
+    @Environment(\.editMode) private var editMode
 
     var body: some View {
         @Bindable var liveActivityStarts = liveActivityStarts
@@ -40,6 +41,16 @@ struct FavoritesView: View {
             }
         }
         .navigationTitle("Favorites")
+        .toolbar {
+            if !favorites.isEmpty {
+                EditButton()
+            }
+        }
+        // Deleting the last favorite hides the Edit button: leave edit mode with it, or the
+        // next favorite would show up in a list still being edited.
+        .onChange(of: favorites.isEmpty) { _, isEmpty in
+            if isEmpty { editMode?.wrappedValue = .inactive }
+        }
         .task { await refreshAthletes() }
     }
 
@@ -89,9 +100,9 @@ struct FavoritesView: View {
     private func row(_ favorite: Favorite) -> some View {
         let label = Label {
             VStack(alignment: .leading) {
-                Text(favorite.name)
+                Text(favorite.title)
                 if favorite.isDeceased {
-                    Text("Deceased").font(.subheadline).foregroundStyle(.secondary)
+                    Text(.deceased(favorite.gender)).font(.subheadline).foregroundStyle(.secondary)
                 }
             }
         } icon: {

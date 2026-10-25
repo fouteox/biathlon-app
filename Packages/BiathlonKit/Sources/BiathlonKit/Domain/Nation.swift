@@ -1,3 +1,5 @@
+import Foundation
+
 public enum Nation {
     /// IOC codes (used by the IBU) to ISO 3166 codes, for flags: the 206 National Olympic
     /// Committees, with Kosovo's `XK` (not an ISO code, but a Unicode flag emoji), and
@@ -42,6 +44,17 @@ public enum Nation {
         let letters = code.uppercased().unicodeScalars
         guard letters.count == 2, letters.allSatisfy({ ("A"..."Z").contains($0) }) else { return nil }
         return String(String.UnicodeScalarView(letters.compactMap { Unicode.Scalar(127_397 + $0.value) }))
+    }
+
+    /// The nation's name in the locale's language, from its ISO code, or the IOC code when
+    /// it has none (`AIN`, Individual Neutral Athletes).
+    public static func localizedName(_ code: String, locale: Locale = .current) -> String {
+        iso[code.uppercased()].flatMap { locale.localizedString(forRegionCode: $0) } ?? code
+    }
+
+    /// The nation's localized name preceded by its flag.
+    public static func namedTitle(_ code: String, locale: Locale = .current) -> String {
+        titled(localizedName(code, locale: locale), nation: code)
     }
 
     /// The text preceded by the nation's flag, or the text alone when the flag is unknown.

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 
 @testable import BiathlonKit
@@ -41,5 +42,24 @@ struct NationTests {
 
     @Test func countryNamesStartWithTheirFlag() {
         #expect(Nation.titled("Allemagne", region: "DE") == "🇩🇪 Allemagne")
+    }
+
+    /// The IBU names nations in English ("Great Britain") or by code: the app names
+    /// them in the reader's language.
+    @Test(arguments: [
+        ("FRA", "fr_FR", "France"), ("GER", "fr_FR", "Allemagne"), ("SUI", "de_DE", "Schweiz"),
+        ("NED", "en_US", "Netherlands"), ("GRL", "fr_FR", "Groenland"), ("nor", "en_US", "Norway"),
+    ])
+    func iocCodesHaveLocalizedNames(code: String, locale: String, name: String) {
+        #expect(Nation.localizedName(code, locale: Locale(identifier: locale)) == name)
+    }
+
+    @Test func unknownCodeNamesItself() {
+        #expect(Nation.localizedName("AIN", locale: Locale(identifier: "fr_FR")) == "AIN")
+    }
+
+    @Test func nameTitlesStartWithTheFlag() {
+        #expect(Nation.namedTitle("FRA", locale: Locale(identifier: "fr_FR")) == "🇫🇷 France")
+        #expect(Nation.namedTitle("AIN", locale: Locale(identifier: "fr_FR")) == "AIN")
     }
 }

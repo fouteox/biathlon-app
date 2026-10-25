@@ -62,9 +62,17 @@ struct ServerClientTests {
         #expect(try await server.client.liveChannel(raceID: "R1", environment: .production) == .notOpen)
     }
 
-    @Test func anEndedRaceGivesItsFinalState() async throws {
-        let server = ServerStub(["GET /v1/races/R1/channels/sandbox": [.init(410, #"{"state":\#(Self.liveState)}"#)]])
-        #expect(try await server.client.liveChannel(raceID: "R1", environment: .sandbox) == .ended(Self.decodedState))
+    @Test func anEndedRaceGivesItsFinalStateAndDismissalDate() async throws {
+        let server = ServerStub([
+            "GET /v1/races/R1/channels/sandbox": [
+                .init(410, #"{"state":\#(Self.liveState),"dismissalDate":1795001800}"#)
+            ]
+        ])
+        #expect(
+            try await server.client.liveChannel(raceID: "R1", environment: .sandbox)
+                == .ended(
+                    LiveActivityEnd(
+                        finalState: Self.decodedState, dismissalDate: Date(timeIntervalSince1970: 1_795_001_800))))
     }
 
     @Test func asksForAChallengeOfItsPurpose() async throws {

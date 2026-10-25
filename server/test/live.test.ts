@@ -295,6 +295,7 @@ describe("Live Activity channels", () => {
 
   it("ends the activity with the final results, sends the end again for offline devices, then deletes the channels", async () => {
     const env = await makeEnv();
+    const dismissal = { "dismissal-date": NOW / 1000 + 30 * 60 };
     stubNetwork();
     await sync(env, [race()], NOW);
     const finished = [race({ StatusId: 11, ScheduleStatus: "FINISHED" })];
@@ -302,8 +303,8 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork({ results: relay.results });
     await sync(env, finished, NOW);
     expect(broadcasts(sent).map((request) => request.body)).toEqual([
-      { aps: { timestamp: NOW / 1000, event: "end", "relevance-score": 0, "content-state": relayFinal } },
-      { aps: { timestamp: NOW / 1000, event: "end", "relevance-score": 0, "content-state": relayFinal } },
+      { aps: { timestamp: NOW / 1000, event: "end", "relevance-score": 0, "content-state": relayFinal, ...dismissal } },
+      { aps: { timestamp: NOW / 1000, event: "end", "relevance-score": 0, "content-state": relayFinal, ...dismissal } },
     ]);
 
     // No message storage: devices offline at the end only get a later send.
@@ -311,9 +312,10 @@ describe("Live Activity channels", () => {
     await sync(env, finished, NOW + 60_000);
     expect(broadcasts(later)).toEqual([]);
     await sync(env, finished, NOW + 10 * 60_000);
-    expect(broadcasts(later).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual([
-      "end",
-      "end",
+    // Dismissed 30 minutes after the race ended, however late the device gets the end.
+    expect(broadcasts(later).map((request) => (request.body as { aps: object }).aps)).toEqual([
+      expect.objectContaining({ event: "end", ...dismissal }),
+      expect.objectContaining({ event: "end", ...dismissal }),
     ]);
     expect(later.some((request) => request.url.includes("biathlonresults.com"))).toBe(false);
     expect(later.some((request) => request.method === "DELETE")).toBe(false);
@@ -363,6 +365,7 @@ describe("Live Activity channels", () => {
           event: "end",
           "relevance-score": 0,
           "content-state": { ...(live.state as object), phase: "finished" },
+          "dismissal-date": NOW / 1000 + 60 + 30 * 60,
         },
       },
       {
@@ -371,6 +374,7 @@ describe("Live Activity channels", () => {
           event: "end",
           "relevance-score": 0,
           "content-state": { ...(live.state as object), phase: "finished" },
+          "dismissal-date": NOW / 1000 + 60 + 30 * 60,
         },
       },
     ]);
@@ -999,7 +1003,7 @@ describe("GET /v1/races/:id/channels/:environment", () => {
       await sync(env, finished, now);
       const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
       expect(response.status).toBe(410);
-      expect(await response.json()).toEqual({ state: relayFinal });
+      expect(await response.json()).toEqual({ state: relayFinal, dismissalDate: NOW / 1000 + 30 * 60 });
     }
   });
 
@@ -1016,7 +1020,7 @@ describe("GET /v1/races/:id/channels/:environment", () => {
     expect(later.filter((request) => !request.url.includes("biathlonresults.com"))).toEqual([]);
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(410);
-    expect(await response.json()).toEqual({ state: relayFinal });
+    expect(await response.json()).toEqual({ state: relayFinal, dismissalDate: NOW / 1000 + 30 * 60 });
   });
 
   it("answers 404 for a channel APNs no longer knows, until it is replaced", async () => {
@@ -1042,7 +1046,7 @@ describe("GET /v1/races/:id/channels/:environment", () => {
     expect(sent.filter((request) => !request.url.includes("biathlonresults.com"))).toEqual([]);
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(410);
-    expect(await response.json()).toEqual({ state: relayFinal });
+    expect(await response.json()).toEqual({ state: relayFinal, dismissalDate: (NOW + 60_000) / 1000 + 30 * 60 });
   });
 
   it("answers 404 for a race without a channel and 400 for an unknown environment", async () => {

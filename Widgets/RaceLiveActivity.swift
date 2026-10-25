@@ -51,7 +51,7 @@ private struct RaceActivityView: View {
                 if let leader = context.state.leaders.first {
                     LeaderLine(leader: leader)
                 } else if context.state.phase.canBeFollowedLive {
-                    StartTime(date: context.state.startTime).font(.subheadline).foregroundStyle(.secondary)
+                    StartTime(date: context.state.startTime).font(.activityBody).foregroundStyle(.secondary)
                 }
             } else {
                 RaceProgress(state: context.state)
@@ -77,7 +77,7 @@ private struct RaceProgress: View {
                 // Counts down to the start, then up from it.
                 Text(state.startTime, style: .timer).monospacedDigit().multilineTextAlignment(.trailing)
             }
-            .font(.subheadline)
+            .font(.activityBody)
             .foregroundStyle(.secondary)
         }
         // A cancelled race, or one over without results: the phase in the header says it all.
@@ -104,8 +104,14 @@ private struct LeaderLine: View {
                 Text(result).monospacedDigit()
             }
         }
-        .font(.subheadline)
+        .font(.activityBody)
     }
+}
+
+extension Font {
+    /// The leaders and the start time: the HIG asks Live Activities for "large, heavier-weight
+    /// text — a medium weight or higher", read at a glance.
+    fileprivate static let activityBody = Font.subheadline.weight(.medium)
 }
 
 private struct PhaseText: View {
