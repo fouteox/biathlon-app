@@ -10,8 +10,9 @@ import { checkChallenge, issueChallenge } from "../src/challenges";
 import { clientData, HEADERS, pruneKeys } from "../src/keys";
 import sample from "./fixtures/apple-attestation-sample.json";
 
-// Apple's sample was attested on 2026-04-20; its credential certificate expires on 2026-04-23.
-const sampleTime = Date.parse("2026-04-21T00:00:00Z");
+// Apple's sample was attested on 2026-04-20; its credential certificate expires on 2026-04-23,
+// and its receipt, created at 2026-04-21T18:13:12Z, is accepted for five minutes.
+const sampleTime = Date.parse("2026-04-21T18:14:00Z");
 // Apple's sample passed the raw challenge as clientDataHash (its "expected clientDataHash"
 // ends with the challenge's bytes); the app passes the SHA-256 of the challenge.
 const sampleInput = {

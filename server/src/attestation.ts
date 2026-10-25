@@ -1,9 +1,10 @@
 // @peculiar/x509 needs the Reflect metadata API, which must load before it.
 import "reflect-metadata";
-import { AsnConvert } from "@peculiar/asn1-schema";
+import { ContentInfo, id_signedData, SignedData } from "@peculiar/asn1-cms";
+import { AsnConvert, AsnParser } from "@peculiar/asn1-schema";
 import { SubjectPublicKeyInfo } from "@peculiar/asn1-x509";
 import { AsnEcSignatureFormatter, BasicConstraintsExtension, X509Certificate } from "@peculiar/x509";
-import { Constructed, OctetString, Sequence, verifySchema } from "asn1js";
+import { Constructed, fromBER, Integer, OctetString, Sequence, Set, verifySchema } from "asn1js";
 import { decode, decodeFirst, type DecodeOptions } from "cborg";
 
 /**
@@ -19,6 +20,14 @@ import { decode, decodeFirst, type DecodeOptions } from "cborg";
  */
 const APPLE_ROOT_CA =
   "MIICITCCAaegAwIBAgIQC/O+DvHN0uD7jG5yH2IXmDAKBggqhkjOPQQDAzBSMSYwJAYDVQQDDB1BcHBsZSBBcHAgQXR0ZXN0YXRpb24gUm9vdCBDQTETMBEGA1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTAeFw0yMDAzMTgxODMyNTNaFw00NTAzMTUwMDAwMDBaMFIxJjAkBgNVBAMMHUFwcGxlIEFwcCBBdHRlc3RhdGlvbiBSb290IENBMRMwEQYDVQQKDApBcHBsZSBJbmMuMRMwEQYDVQQIDApDYWxpZm9ybmlhMHYwEAYHKoZIzj0CAQYFK4EEACIDYgAERTHhmLW07ATaFQIEVwTtT4dyctdhNbJhFs/Ii2FdCgAHGbpphY3+d8qjuDngIN3WVhQUBHAoMeQ/cLiP1sOUtgjqK9auYen1mMEvRq9Sk3Jm5X8U62H+xTD3FE9TgS41o0IwQDAPBgNVHRMBAf8EBTADAQH/MB0GA1UdDgQWBBSskRBTM72+aEH/pwyp5frq5eWKoTAOBgNVHQ8BAf8EBAMCAQYwCgYIKoZIzj0EAwMDaAAwZQIwQgFGnByvsiVbpTKwSga0kP0e8EeDS4+sQmTvb7vn53O5+FRXgeLhpJ06ysC5PrOyAjEAp5U4xDgEgllF7En3VcE3iexZZtKeYnpqtijVoyFraWVIyd/dganmrduC1bmTBGwD";
+
+/**
+ * Apple Root CA - G3, which signs App Attest receipts, from
+ * https://www.apple.com/certificateauthority/AppleRootCA-G3.cer
+ * (SHA-256 fingerprint 63:34:3A:BF:B8:9A:6A:03:EB:B5:7E:9B:3F:5F:A7:BE:7C:4F:5C:75:6F:30:17:B3:A8:C4:88:C3:65:3E:91:79).
+ */
+const APPLE_ROOT_CA_G3 =
+  "MIICQzCCAcmgAwIBAgIILcX8iNLFS5UwCgYIKoZIzj0EAwMwZzEbMBkGA1UEAwwSQXBwbGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwHhcNMTQwNDMwMTgxOTA2WhcNMzkwNDMwMTgxOTA2WjBnMRswGQYDVQQDDBJBcHBsZSBSb290IENBIC0gRzMxJjAkBgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9yaXR5MRMwEQYDVQQKDApBcHBsZSBJbmMuMQswCQYDVQQGEwJVUzB2MBAGByqGSM49AgEGBSuBBAAiA2IABJjpLz1AcqTtkyJygRMc3RCV8cWjTnHcFBbZDuWmBSp3ZHtfTjjTuxxEtX/1H7YyYl3J6YRbTzBPEVoA/VhYDKX1DyxNB0cTddqXl5dvMVztK517IDvYuVTZXpmkOlEKMaNCMEAwHQYDVR0OBBYEFLuw3qFYM4iapIqZ3r6966/ayySrMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2gAMGUCMQCD6cHEFl4aXTQY2e3v9GwOAEZLuN+yRhHFD/3meoyhpmvOwgPUnPWTxnS4at+qIxUCMG1mihDK1A3UT82NQz60imOlM27jbdoXt2QfyFMm+YhidDkLF1vLUagM6BgD56KyKA==";
 
 /** Extension of the credential certificate that holds the nonce: `SEQUENCE { [1] EXPLICIT OCTET STRING }`. */
 const NONCE_OID = "1.2.840.113635.100.8.2";
@@ -58,10 +67,7 @@ export interface AttestedKey {
   /** X9.62 uncompressed P-256 point of the attested key. */
   publicKey: Uint8Array;
   environment: AttestEnvironment;
-  /**
-   * Kept for Apple's fraud metric, which this server doesn't query yet. Not verified: Apple
-   * asks to check its signature, App ID, creation time and public key before trusting it.
-   */
+  /** Verified with the attestation, and kept for Apple's fraud metric, which this server doesn't query yet. */
   receipt: Uint8Array;
   /** `apple_validation_category_01`, when the device sends it. */
   validationCategory?: number;
@@ -145,6 +151,8 @@ export async function verifyAttestation(input: {
     // 10. The build is one of this app's. 11. The build is still supported.
     checkValidationCategory(authData, input.validationCategories);
     checkBundleVersion(authData, input.minBundleVersion);
+    // 12. Apple: verify the receipt that comes with the attestation before storing it.
+    await verifyReceipt({ receipt, appId: input.appId, publicKey, now: input.now });
     return {
       publicKey,
       environment,
@@ -153,6 +161,120 @@ export async function verifyAttestation(input: {
       bundleVersion: authData.bundleVersion,
     };
   });
+}
+
+/** Receipt payload fields Apple asks to check. */
+const RECEIPT_FIELD = { appId: 2, attestedPublicKey: 3, creationTime: 12 } as const;
+/** Apple: a receipt created more than five minutes ago may be replayed. */
+const RECEIPT_MAX_AGE_MS = 5 * 60 * 1000;
+const SHA256_OID = "2.16.840.1.101.3.4.2.1";
+const ECDSA_WITH_SHA256_OID = "1.2.840.10045.4.3.2";
+
+/**
+ * Verifies the receipt that came with the attestation of `publicKey`, following
+ * "Verify the receipt" in "Assessing fraud risk" (Apple Developer documentation,
+ * read on 2026-10-25). The receipt is a BER-encoded PKCS #7 container, signed
+ * without signed attributes, whose payload is a set of
+ * `SEQUENCE { type INTEGER, version INTEGER, value OCTET STRING }` fields.
+ */
+export async function verifyReceipt(input: {
+  receipt: Uint8Array;
+  appId: string;
+  publicKey: Uint8Array;
+  now: number;
+  root?: Uint8Array;
+}): Promise<void> {
+  return guarded(async () => {
+    const info = AsnParser.parse(copy(input.receipt), ContentInfo);
+    if (info.contentType !== id_signedData) throw new AttestationError("receipt is not signed data");
+    const signedData = AsnParser.parse(info.content, SignedData);
+    const [signer, ...others] = signedData.signerInfos;
+    if (!signer || others.length > 0) throw new AttestationError("receipt must have one signer");
+    if (signer.signedAttrs) throw new AttestationError("unexpected receipt signed attributes");
+    if (
+      signer.digestAlgorithm.algorithm !== SHA256_OID ||
+      signer.signatureAlgorithm.algorithm !== ECDSA_WITH_SHA256_OID
+    ) {
+      throw new AttestationError("unsupported receipt algorithm");
+    }
+
+    // 1. The signature covers the payload. The signer names its certificate by issuer and serial number.
+    const payload = receiptPayload(signedData);
+    const certificates = (signedData.certificates ?? []).flatMap((choice) =>
+      choice.certificate ? [new X509Certificate(AsnConvert.serialize(choice.certificate))] : [],
+    );
+    const id = signer.sid.issuerAndSerialNumber;
+    const signing =
+      id &&
+      certificates.find(
+        (certificate) =>
+          certificate.serialNumber === hex(new Uint8Array(id.serialNumber)) &&
+          equal(
+            new Uint8Array(certificate.issuerName.toArrayBuffer()),
+            new Uint8Array(AsnConvert.serialize(id.issuer)),
+          ),
+      );
+    if (!signing) throw new AttestationError("missing receipt signing certificate");
+    const raw = new AsnEcSignatureFormatter().toWebSignature(KEY_ALGORITHM, signer.signature.buffer);
+    if (!raw) throw new AttestationError("invalid receipt signature encoding");
+    const key = await signing.publicKey.export(KEY_ALGORITHM, ["verify"]);
+    if (!(await crypto.subtle.verify({ name: "ECDSA", hash: "SHA-256" }, key, raw, copy(payload)))) {
+      throw new AttestationError("invalid receipt signature");
+    }
+
+    // 2. The signing certificate chains up to Apple Root CA - G3.
+    const intermediate = certificates.find((certificate) => certificate.subject === signing.issuer);
+    if (!intermediate) throw new AttestationError("receipt certificate chain mismatch");
+    if (!intermediate.getExtension(BasicConstraintsExtension)?.ca) {
+      throw new AttestationError("receipt intermediate is not a CA");
+    }
+    await verifyIssued(signing, intermediate, input.now);
+    await verifyIssued(intermediate, new X509Certificate(input.root ? copy(input.root) : APPLE_ROOT_CA_G3), input.now);
+
+    // 3. The payload's fields. 4. The App ID is this app's.
+    const fields = receiptFields(payload);
+    if (new TextDecoder().decode(receiptField(fields, RECEIPT_FIELD.appId)) !== input.appId) {
+      throw new AttestationError("receipt App ID mismatch");
+    }
+    // 5. Created within five minutes of now.
+    const created = Date.parse(new TextDecoder().decode(receiptField(fields, RECEIPT_FIELD.creationTime)));
+    if (!(Math.abs(input.now - created) <= RECEIPT_MAX_AGE_MS)) throw new AttestationError("receipt too old");
+    // 6. The attested public key, in the credential certificate there, is the one just attested.
+    const attested = new X509Certificate(receiptField(fields, RECEIPT_FIELD.attestedPublicKey));
+    const attestedKey = AsnConvert.parse(attested.publicKey.rawData, SubjectPublicKeyInfo).subjectPublicKey;
+    if (!equal(new Uint8Array(attestedKey), input.publicKey)) throw new AttestationError("receipt public key mismatch");
+  });
+}
+
+/** The encapsulated content, which Apple sends as a constructed (chunked) OCTET STRING. */
+function receiptPayload(signedData: SignedData): Uint8Array {
+  const content = signedData.encapContentInfo.eContent?.any;
+  if (!content) throw new AttestationError("missing receipt payload");
+  const { offset, result } = fromBER(content);
+  if (offset !== content.byteLength || !(result instanceof OctetString)) {
+    throw new AttestationError("malformed receipt payload");
+  }
+  return new Uint8Array(result.getValue());
+}
+
+function receiptFields(payload: Uint8Array): Map<number, Uint8Array> {
+  const { offset, result } = fromBER(copy(payload));
+  if (offset !== payload.length || !(result instanceof Set)) throw new AttestationError("malformed receipt payload");
+  const fields = new Map<number, Uint8Array>();
+  for (const item of result.valueBlock.value) {
+    const [type, , value] = item instanceof Sequence ? item.valueBlock.value : [];
+    if (!(type instanceof Integer) || !(value instanceof OctetString)) {
+      throw new AttestationError("malformed receipt field");
+    }
+    fields.set(type.valueBlock.valueDec, new Uint8Array(value.getValue()));
+  }
+  return fields;
+}
+
+function receiptField(fields: Map<number, Uint8Array>, type: number): Uint8Array {
+  const value = fields.get(type);
+  if (!value) throw new AttestationError(`missing receipt field ${type}`);
+  return value;
 }
 
 /**
@@ -324,6 +446,10 @@ function concat(a: Uint8Array, b: Uint8Array): Uint8Array {
   result.set(a);
   result.set(b, a.length);
   return result;
+}
+
+function hex(data: Uint8Array): string {
+  return Array.from(data, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function equal(a: Uint8Array, b: Uint8Array): boolean {
