@@ -106,7 +106,8 @@ struct RowStack<Content: View>: View {
 
     var body: some View {
         let columns = RowColumns(dynamicTypeSize)
-        columns.layout(spacing: spacing) { content(columns) }
+        let layout = columns.layout(spacing: spacing)
+        layout { content(columns) }
     }
 }
 
