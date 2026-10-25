@@ -36,7 +36,8 @@ jobs:
 
   app-ios:
     name: App (iOS Simulator)
-    runs-on: macos-26
+    # Xcode 27 (Swift 6.4), the version the app is developed with.
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v7
       - run: xcodebuild -version && swift --version

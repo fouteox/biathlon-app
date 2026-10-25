@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { join } from "node:path";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vite-plus/test";
 import worker from "../src/index";
 import { snapshot, type IBUCompetition, type RaceSnapshot } from "../src/ibu";
 import { liveState, relevanceScore, syncLiveActivities, type IBUResults, type LiveState } from "../src/live";
@@ -16,7 +17,7 @@ import { pushSenders } from "./pushSenders";
 // ActivityKit's default strategies and give its local updates the same relevance score.
 const cases: { name: string; results: IBUResults; state: unknown; relevanceScore?: number }[] = JSON.parse(
   readFileSync(
-    new URL("../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/live-activity.json", import.meta.url),
+    join(import.meta.dirname, "../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/live-activity.json"),
     "utf8",
   ),
 );
@@ -76,7 +77,12 @@ function stubNetwork(
   vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
     const url = String(input);
     const headers = Object.fromEntries(new Headers(init.headers).entries());
-    sent.push({ method: init.method ?? "GET", url, headers, body: init.body ? JSON.parse(String(init.body)) : undefined });
+    sent.push({
+      method: init.method ?? "GET",
+      url,
+      headers,
+      body: typeof init.body === "string" ? JSON.parse(init.body) : undefined,
+    });
     if (url.includes("biathlonresults.com")) {
       await options.duringResults?.();
       return Response.json(options.results ?? live.results, { status: options.resultsStatus ?? 200 });
@@ -84,12 +90,18 @@ function stubNetwork(
     if (options.failingHost && url.includes(options.failingHost)) return new Response(null, { status: 500 });
     if (url.includes("api-manage-broadcast") && init.method === "POST") {
       channels += 1;
-      return new Response(null, { status: 201, headers: { "apns-channel-id": `${options.channelPrefix ?? "channel"}-${channels}` } });
+      return new Response(null, {
+        status: 201,
+        headers: { "apns-channel-id": `${options.channelPrefix ?? "channel"}-${channels}` },
+      });
     }
     if (url.includes("api-manage-broadcast") && init.method === "DELETE") return new Response(null, { status: 204 });
     if (url.includes("/3/device/")) {
       const status = (await options.duringDevice?.()) ?? options.deviceStatus;
-      if (status) return options.deviceReason ? Response.json({ reason: options.deviceReason }, { status }) : new Response(null, { status });
+      if (status)
+        return options.deviceReason
+          ? Response.json({ reason: options.deviceReason }, { status })
+          : new Response(null, { status });
     }
     if (url.includes("/4/broadcasts/") && options.broadcastReason) {
       return Response.json({ reason: options.broadcastReason }, { status: 400 });
@@ -101,7 +113,9 @@ function stubNetwork(
 
 let pem = "";
 beforeAll(async () => {
-  const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"])) as CryptoKeyPair;
+  const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, [
+    "sign",
+  ])) as CryptoKeyPair;
   const pkcs8 = new Uint8Array((await crypto.subtle.exportKey("pkcs8", pair.privateKey)) as ArrayBuffer);
   pem = `-----BEGIN PRIVATE KEY-----\n${btoa(String.fromCharCode(...pkcs8))}\n-----END PRIVATE KEY-----`;
 });
@@ -182,7 +196,9 @@ describe("Live Activity channels", () => {
 
     await syncLiveActivities(env, [race()], NOW);
 
-    const creations = sent.filter((request) => request.method === "POST" && request.url.includes("api-manage-broadcast"));
+    const creations = sent.filter(
+      (request) => request.method === "POST" && request.url.includes("api-manage-broadcast"),
+    );
     expect(creations.map((request) => request.url)).toEqual([
       "https://api-manage-broadcast.push.apple.com:2196/1/apps/com.fouteox.biathlon/channels",
       "https://api-manage-broadcast.sandbox.push.apple.com:2195/1/apps/com.fouteox.biathlon/channels",
@@ -211,7 +227,11 @@ describe("Live Activity channels", () => {
       ["https://api.push.apple.com/4/broadcasts/apps/com.fouteox.biathlon", "channel-1"],
       ["https://api.sandbox.push.apple.com/4/broadcasts/apps/com.fouteox.biathlon", "channel-2"],
     ]);
-    expect(updates[0]?.headers).toMatchObject({ "apns-push-type": "liveactivity", "apns-priority": "10", "apns-expiration": "0" });
+    expect(updates[0]?.headers).toMatchObject({
+      "apns-push-type": "liveactivity",
+      "apns-priority": "10",
+      "apns-expiration": "0",
+    });
     expect(updates[0]?.body).toEqual({
       aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 1, "content-state": live.state },
     });
@@ -225,7 +245,9 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork();
     await syncLiveActivities(env, [race({ StartTime: "2026-11-26T15:45:00Z" })], NOW);
 
-    expect(broadcasts(sent).map((request) => (request.body as { aps: { "content-state": unknown } }).aps["content-state"])).toEqual([
+    expect(
+      broadcasts(sent).map((request) => (request.body as { aps: { "content-state": unknown } }).aps["content-state"]),
+    ).toEqual([
       { phase: "scheduled", startTime: 817400700, leaders: [] },
       { phase: "scheduled", startTime: 817400700, leaders: [] },
     ]);
@@ -251,16 +273,18 @@ describe("Live Activity channels", () => {
     await syncLiveActivities(env, finished, NOW + 60_000);
     expect(broadcasts(later)).toEqual([]);
     await syncLiveActivities(env, finished, NOW + 10 * 60_000);
-    expect(broadcasts(later).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
+    expect(broadcasts(later).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual([
+      "end",
+      "end",
+    ]);
     expect(later.some((request) => request.url.includes("biathlonresults.com"))).toBe(false);
     expect(later.some((request) => request.method === "DELETE")).toBe(false);
 
     const last = stubNetwork();
     await syncLiveActivities(env, finished, NOW + 60 * 60_000);
-    expect(last.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"])).toEqual([
-      "channel-1",
-      "channel-2",
-    ]);
+    expect(
+      last.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"]),
+    ).toEqual(["channel-1", "channel-2"]);
     expect(broadcasts(last)).toEqual([]);
     // The rows stay, for the app to learn that the activity is over.
     expect((await channels(env)).map(({ state }) => JSON.parse(state))).toEqual([relayFinal, relayFinal]);
@@ -278,7 +302,10 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork({ results: { RaceId: RACE_ID, Results: [] } });
     await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW);
 
-    expect(broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
+    expect(broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual([
+      "end",
+      "end",
+    ]);
   });
 
   it("ends a finished race with its last state when its results can't be read", async () => {
@@ -292,8 +319,22 @@ describe("Live Activity channels", () => {
     await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 60_000);
 
     expect(broadcasts(sent).map((request) => request.body)).toEqual([
-      { aps: { timestamp: NOW / 1000 + 60, event: "end", "relevance-score": 0, "content-state": { ...(live.state as object), phase: "finished" } } },
-      { aps: { timestamp: NOW / 1000 + 60, event: "end", "relevance-score": 0, "content-state": { ...(live.state as object), phase: "finished" } } },
+      {
+        aps: {
+          timestamp: NOW / 1000 + 60,
+          event: "end",
+          "relevance-score": 0,
+          "content-state": { ...(live.state as object), phase: "finished" },
+        },
+      },
+      {
+        aps: {
+          timestamp: NOW / 1000 + 60,
+          event: "end",
+          "relevance-score": 0,
+          "content-state": { ...(live.state as object), phase: "finished" },
+        },
+      },
     ]);
   });
 
@@ -305,7 +346,9 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork();
     await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW);
 
-    expect(broadcasts(sent).map((request) => (request.body as { aps: { "content-state": unknown } }).aps["content-state"])).toEqual([
+    expect(
+      broadcasts(sent).map((request) => (request.body as { aps: { "content-state": unknown } }).aps["content-state"]),
+    ).toEqual([
       { ...(live.state as object), phase: "finished" },
       { ...(live.state as object), phase: "finished" },
     ]);
@@ -325,7 +368,9 @@ describe("Live Activity channels", () => {
 
     const sent = stubNetwork({ results: withoutCompetition });
     await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 120_000);
-    expect(broadcasts(sent).map((request) => (request.body as { aps: { "content-state": unknown } }).aps["content-state"])).toEqual([
+    expect(
+      broadcasts(sent).map((request) => (request.body as { aps: { "content-state": unknown } }).aps["content-state"]),
+    ).toEqual([
       { ...(live.state as object), phase: "finished" },
       { ...(live.state as object), phase: "finished" },
     ]);
@@ -348,7 +393,10 @@ describe("Live Activity channels", () => {
 
     const ended = stubNetwork({ results: relay.results });
     await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 120_000);
-    expect(broadcasts(ended).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
+    expect(broadcasts(ended).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual([
+      "end",
+      "end",
+    ]);
   });
 
   it("leaves alone the new channel an overlapping run opened while the old one was being retired", async () => {
@@ -362,13 +410,17 @@ describe("Live Activity channels", () => {
     // The other run replaces the row with an open channel just before this one retires the old channel.
     const batch = env.DB.batch.bind(env.DB);
     env.DB.batch = async (statements) => {
-      await env.DB.prepare("UPDATE live_channels SET channel_id = 'new-' || environment, ended_at = NULL, end_sent_at = NULL").run();
+      await env.DB.prepare(
+        "UPDATE live_channels SET channel_id = 'new-' || environment, ended_at = NULL, end_sent_at = NULL",
+      ).run();
       return batch(statements);
     };
 
     await syncLiveActivities(env, cancelled, NOW + 60 * 60_000);
 
-    const { results } = await env.DB.prepare("SELECT channel_id AS channelId, deleted_at AS deletedAt FROM live_channels ORDER BY environment").all();
+    const { results } = await env.DB.prepare(
+      "SELECT channel_id AS channelId, deleted_at AS deletedAt FROM live_channels ORDER BY environment",
+    ).all();
     expect(results).toEqual([
       { channelId: "new-production", deletedAt: null },
       { channelId: "new-sandbox", deletedAt: null },
@@ -416,7 +468,10 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork();
     await syncLiveActivities(env, [race({ StatusId: 6, ScheduleStatus: "CANCELLED" })], NOW + 60_000);
 
-    const states = broadcasts(sent).map((request) => (request.body as { aps: { "content-state": { phase: string; leaders: unknown[] } } }).aps["content-state"]);
+    const states = broadcasts(sent).map(
+      (request) =>
+        (request.body as { aps: { "content-state": { phase: string; leaders: unknown[] } } }).aps["content-state"],
+    );
     expect(states.map(({ phase, leaders }) => [phase, leaders])).toEqual([
       ["cancelled", []],
       ["cancelled", []],
@@ -477,10 +532,9 @@ describe("Live Activity channels", () => {
 
     await syncLiveActivities(env, [race()], NOW);
 
-    expect(sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"])).toEqual([
-      "channel-1",
-      "channel-2",
-    ]);
+    expect(
+      sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"]),
+    ).toEqual(["channel-1", "channel-2"]);
     expect(await retired(env)).toEqual([]);
     expect((await channels(env)).map(({ channelId }) => channelId)).toEqual(["other", "other"]);
   });
@@ -488,7 +542,9 @@ describe("Live Activity channels", () => {
   it("deletes a few retired channels per run, leaving the rest of the budget to the races", async () => {
     const env = await makeEnv();
     for (const id of ["a", "b", "c", "d", "e", "f"]) {
-      await env.DB.prepare("INSERT INTO retired_channels (environment, channel_id) VALUES ('sandbox', ?1)").bind(id).run();
+      await env.DB.prepare("INSERT INTO retired_channels (environment, channel_id) VALUES ('sandbox', ?1)")
+        .bind(id)
+        .run();
     }
     const sent = stubNetwork({ failingHost: "api-manage-broadcast" });
 
@@ -500,9 +556,12 @@ describe("Live Activity channels", () => {
   it("tries the retired channels in turn, so failing ones can't hold the others back", async () => {
     const env = await makeEnv();
     for (const id of ["a", "b", "c", "d", "e", "f"]) {
-      await env.DB.prepare("INSERT INTO retired_channels (environment, channel_id) VALUES ('sandbox', ?1)").bind(id).run();
+      await env.DB.prepare("INSERT INTO retired_channels (environment, channel_id) VALUES ('sandbox', ?1)")
+        .bind(id)
+        .run();
     }
-    const deleted = (sent: Sent[]) => sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"]);
+    const deleted = (sent: Sent[]) =>
+      sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"]);
 
     const first = stubNetwork({ failingHost: "api-manage-broadcast" });
     await syncLiveActivities(env, [], NOW);
@@ -522,7 +581,9 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork();
     await syncLiveActivities(env, [race({ StartTime: "2026-11-27T15:15:00Z" })], NOW + 60_000);
 
-    const states = broadcasts(sent).map((request) => (request.body as { aps: { "content-state": { leaders: unknown[] } } }).aps["content-state"]);
+    const states = broadcasts(sent).map(
+      (request) => (request.body as { aps: { "content-state": { leaders: unknown[] } } }).aps["content-state"],
+    );
     expect(states.map(({ leaders }) => leaders)).toEqual([[], []]);
   });
 
@@ -536,7 +597,9 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork({ resultsStatus: 503 });
     await syncLiveActivities(env, [race({ IsLive: true, StartTime: "2026-11-26T16:15:00Z" })], NOW + 60_000);
 
-    const states = broadcasts(sent).map((request) => (request.body as { aps: { "content-state": { startTime: number } } }).aps["content-state"]);
+    const states = broadcasts(sent).map(
+      (request) => (request.body as { aps: { "content-state": { startTime: number } } }).aps["content-state"],
+    );
     expect(states).toEqual([
       { ...(live.state as { startTime: number }), startTime: (live.state as { startTime: number }).startTime + 3600 },
       { ...(live.state as { startTime: number }), startTime: (live.state as { startTime: number }).startTime + 3600 },
@@ -565,7 +628,9 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork();
     await syncLiveActivities(env, [race({ IsLive: true })], NOW + 60_000);
 
-    const creations = sent.filter((request) => request.method === "POST" && request.url.includes("api-manage-broadcast"));
+    const creations = sent.filter(
+      (request) => request.method === "POST" && request.url.includes("api-manage-broadcast"),
+    );
     expect(creations.length).toBe(2);
     const { results } = await env.DB.prepare("SELECT deleted_at AS deletedAt FROM live_channels").all();
     expect(results).toEqual([{ deletedAt: null }, { deletedAt: null }]);
@@ -591,7 +656,12 @@ describe("Live Activity channels", () => {
     await syncLiveActivities(env, [followed], NOW, new SubrequestBudget(3));
 
     const sent = stubNetwork();
-    await syncLiveActivities(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" }), followed], NOW, new SubrequestBudget(3));
+    await syncLiveActivities(
+      env,
+      [race({ StatusId: 11, ScheduleStatus: "FINISHED" }), followed],
+      NOW,
+      new SubrequestBudget(3),
+    );
 
     expect(broadcasts(sent).map((request) => request.url)).toEqual([
       "https://api.push.apple.com/4/broadcasts/apps/com.fouteox.biathlon",
@@ -661,14 +731,19 @@ describe("Live Activity channels", () => {
     stubNetwork({ results: relay.results, broadcastReason: "BadPayload" });
     await syncLiveActivities(env, finished, NOW);
 
-    const { results } = await env.DB.prepare("SELECT ended_at AS endedAt, end_sent_at AS endSentAt FROM live_channels").all();
+    const { results } = await env.DB.prepare(
+      "SELECT ended_at AS endedAt, end_sent_at AS endSentAt FROM live_channels",
+    ).all();
     expect(results).toEqual([
       { endedAt: NOW, endSentAt: null },
       { endedAt: NOW, endSentAt: null },
     ]);
     const sent = stubNetwork({ results: relay.results });
     await syncLiveActivities(env, finished, NOW + 60_000);
-    expect(broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
+    expect(broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual([
+      "end",
+      "end",
+    ]);
   });
 
   it("deletes a channel at APNs when it can't record it", async () => {
@@ -682,9 +757,9 @@ describe("Live Activity channels", () => {
 
     await expect(syncLiveActivities(env, [race()], NOW)).rejects.toThrow("D1 unavailable");
 
-    expect(sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"])).toEqual([
-      "channel-1",
-    ]);
+    expect(
+      sent.filter((request) => request.method === "DELETE").map((request) => request.headers["apns-channel-id"]),
+    ).toEqual(["channel-1"]);
   });
 
   it("sends no end once an overlapping run stored a newer state, like a race reinstated", async () => {
@@ -754,7 +829,9 @@ describe("Live Activity channels", () => {
     }));
 
     expect(outcome).toEqual({ kind: "deferred" });
-    const cached = await env.DB.prepare("SELECT updated_at AS updatedAt FROM settings WHERE key = 'apns_token_sandbox'").first();
+    const cached = await env.DB.prepare(
+      "SELECT updated_at AS updatedAt FROM settings WHERE key = 'apns_token_sandbox'",
+    ).first();
     expect(cached).toEqual({ updatedAt: later });
   });
 
@@ -762,7 +839,8 @@ describe("Live Activity channels", () => {
     const env = await makeEnv();
     stubNetwork();
     await syncLiveActivities(env, [race()], NOW);
-    const events = (sent: Sent[]) => broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event);
+    const events = (sent: Sent[]) =>
+      broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event);
 
     const meanwhile = stubNetwork();
     await syncLiveActivities(env, [], NOW);
@@ -859,7 +937,9 @@ describe("Live Activity channels", () => {
     for (const run of [1, 2]) {
       const sent = stubNetwork();
       await syncLiveActivities(env, races, NOW + run * 60_000, new SubrequestBudget(3));
-      lookups.push(...sent.filter((request) => request.url.includes("biathlonresults.com")).map((request) => request.url));
+      lookups.push(
+        ...sent.filter((request) => request.url.includes("biathlonresults.com")).map((request) => request.url),
+      );
     }
 
     expect(lookups.map((url) => new URL(url).searchParams.get("RaceId"))).toEqual(races.map(({ id }) => id));
@@ -915,7 +995,10 @@ describe("Live Activity channels", () => {
     const sent = stubNetwork();
     await syncLiveActivities(env, undefined, NOW + 10 * 60_000);
 
-    expect(broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual(["end", "end"]);
+    expect(broadcasts(sent).map((request) => (request.body as { aps: { event: string } }).aps.event)).toEqual([
+      "end",
+      "end",
+    ]);
     expect(sent.filter((request) => request.url.includes("api-manage-broadcast"))).toEqual([]);
     expect((await channels(env)).length).toBe(4);
   });
@@ -934,7 +1017,7 @@ describe("GET /v1/races/:id/channels/:environment", () => {
 
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(200);
-    const { aps } = broadcasts(sent)[0]?.body as { aps: { timestamp: number } };
+    const { aps } = broadcasts(sent)[0]!.body as { aps: { timestamp: number } };
     expect(await response.json()).toEqual({ channelId: "channel-2", state: live.state, timestamp: aps.timestamp });
   });
 
@@ -1042,7 +1125,10 @@ describe("alerts", () => {
     const env = await makeEnv();
     const lots: number[] = [];
     env.PUSH_SENDER = pushSenders(lots);
-    await queue(env, Array.from({ length: 120 }, (_, index) => `t${index}`));
+    await queue(
+      env,
+      Array.from({ length: 120 }, (_, index) => `t${index}`),
+    );
     const sent = stubNetwork();
 
     await drainOutbox(env, NOW);
@@ -1071,10 +1157,16 @@ describe("alerts", () => {
     const env = await makeEnv();
     const objects: string[] = [];
     env.PUSH_SENDER = pushSenders([], { objects });
-    await queue(env, Array.from({ length: 60 }, (_, index) => `a${index}`));
+    await queue(
+      env,
+      Array.from({ length: 60 }, (_, index) => `a${index}`),
+    );
     stubNetwork();
     await drainOutbox(env, NOW);
-    await queue(env, Array.from({ length: 60 }, (_, index) => `b${index}`));
+    await queue(
+      env,
+      Array.from({ length: 60 }, (_, index) => `b${index}`),
+    );
     await drainOutbox(env, NOW);
 
     expect(objects.length).toBe(4);
@@ -1113,7 +1205,10 @@ describe("alerts", () => {
 
   it("forgets the devices APNs no longer knows in a few D1 queries", async () => {
     const env = await makeEnv();
-    await queue(env, Array.from({ length: 60 }, (_, index) => `t${index}`));
+    await queue(
+      env,
+      Array.from({ length: 60 }, (_, index) => `t${index}`),
+    );
     const calls = countD1Queries(env);
     stubNetwork({ deviceStatus: 410 });
 
@@ -1154,7 +1249,12 @@ describe("Live Activities started for favorites", () => {
     )
       .bind(key)
       .run();
-    const registration = parseStartRegistration(token, { environment: "production", athletes: [], nations: [], ...body });
+    const registration = parseStartRegistration(token, {
+      environment: "production",
+      athletes: [],
+      nations: [],
+      ...body,
+    });
     if (typeof registration === "string") throw new Error(registration);
     await saveStartToken(env.DB, registration, key, 0);
   }
@@ -1172,7 +1272,10 @@ describe("Live Activities started for favorites", () => {
 
   const starts = (sent: Sent[]) => sent.filter((request) => request.url.includes("/3/device/"));
   /** The devices started, sorted: the APNs environments' lots go out at once. */
-  const startUrls = (sent: Sent[]) => starts(sent).map((request) => request.url).sort();
+  const startUrls = (sent: Sent[]) =>
+    starts(sent)
+      .map((request) => request.url)
+      .sort();
   const startOn = (sent: Sent[], host: string) => starts(sent).find((request) => request.url.startsWith(host));
   const ibu = (sent: Sent[]) => sent.filter((request) => request.url.includes("biathlonresults.com"));
 
@@ -1199,7 +1302,7 @@ describe("Live Activities started for favorites", () => {
       // Kept by APNs until a while after the race starts, for a device offline meanwhile.
       "apns-expiration": String(START / 1000 + 15 * 60),
     });
-    expect(startOn(sent, "https://api.push.apple.com")?.body).toEqual({
+    expect(startOn(sent, "https://api.push.apple.com")!.body).toEqual({
       aps: {
         timestamp: DUE / 1000,
         event: "start",
@@ -1215,7 +1318,11 @@ describe("Live Activities started for favorites", () => {
         },
       },
     });
-    expect((startOn(sent, "https://api.sandbox.push.apple.com")?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe(sandbox!.channelId);
+    expect(
+      (startOn(sent, "https://api.sandbox.push.apple.com")!.body as { aps: { "input-push-channel": string } }).aps[
+        "input-push-channel"
+      ],
+    ).toBe(sandbox!.channelId);
 
     // Each device is checked once per race.
     const later = stub();
@@ -1309,7 +1416,9 @@ describe("Live Activities started for favorites", () => {
     const env = await setUp();
     const sent = stub({ duringResults: () => save(env, "bb".repeat(32), { nations: ["FRA"] }) });
     await startFavoriteActivities(env, [race()], DUE);
-    expect(starts(sent).map((request) => request.url)).toContain(`https://api.push.apple.com/3/device/${"bb".repeat(32)}`);
+    expect(starts(sent).map((request) => request.url)).toContain(
+      `https://api.push.apple.com/3/device/${"bb".repeat(32)}`,
+    );
   });
 
   it("starts nothing for a device whose favorites changed or that opted out while the start list was read", async () => {
@@ -1358,14 +1467,20 @@ describe("Live Activities started for favorites", () => {
     const sent = stub();
     await startFavoriteActivities(env, [race()], DUE + 60_000);
     expect(startUrls(sent)).toEqual([`https://api.push.apple.com/3/device/${"aa".repeat(32)}`]);
-    expect((starts(sent)[0]?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe("replacement");
+    expect((starts(sent)[0]!.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"]).toBe(
+      "replacement",
+    );
   });
 
   it("forgets the favorites no launch of the app sent again for a year", async () => {
     const env = await setUp();
-    await env.DB.prepare("UPDATE live_start_tokens SET updated_at = ?1 WHERE token <> ?2").bind(START, "aa".repeat(32)).run();
+    await env.DB.prepare("UPDATE live_start_tokens SET updated_at = ?1 WHERE token <> ?2")
+      .bind(START, "aa".repeat(32))
+      .run();
     await pruneStarts(env.DB, START + 365 * 24 * 60 * 60_000);
-    const { results } = await env.DB.prepare("SELECT token FROM live_start_tokens ORDER BY token").all<{ token: string }>();
+    const { results } = await env.DB.prepare("SELECT token FROM live_start_tokens ORDER BY token").all<{
+      token: string;
+    }>();
     expect(results.map(({ token }) => token)).toEqual(["bb".repeat(32), "cc".repeat(32)]);
   });
 
@@ -1380,16 +1495,17 @@ describe("Live Activities started for favorites", () => {
       },
     });
     await startFavoriteActivities(env, [race()], DUE);
-    expect((startOn(sent, "https://api.push.apple.com")?.body as { aps: { "content-state": unknown } }).aps["content-state"]).toEqual(
-      published,
-    );
+    expect(
+      (startOn(sent, "https://api.push.apple.com")!.body as { aps: { "content-state": unknown } }).aps["content-state"],
+    ).toEqual(published);
   });
 
   it("forgets the checks of races two days after their start", async () => {
     const env = await setUp();
     stub();
     await startFavoriteActivities(env, [race()], DUE);
-    const checks = async () => (await env.DB.prepare("SELECT COUNT(*) AS n FROM live_starts").first<{ n: number }>())!.n;
+    const checks = async () =>
+      (await env.DB.prepare("SELECT COUNT(*) AS n FROM live_starts").first<{ n: number }>())!.n;
     await pruneStarts(env.DB, START + 47 * 60 * 60_000);
     expect(await checks()).toBe(3);
     await pruneStarts(env.DB, START + 49 * 60 * 60_000);
@@ -1417,7 +1533,7 @@ describe("Live Activities started for favorites", () => {
     await startFavoriteActivities(env, [race()], DUE + 2 * 60_000);
     const [production] = await channels(env);
     const channelOf = (host: string) =>
-      (startOn(sent, host)?.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"];
+      (startOn(sent, host)!.body as { aps: { "input-push-channel": string } }).aps["input-push-channel"];
     expect(starts(sent).length).toBe(2);
     expect(channelOf("https://api.push.apple.com")).toBe(production!.channelId);
   });
@@ -1533,7 +1649,9 @@ describe("Live Activities started for favorites", () => {
     const env = await setUp();
     stub({ deviceStatus: 410 });
     await startFavoriteActivities(env, [race()], DUE);
-    const { results } = await env.DB.prepare("SELECT token FROM live_start_tokens ORDER BY token").all<{ token: string }>();
+    const { results } = await env.DB.prepare("SELECT token FROM live_start_tokens ORDER BY token").all<{
+      token: string;
+    }>();
     expect(results.map(({ token }) => token)).toEqual(["bb".repeat(32)]);
 
     const other = await setUp();

@@ -1,7 +1,15 @@
 import type { APNsEnvironment } from "./apns";
 import { detectChange, hasChanged, type RaceChange } from "./changes";
 import { deleteDevices } from "./devices";
-import { activeEvents, fetchIBU, seasonId, snapshot, type IBUCompetition, type IBUEvent, type RaceSnapshot } from "./ibu";
+import {
+  activeEvents,
+  fetchIBU,
+  seasonId,
+  snapshot,
+  type IBUCompetition,
+  type IBUEvent,
+  type RaceSnapshot,
+} from "./ibu";
 import { syncLiveActivities } from "./live";
 import { startFavoriteActivities } from "./liveStarts";
 import type { AlertInput } from "./payload";
@@ -138,9 +146,7 @@ export async function drainOutbox(
   now: number,
   lots = new PushLots(env, new ProviderTokens(env, now, new SubrequestBudget())),
 ): Promise<void> {
-  const { results: rows } = await env.DB.prepare(
-    "SELECT * FROM outbox WHERE created_at >= ?1 ORDER BY id LIMIT ?2",
-  )
+  const { results: rows } = await env.DB.prepare("SELECT * FROM outbox WHERE created_at >= ?1 ORDER BY id LIMIT ?2")
     .bind(now - OUTBOX_MAX_AGE_MS, lots.room)
     .all<OutboxRow>();
 

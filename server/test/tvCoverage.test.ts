@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import worker from "../src/index";
 import { TV_COVERAGE } from "../src/tvCoverage";
 
@@ -22,9 +22,9 @@ const DAY = 86_400_000;
 const COUNTRIES = ["FR", "GB", "DE"];
 
 const broadcastersOn = (country: string, time: number) =>
-  TV_COVERAGE.filter((entry) => entry.country === country && Date.parse(entry.from) <= time && time < Date.parse(entry.until)).map(
-    (entry) => entry.broadcaster,
-  );
+  TV_COVERAGE.filter(
+    (entry) => entry.country === country && Date.parse(entry.from) <= time && time < Date.parse(entry.until),
+  ).map((entry) => entry.broadcaster);
 
 describe("TV coverage", () => {
   for (const entry of TV_COVERAGE) {
@@ -40,7 +40,8 @@ describe("TV coverage", () => {
   for (const [name, first, last] of EVENTS_2627) {
     it(`names a broadcaster in every country on every day of ${name}`, () => {
       for (let time = Date.parse(`${first}T00:00:00Z`); time <= Date.parse(`${last}T23:59:59Z`); time += DAY / 2) {
-        for (const country of COUNTRIES) expect(broadcastersOn(country, time), `${country} ${new Date(time).toISOString()}`).not.toEqual([]);
+        for (const country of COUNTRIES)
+          expect(broadcastersOn(country, time), `${country} ${new Date(time).toISOString()}`).not.toEqual([]);
       }
     });
   }
@@ -55,7 +56,11 @@ describe("TV coverage", () => {
 
 describe("GET /v1/tv-coverage", () => {
   it("serves the coverage to the app, cacheable for an hour", async () => {
-    const response = await worker.fetch(new Request("https://server.test/v1/tv-coverage"), {} as Env, {} as ExecutionContext);
+    const response = await worker.fetch(
+      new Request("https://server.test/v1/tv-coverage"),
+      {} as Env,
+      {} as ExecutionContext,
+    );
     expect(response.status).toBe(200);
     expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
     expect(await response.json()).toEqual({ coverage: TV_COVERAGE });

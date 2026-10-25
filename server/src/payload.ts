@@ -19,8 +19,20 @@ export const LOC_KEYS = {
  * (`RaceKind` in BiathlonKit), checked against the shared `race-kinds.json` fixture.
  */
 export const RACE_KINDS = [
-  "SMSP", "SWSP", "SMPU", "SWPU", "SMIN", "SWIN", "SMSI",
-  "SWSI", "SMMS", "SWMS", "SMRL", "SWRL", "MXRL", "MXSR",
+  "SMSP",
+  "SWSP",
+  "SMPU",
+  "SWPU",
+  "SMIN",
+  "SWIN",
+  "SMSI",
+  "SWSI",
+  "SMMS",
+  "SWMS",
+  "SMRL",
+  "SWRL",
+  "MXRL",
+  "MXSR",
 ] as const;
 
 /**
@@ -71,7 +83,10 @@ function rescheduledArgs(input: AlertInput): string[] {
  * The new start's day and time, in the device's locale and time zone
  * (e.g. "jeudi" and "15:45", or "Thursday" and "3:45 PM").
  */
-export function formatStart(input: Pick<AlertInput, "startTime" | "locale" | "timeZone">): { day: string; time: string } {
+export function formatStart(input: Pick<AlertInput, "startTime" | "locale" | "timeZone">): {
+  day: string;
+  time: string;
+} {
   const date = new Date(input.startTime);
   const format = (locale: string, timeZone: string) => ({
     day: new Intl.DateTimeFormat(locale, { weekday: "long", timeZone }).format(date),

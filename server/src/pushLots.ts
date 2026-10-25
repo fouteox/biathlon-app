@@ -73,7 +73,10 @@ export class PushLots {
     const expired = outcomes.flatMap((outcome, index) => (outcome.kind === "expiredProviderToken" ? [index] : []));
     const renewed = expired.length > 0 ? await this.tokens.renew(environment).catch(() => undefined) : undefined;
     if (renewed) {
-      const retried = await this.lots(renewed, expired.map((index) => items[index]!.push));
+      const retried = await this.lots(
+        renewed,
+        expired.map((index) => items[index]!.push),
+      );
       expired.forEach((index, position) => (outcomes[index] = retried[position]!));
     }
     items.forEach(({ resolve }, index) => resolve(outcomes[index]!));

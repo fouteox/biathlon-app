@@ -1,5 +1,12 @@
 import { isEnvironment, probe } from "./apns";
-import { deleteOwnedDevice, isDeviceToken, ownsDevice, parseRegistration, saveDevice, type DeviceRegistration } from "./devices";
+import {
+  deleteOwnedDevice,
+  isDeviceToken,
+  ownsDevice,
+  parseRegistration,
+  saveDevice,
+  type DeviceRegistration,
+} from "./devices";
 import {
   deleteOwnedStartToken,
   ownsStartToken,
@@ -62,7 +69,7 @@ export default {
     return new Response("Not found", { status: 404 });
   },
 
-  async scheduled(controller, env, ctx): Promise<void> {
+  async scheduled(controller, env): Promise<void> {
     if (!(await claimCronRun(env.DB, controller.scheduledTime))) return;
     try {
       await runCron(env, controller.scheduledTime);
@@ -101,7 +108,10 @@ const LIVE_ACTIVITY_STARTS: TokenStore<StartRegistration> = {
 
 const TOKEN_ROUTES: [RegExp, (request: Request, env: Env, token: string) => Promise<Response>][] = [
   [/^\/v1\/devices\/([^/]+)$/, (request, env, token) => registerToken(request, env, token, DEVICES)],
-  [/^\/v1\/live-activity-starts\/([^/]+)$/, (request, env, token) => registerToken(request, env, token, LIVE_ACTIVITY_STARTS)],
+  [
+    /^\/v1\/live-activity-starts\/([^/]+)$/,
+    (request, env, token) => registerToken(request, env, token, LIVE_ACTIVITY_STARTS),
+  ],
 ];
 
 async function registerToken<Registration>(request: Request, env: Env, token: string, store: TokenStore<Registration>) {

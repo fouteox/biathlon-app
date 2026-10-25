@@ -135,7 +135,9 @@ export async function authorize(
   }
   // The counter rejects replayed assertions. Conditional update: of two requests racing
   // with the same key, only the newer counter wins.
-  const updated = await env.DB.prepare("UPDATE app_attest_keys SET counter = ?1, used_at = ?2 WHERE key_id = ?3 AND counter < ?1")
+  const updated = await env.DB.prepare(
+    "UPDATE app_attest_keys SET counter = ?1, used_at = ?2 WHERE key_id = ?3 AND counter < ?1",
+  )
     .bind(counter, now, keyId)
     .run();
   if (updated.meta.changes !== 1) return { status: 401, error: "assertion rejected: counter did not increase" };

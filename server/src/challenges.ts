@@ -33,7 +33,12 @@ export async function issueChallenge(secret: string, purpose: Purpose, now: numb
 }
 
 /** Tells whether `challenge` was issued here for `purpose` and is still valid. */
-export async function checkChallenge(secret: string, challenge: string, purpose: Purpose, now: number): Promise<boolean> {
+export async function checkChallenge(
+  secret: string,
+  challenge: string,
+  purpose: Purpose,
+  now: number,
+): Promise<boolean> {
   const separator = challenge.lastIndexOf(".");
   if (separator < 0) return false;
   const payload = challenge.slice(0, separator);
@@ -44,7 +49,12 @@ export async function checkChallenge(secret: string, challenge: string, purpose:
   if (!valid) return false;
   const [kind, issued] = payload.split(".");
   const issuedAt = Number(issued);
-  return kind === purpose && Number.isSafeInteger(issuedAt) && issuedAt <= now + CLOCK_SKEW_MS && now - issuedAt <= LIFETIME_MS[purpose];
+  return (
+    kind === purpose &&
+    Number.isSafeInteger(issuedAt) &&
+    issuedAt <= now + CLOCK_SKEW_MS &&
+    now - issuedAt <= LIFETIME_MS[purpose]
+  );
 }
 
 async function hmacKey(secret: string): Promise<CryptoKey> {
