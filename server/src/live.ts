@@ -94,6 +94,17 @@ const END_GRACE_MS = 60 * 60_000;
  */
 const UNLISTED_GRACE_MS = 12 * 60 * 60_000;
 
+/**
+ * Deletes the channels deleted at APNs whose activity ended longer ago than an activity can
+ * stay on screen (`UNLISTED_GRACE_MS`): until then, `channelFor` tells the app it ended.
+ */
+export async function pruneChannels(db: D1Database, now: number): Promise<void> {
+  await db
+    .prepare("DELETE FROM live_channels WHERE ended_at < ?1 AND deleted_at IS NOT NULL")
+    .bind(now - UNLISTED_GRACE_MS)
+    .run();
+}
+
 /** The state the app shows, from a race's results; `undefined` without a `Competition` block. */
 export function liveState(results: IBUResults): LiveState | undefined {
   const competition = results.Competition;

@@ -18,9 +18,9 @@ import {
 import { IBU_BASE_URL } from "./ibu";
 import { isPurpose, issueChallenge } from "./challenges";
 import { authorize, pruneKeys, registerKey } from "./keys";
-import { channelFor } from "./live";
+import { channelFor, pruneChannels } from "./live";
 import { TV_COVERAGE } from "./tvCoverage";
-import { claimCronRun, runCron } from "./watcher";
+import { claimCronRun, pruneRaces, runCron } from "./watcher";
 
 export { PushSender } from "./pushSender";
 
@@ -33,6 +33,8 @@ export default {
     }
 
     if (url.pathname === "/v1/app-attest/challenges" && request.method === "POST") {
+      const limited = await rateLimited(env.CHALLENGE_RATE_LIMITER, request);
+      if (limited) return limited;
       const purpose = url.searchParams.get("purpose");
       if (!isPurpose(purpose)) return json({ error: "purpose must be attest or assert" }, 400);
       return json({ challenge: await issueChallenge(env.APP_ATTEST_SECRET, purpose, Date.now()) }, 201);
@@ -63,7 +65,7 @@ export default {
     }
 
     if (url.pathname.startsWith("/ibu/") && request.method === "GET") {
-      return proxyIBU(url, ctx);
+      return proxyIBU(request, url, env, ctx);
     }
 
     return new Response("Not found", { status: 404 });
@@ -79,6 +81,9 @@ export default {
       if (time.getUTCHours() === 3 && time.getUTCMinutes() === 0) {
         await pruneStarts(env.DB, controller.scheduledTime);
         await pruneKeys(env.DB, controller.scheduledTime);
+        // After the starts and the channels that reference the races.
+        await pruneChannels(env.DB, controller.scheduledTime);
+        await pruneRaces(env.DB, controller.scheduledTime);
       }
     }
   },
@@ -116,11 +121,11 @@ const TOKEN_ROUTES: [RegExp, (request: Request, env: Env, token: string) => Prom
 
 async function registerToken<Registration>(request: Request, env: Env, token: string, store: TokenStore<Registration>) {
   if (request.method !== "PUT" && request.method !== "DELETE") return new Response(null, { status: 405 });
+  if (!isDeviceToken(token)) return json({ error: "invalid token" }, 400);
   // Read once: the assertion signs these exact bytes.
   const body = new Uint8Array(await request.arrayBuffer());
   const registration = request.method === "PUT" ? store.parse(token, parseJSON(body)) : undefined;
   if (typeof registration === "string") return json({ error: registration }, 400);
-  if (!isDeviceToken(token)) return json({ error: "invalid token" }, 400);
   const auth = await authorize(env, request, body, Date.now());
   if ("error" in auth) return json({ error: auth.error }, auth.status);
   if (!(await store.owns(env.DB, token, auth.keyId))) return json({ error: "token registered by another key" }, 403);
@@ -144,7 +149,7 @@ const CACHE_SECONDS: Record<string, number> = {
   AllResults: 3600,
 };
 
-async function proxyIBU(url: URL, ctx: ExecutionContext): Promise<Response> {
+async function proxyIBU(request: Request, url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {
   const path = url.pathname.slice("/ibu/".length);
   const ttl = CACHE_SECONDS[path];
   if (ttl === undefined) return new Response("Not found", { status: 404 });
@@ -153,6 +158,8 @@ async function proxyIBU(url: URL, ctx: ExecutionContext): Promise<Response> {
   const cacheKey = new Request(url.toString());
   const hit = await cache.match(cacheKey);
   if (hit) return hit;
+  const limited = await rateLimited(env.IBU_RATE_LIMITER, request);
+  if (limited) return limited;
 
   const upstream = await fetch(new URL(path + url.search, IBU_BASE_URL));
   if (!upstream.ok) return new Response(upstream.body, { status: upstream.status });
@@ -164,6 +171,18 @@ async function proxyIBU(url: URL, ctx: ExecutionContext): Promise<Response> {
   });
   ctx.waitUntil(cache.put(cacheKey, response.clone()));
   return response;
+}
+
+/**
+ * A 429 once the client's IP address went over the limiter's rate (wrangler.jsonc), which
+ * Cloudflare counts in each of its locations. Cloudflare advises against keying on the address,
+ * which many users can share: the limits are generous for that, but these requests are anonymous
+ * and carry nothing else to key on.
+ */
+async function rateLimited(limiter: RateLimit, request: Request): Promise<Response | undefined> {
+  const { success } = await limiter.limit({ key: request.headers.get("cf-connecting-ip") ?? "" });
+  // The limiter tells nothing of when its window ends: at most a period later.
+  return success ? undefined : json({ error: "too many requests" }, 429, { "retry-after": "60" });
 }
 
 function parseJSON(bytes: Uint8Array): unknown {

@@ -1,5 +1,4 @@
 import { isEnvironment, type APNsEnvironment, type PushOutcome } from "./apns";
-import { isDeviceToken } from "./devices";
 import { fetchIBU, parseIBUDate, type RaceSnapshot } from "./ibu";
 import { isFollowable, relevanceScore, type IBUResults, type LiveState } from "./live";
 import { LOC_KEYS, raceTitleKey } from "./payload";
@@ -42,10 +41,8 @@ const ATTRIBUTES_TYPE = "RaceActivityAttributes";
 const ATHLETE_PATTERN = /^[A-Z0-9]{1,32}$/;
 const NATION_PATTERN = /^[A-Z]{3}$/;
 
-/** Validates the JSON body of `PUT /v1/live-activity-starts/:token`. */
+/** Validates the JSON body of `PUT /v1/live-activity-starts/:token`, for a token `isDeviceToken` accepted. */
 export function parseStartRegistration(token: string, body: unknown): StartRegistration | string {
-  const normalized = token.toLowerCase();
-  if (!isDeviceToken(normalized)) return "invalid push-to-start token";
   if (typeof body !== "object" || body === null) return "body must be a JSON object";
   const input = body as Record<string, unknown>;
   if (!isEnvironment(input.environment)) return "invalid environment";
@@ -54,7 +51,7 @@ export function parseStartRegistration(token: string, body: unknown): StartRegis
   if (!athletes || !nations) return "athletes and nations must be arrays of IBU ids and IOC codes";
   // Without favorites, the app deletes its token instead.
   if (athletes.length + nations.length === 0) return "no favorites";
-  return { token: normalized, environment: input.environment, athletes, nations };
+  return { token, environment: input.environment, athletes, nations };
 }
 
 function codes(value: unknown, pattern: RegExp): string[] | undefined {

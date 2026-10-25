@@ -351,6 +351,17 @@ describe("device registration endpoint", () => {
     await call(await signed("PUT", "cd".repeat(32), registration));
     expect(await tokens()).toEqual(["cd".repeat(32)]);
   });
+
+  it("stores the token in lowercase and rejects one that isn't hex", async () => {
+    const { call, signed, tokens } = await setUp();
+    expect((await call(await signed("PUT", token.toUpperCase(), registration))).status).toBe(204);
+    expect(await tokens()).toEqual([token]);
+    for (const method of ["PUT", "DELETE"] as const) {
+      const response = await call(await signed(method, "not-a-token", method === "PUT" ? registration : undefined));
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "invalid token" });
+    }
+  });
 });
 
 describe("Live Activity start endpoint", () => {
@@ -422,6 +433,25 @@ describe("Live Activity start endpoint", () => {
 
 describe("challenges", () => {
   const now = Date.parse("2026-11-26T12:00:00Z");
+
+  it("answers 429 to an IP address past 30 challenges a minute", async () => {
+    const issue = (ip: string) =>
+      worker.fetch(
+        new Request("https://server.test/v1/app-attest/challenges?purpose=attest", {
+          method: "POST",
+          headers: { "cf-connecting-ip": ip },
+        }) as never,
+        env,
+        createExecutionContext(),
+      );
+    for (let index = 0; index < 30; index += 1) expect((await issue("192.0.2.1")).status).toBe(201);
+
+    const limited = await issue("192.0.2.1");
+
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("retry-after")).toBe("60");
+    expect((await issue("192.0.2.2")).status).toBe(201);
+  });
 
   it("accepts a fresh challenge for its purpose only", async () => {
     const challenge = await issueChallenge("secret", "assert", now);
