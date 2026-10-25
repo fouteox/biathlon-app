@@ -58,14 +58,20 @@ final class AccessibilityUITests: XCTestCase {
         let star = app.navigationBars.buttons["Add to favorites"]
         XCTAssertTrue(star.waitForExistence(timeout: Self.timeout))
         star.tap()
-        Self.teamButton(in: app, titled: "Add ").tap()
-        // Leaves the favorites as they were for the next run, even when an assertion fails: the
+        // Leaves the favorites as they were for the next run, even when a step below fails: the
         // store persists on the simulator.
         addTeardownBlock { @MainActor in
             Self.openTab("Standings", in: app)
-            Self.teamButton(in: app, titled: "Remove ").tap()
-            app.navigationBars.buttons["Remove from favorites"].tap()
+            for remove in [
+                Self.teamButton(in: app, titled: "Remove "), app.navigationBars.buttons["Remove from favorites"],
+            ] where remove.exists {
+                remove.tap()
+            }
         }
+        // The athlete's team shows with the profile, which can load after the toolbar's star.
+        let team = Self.teamButton(in: app, titled: "Add ")
+        XCTAssertTrue(team.waitForExistence(timeout: Self.timeout))
+        team.tap()
 
         Self.openTab("Favorites", in: app)
         try assertRowsReadAsOneElement(in: app)
