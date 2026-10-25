@@ -142,9 +142,11 @@ struct ResultLine: View {
     @ScaledMetric(relativeTo: .headline) private var rankWidth = 36.0
 
     var body: some View {
-        HStack(spacing: 12) {
-            RankText(rank: row.irm ?? row.rank).frame(width: rankWidth, alignment: .leading)
-            NationMark(code: row.nation)
+        RowStack(spacing: 12) { columns in
+            HStack(spacing: 12) {
+                RankText(rank: row.irm ?? row.rank).frame(width: rankWidth, alignment: .leading)
+                NationMark(code: row.nation)
+            }
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(row.shortName ?? row.name)
@@ -162,8 +164,8 @@ struct ResultLine: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 2) {
+            .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: columns.trailingAlignment, spacing: 2) {
                 if let time = row.totalTime {
                     Text(time).font(.subheadline.monospacedDigit())
                 }
@@ -188,3 +190,21 @@ struct RankText: View {
         }
     }
 }
+
+#if DEBUG
+    #Preview("Result lines, largest text size") {
+        let rows = try? JSONDecoder().decode(
+            [ResultRow].self,
+            from: Data(
+                #"""
+                [{"IBUId":"BTFRA1","Name":"PERROT Eric","ShortName":"PERROT E.","Nat":"FRA","Rank":"1",
+                  "Shootings":"0+0+1+0","TotalTime":"24:51.3","Behind":"0.0"},
+                 {"IBUId":"BTNOR2","Name":"BOTN Johan-Olav Smoerdal","Nat":"NOR","Rank":"2",
+                  "Shootings":"1+0+0+0","TotalTime":"25:03.7","Behind":"+12.4"}]
+                """#.utf8))
+        List {
+            ForEach(rows ?? []) { ResultLine(row: $0, highlighted: $0.rank == "2") }
+        }
+        .environment(\.dynamicTypeSize, .accessibility5)
+    }
+#endif

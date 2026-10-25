@@ -1,4 +1,5 @@
 import BiathlonKit
+import SwiftData
 import SwiftUI
 
 struct StandingsView: View {
@@ -80,29 +81,35 @@ private struct StandingRow: View {
     @ScaledMetric(relativeTo: .headline) private var rankWidth = 36.0
 
     var body: some View {
-        let content = HStack(spacing: 12) {
-            RankText(rank: row.rank).frame(width: rankWidth, alignment: .leading)
-            NationMark(code: row.isNation ? row.nation ?? row.name : row.nation)
-            Text(row.shortName ?? row.name)
-            if row.bibColors.contains("yellow") {
-                // The leader's bib is yellow: here the color is the information.
-                Image(systemName: "tshirt.fill")
-                    .foregroundStyle(.yellow)
-                    .accessibilityLabel("Yellow bib")
+        let content = RowStack(spacing: 12) { _ in
+            HStack(spacing: 12) {
+                RankText(rank: row.rank).frame(width: rankWidth, alignment: .leading)
+                NationMark(code: row.isNation ? row.nation ?? row.name : row.nation)
             }
-            Spacer()
-            if let change = row.rankChange, change != 0 {
-                Image(systemName: change < 0 ? "arrow.up" : "arrow.down")
-                    .font(.caption)
-                    .foregroundStyle(change < 0 ? .green : .red)
-                    .accessibilityLabel(change < 0 ? Text("Up") : Text("Down"))
+            HStack(spacing: 12) {
+                Text(row.shortName ?? row.name)
+                if row.bibColors.contains("yellow") {
+                    // The leader's bib is yellow: here the color is the information.
+                    Image(systemName: "tshirt.fill")
+                        .foregroundStyle(.yellow)
+                        .accessibilityLabel("Yellow bib")
+                }
             }
-            if let score = row.score {
-                Text(score).font(.subheadline.monospacedDigit().bold())
-            }
-            if row.isNation, let nation = row.nation {
-                FavoriteButton(kind: .nation, key: nation, name: row.name, nation: nation)
-                    .labelStyle(.iconOnly)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 12) {
+                if let change = row.rankChange, change != 0 {
+                    Image(systemName: change < 0 ? "arrow.up" : "arrow.down")
+                        .font(.caption)
+                        .foregroundStyle(change < 0 ? .green : .red)
+                        .accessibilityLabel(change < 0 ? Text("Up") : Text("Down"))
+                }
+                if let score = row.score {
+                    Text(score).font(.subheadline.monospacedDigit().bold())
+                }
+                if row.isNation, let nation = row.nation {
+                    FavoriteButton(kind: .nation, key: nation, name: row.name, nation: nation)
+                        .labelStyle(.iconOnly)
+                }
             }
         }
         if let id = row.athleteID {
@@ -112,3 +119,24 @@ private struct StandingRow: View {
         }
     }
 }
+
+#if DEBUG
+    #Preview("Standing rows, largest text size") {
+        let rows = try? JSONDecoder().decode(
+            [CupRow].self,
+            from: Data(
+                #"""
+                [{"Rank":"1","Bibs":[{"Color":"yellow"}],"IBUId":"BTFRA1","Name":"PERROT Eric",
+                  "ShortName":"PERROT E.","Nat":"FRA","Score":"1263"},
+                 {"Rank":"3","IBUId":"BTNOR2","Name":"BOTN Johan-Olav Smoerdal","Nat":"NOR","Score":968,"RnkDiff":-1},
+                 {"Rank":"1","Name":"France","Nat":"FRA","Score":"2900"}]
+                """#.utf8))
+        NavigationStack {
+            List {
+                ForEach(rows ?? []) { StandingRow(row: $0) }
+            }
+        }
+        .environment(\.dynamicTypeSize, .accessibility5)
+        .modelContainer(for: Favorite.self, inMemory: true)
+    }
+#endif

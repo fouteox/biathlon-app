@@ -17,7 +17,7 @@ struct AthleteView: View {
             let results = history.state.value ?? []
             List {
                 Section {
-                    HStack(spacing: 16) {
+                    RowStack(spacing: 16) { _ in
                         AsyncImage(url: bio.photoURL) { image in
                             image.resizable().scaledToFill()
                         } placeholder: {
@@ -42,6 +42,7 @@ struct AthleteView: View {
                                     .foregroundStyle(.secondary)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 if let nation = bio.nation {
@@ -54,14 +55,14 @@ struct AthleteView: View {
                 if !results.isEmpty {
                     Section("Latest results") {
                         ForEach(results.prefix(30)) { result in
-                            HStack {
+                            RowStack { _ in
                                 VStack(alignment: .leading) {
                                     Text(RaceKind.title(ofRace: result.raceID ?? "", ibuName: result.competition ?? ""))
                                     Text([result.place, result.season].compactMap(\.self).joined(separator: " · "))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }
-                                Spacer()
+                                .frame(maxWidth: .infinity, alignment: .leading)
                                 RankText(rank: result.rank)
                             }
                         }
