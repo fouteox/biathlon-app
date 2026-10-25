@@ -36,8 +36,11 @@ final class AccessibilityUITests: XCTestCase {
         // the athlete's, not the standings left behind.
         let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Latest results")).firstMatch
         XCTAssertTrue(results.waitForExistence(timeout: Self.timeout))
-        let profile = firstRow(in: app)
-        XCTAssertEqual(profile.images.count, 0, profile.debugDescription)
+        // The profile reads its texts and nothing else: the photo, or the symbol shown in its
+        // place, adds no words of its own.
+        let profile = try XCTUnwrap(Self.readElements(of: try firstRow(in: app).snapshot()).first)
+        let texts = profile.children.filter { $0.elementType == .staticText }.map(\.label)
+        XCTAssertEqual(profile.label, texts.joined(separator: ", "))
         try assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
     }
