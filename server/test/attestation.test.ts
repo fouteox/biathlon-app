@@ -1,10 +1,10 @@
 import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vite-plus/test";
-import { fromBase64, rawSignature, sha256, toBase64, verifyAssertion, verifyAttestation } from "../src/attestation";
-import { decode } from "../src/cbor";
+import { AsnEcSignatureFormatter } from "@peculiar/x509";
+import { decode, encode } from "cborg";
+import { AttestationError, fromBase64, sha256, toBase64, verifyAssertion, verifyAttestation } from "../src/attestation";
 import { deleteOwnedDevice } from "../src/devices";
-import { DERError, parseCertificate, readNode } from "../src/der";
 import worker from "../src/index";
 import { checkChallenge, issueChallenge } from "../src/challenges";
 import { clientData, HEADERS, pruneKeys } from "../src/keys";
@@ -70,8 +70,7 @@ describe("attestation", () => {
 
   it("rejects a chain that doesn't lead to Apple's root", async () => {
     // The intermediate certificate as root: the intermediate's issuer then doesn't match.
-    const x5c = (decode(sampleInput.attestation) as Map<string, Map<string, Uint8Array[]>>).get("attStmt")!.get("x5c")!;
-    await expect(verifyAttestation({ ...sampleInput, root: x5c[1] })).rejects.toThrow("chain");
+    await expect(verifyAttestation({ ...sampleInput, root: sampleCertificates()[1] })).rejects.toThrow("chain");
   });
 
   it("rejects tampered authenticator data", async () => {
@@ -81,16 +80,27 @@ describe("attestation", () => {
     await expect(verifyAttestation({ ...sampleInput, attestation: tampered })).rejects.toThrow("nonce mismatch");
   });
 
-  it("rejects a certificate with an empty signature algorithm", () => {
-    const x5c = (decode(sampleInput.attestation) as Map<string, Map<string, Uint8Array[]>>).get("attStmt")!.get("x5c")!;
-    const leaf = x5c[0]!;
-    const outer = readNode(leaf);
-    const tbs = readNode(outer.contents);
-    const algorithm = readNode(outer.contents, tbs.bytes.length);
-    const signature = outer.contents.subarray(tbs.bytes.length + algorithm.bytes.length);
-    const contents = new Uint8Array([...tbs.bytes, 0x30, 0x00, ...signature]);
-    const forged = new Uint8Array([0x30, 0x82, contents.length >> 8, contents.length & 0xff, ...contents]);
-    expect(() => parseCertificate(forged)).toThrow(DERError);
+  it("rejects a credential certificate whose signature doesn't match", async () => {
+    const attestation = decode(sampleInput.attestation, { useMaps: true }) as Map<string, unknown>;
+    const [leaf, intermediate] = sampleCertificates();
+    const tampered = new Uint8Array(leaf!);
+    // Last byte of the signature value.
+    tampered[tampered.length - 1] = tampered[tampered.length - 1]! ^ 1;
+    const statement = new Map(attestation.get("attStmt") as Map<string, unknown>).set("x5c", [tampered, intermediate]);
+    await expect(
+      verifyAttestation({ ...sampleInput, attestation: encode(new Map(attestation).set("attStmt", statement)) }),
+    ).rejects.toThrow("invalid certificate signature");
+  });
+
+  it("rejects a malformed certificate", async () => {
+    const attestation = decode(sampleInput.attestation, { useMaps: true }) as Map<string, unknown>;
+    const statement = new Map(attestation.get("attStmt") as Map<string, unknown>).set("x5c", [
+      Uint8Array.from([0x30, 0x00]),
+      sampleCertificates()[1],
+    ]);
+    await expect(
+      verifyAttestation({ ...sampleInput, attestation: encode(new Map(attestation).set("attStmt", statement)) }),
+    ).rejects.toThrow("malformed input");
   });
 
   it("rejects garbage", async () => {
@@ -122,28 +132,27 @@ async function makeDevice() {
     authenticatorData.set(extensions, 37);
     const nonce = await sha256(new Uint8Array([...authenticatorData, ...(await sha256(data))]));
     const raw = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, pair.privateKey, nonce));
-    return cborMap({ signature: derSignature(raw), authenticatorData });
+    // App Attest encodes signatures in DER.
+    const signature = new Uint8Array(
+      new AsnEcSignatureFormatter().toAsnSignature({ name: "ECDSA", namedCurve: "P-256" }, raw)!,
+    );
+    return encode({ signature, authenticatorData });
   };
   return { publicKey, keyId, assert };
 }
 
 /** Apple's extensions map: the validation category (little-endian UInt32) and the bundle version. */
 function buildExtensions(category: number, version: string): Uint8Array {
-  const text = (value: string) => {
-    const bytes = new TextEncoder().encode(value);
-    return [bytes.length < 24 ? 0x60 | bytes.length : 0x78, ...(bytes.length < 24 ? [] : [bytes.length]), ...bytes];
-  };
-  return Uint8Array.from([
-    0xa2,
-    ...text("apple_validation_category_01"),
-    0x44,
-    category,
-    0,
-    0,
-    0,
-    ...text("apple_bundle_version_01"),
-    ...text(version),
-  ]);
+  return encode({
+    apple_validation_category_01: Uint8Array.from([category, 0, 0, 0]),
+    apple_bundle_version_01: version,
+  });
+}
+
+/** The credential and intermediate certificates of Apple's sample. */
+function sampleCertificates(): Uint8Array[] {
+  const attestation = decode(sampleInput.attestation, { useMaps: true }) as Map<string, Map<string, Uint8Array[]>>;
+  return attestation.get("attStmt")!.get("x5c")!;
 }
 
 describe("assertion", () => {
@@ -200,18 +209,13 @@ describe("assertion", () => {
     );
   });
 
-  it("rejects malformed CBOR text as a verification failure", async () => {
+  it("rejects malformed CBOR as a verification failure", async () => {
     // { "fmt": <text with an invalid UTF-8 byte> }
     const bad = Uint8Array.from([0xa1, 0x63, 0x66, 0x6d, 0x74, 0x61, 0xff]);
-    await expect(verifyAttestation({ ...sampleInput, attestation: bad })).rejects.toThrow("invalid UTF-8 text");
-  });
-
-  it("converts DER signatures with and without leading zeros", () => {
-    const der = Uint8Array.from([0x30, 0x07, 0x02, 0x02, 0x00, 0x80, 0x02, 0x01, 0x01]);
-    const raw = rawSignature(der, 32);
-    expect(raw[31]).toBe(0x80);
-    expect(raw[63]).toBe(0x01);
-    expect(raw.slice(0, 31).every((byte) => byte === 0)).toBe(true);
+    await expect(verifyAttestation({ ...sampleInput, attestation: bad })).rejects.toThrow(AttestationError);
+    // The same map twice: cborg rejects duplicate keys.
+    const duplicate = Uint8Array.from([0xa2, 0x61, 0x61, 0x01, 0x61, 0x61, 0x02]);
+    await expect(verifyAttestation({ ...sampleInput, attestation: duplicate })).rejects.toThrow("malformed input");
   });
 });
 
@@ -477,32 +481,3 @@ describe("challenges", () => {
     expect(await checkChallenge("secret", "a.b.c.!!", "assert", now)).toBe(false);
   });
 });
-
-/** Encodes a CBOR map with text keys and byte string values. */
-function cborMap(entries: Record<string, Uint8Array>): Uint8Array {
-  const head = (major: number, length: number) =>
-    length < 24
-      ? [(major << 5) | length]
-      : length < 256
-        ? [(major << 5) | 24, length]
-        : [(major << 5) | 25, length >> 8, length & 0xff];
-  const bytes = [...head(5, Object.keys(entries).length)];
-  for (const [key, value] of Object.entries(entries)) {
-    const text = new TextEncoder().encode(key);
-    bytes.push(...head(3, text.length), ...text, ...head(2, value.length), ...value);
-  }
-  return Uint8Array.from(bytes);
-}
-
-/** r || s to DER, as App Attest encodes signatures. */
-function derSignature(raw: Uint8Array): Uint8Array {
-  const integer = (value: Uint8Array) => {
-    let start = 0;
-    while (start < value.length - 1 && value[start] === 0) start++;
-    const trimmed = [...value.subarray(start)];
-    if (trimmed[0]! & 0x80) trimmed.unshift(0);
-    return [0x02, trimmed.length, ...trimmed];
-  };
-  const body = [...integer(raw.subarray(0, 32)), ...integer(raw.subarray(32))];
-  return Uint8Array.from([0x30, body.length, ...body]);
-}
