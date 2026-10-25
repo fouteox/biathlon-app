@@ -29,6 +29,8 @@ final class LiveActivities {
 
     @ObservationIgnored private let server: ServerClient?
     @ObservationIgnored private var observers: [Task<Void, Never>] = []
+    /// Each activity's observation, by activity identifier, until the activity ends.
+    @ObservationIgnored private let activityObservers = KeyedTasks<String>()
 
     var isAvailable: Bool { server != nil && areEnabled }
 
@@ -258,23 +260,27 @@ final class LiveActivities {
     }
 
     /// Ended and dismissed activities leave `followedRaceIDs`, wherever they end, and a
-    /// broadcast that moves the race reschedules its activity while the app runs.
+    /// broadcast that moves the race reschedules its activity while the app runs. The
+    /// observation stops once the activity ends: it won't update its content anymore.
     private func observeState(of activity: Activity<RaceActivityAttributes>) {
         let raceID = activity.attributes.raceID
         let scheduledStart = activity.attributes.scheduledStart
-        observers.append(contentsOf: [
-            Task { [weak self] in
-                for await _ in activity.activityStateUpdates { self?.refresh() }
+        activityObservers.run(
+            activity.id,
+            { [weak self] in
+                for await state in activity.activityStateUpdates {
+                    self?.refresh()
+                    guard Self.shownStates.contains(state) else { return }
+                }
             },
-            Task { [weak self] in
+            { [weak self] in
                 for await content in activity.contentUpdates
                 where content.state.needsNewActivity(
                     scheduledStart: scheduledStart, isPending: activity.activityState == .pending, now: .now)
                 {
                     await self?.reconcile(raceID: raceID)
                 }
-            },
-        ])
+            })
     }
 
     private func channel(raceID: String) async throws -> LiveChannel {

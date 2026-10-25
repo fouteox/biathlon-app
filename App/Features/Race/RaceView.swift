@@ -10,7 +10,7 @@ struct RaceView: View {
     @Environment(\.server) private var server
     @Environment(LiveActivities.self) private var liveActivities
     @State private var loader = Loader<RaceResults>()
-    @State private var tvGuide = Loader<TVGuide?>()
+    @State private var tvGuide = Loader<TVGuide>()
     @State private var liveActivityFailed = false
     @State private var liveActivityFailure = ""
     @Query private var favorites: [Favorite]
@@ -79,7 +79,10 @@ struct RaceView: View {
             Text(liveActivityFailure)
         }
         .task { await load() }
-        .task { await tvGuide.load { try await server?.tvGuide() } }
+        .task {
+            guard let server else { return }
+            await tvGuide.load { try await server.tvGuide() }
+        }
         .refreshingWhileLive(isLive, action: load)
     }
 
@@ -106,10 +109,9 @@ struct RaceView: View {
         }
     }
 
-    /// Nothing until the guide loads, or without a server.
+    /// Nothing until the guide loads, or without a server, the guide then never loading.
     private func tvListings(of competition: Competition) -> TVGuide.Listings? {
-        let guide = tvGuide.state.value ?? nil
-        return guide?.listings(at: competition.startTime, home: Locale.current.region?.identifier)
+        tvGuide.state.value?.listings(at: competition.startTime, home: Locale.current.region?.identifier)
     }
 
     private func isFavorite(_ row: ResultRow, in results: RaceResults) -> Bool {
