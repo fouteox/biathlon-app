@@ -134,6 +134,18 @@ export function broadcastTimestamp(ms: number): number {
 }
 
 /**
+ * The `dismissal-date` of an activity ended at `endedAt` (milliseconds), in seconds since 1970
+ * like `timestamp`: the Lock Screen keeps the final state 30 minutes, within the HIG's
+ * "15 to 30 minutes is adequate", instead of the default four hours. Every send of the end
+ * carries the same date, so a device offline until later removes the activity at once.
+ */
+export function dismissalDate(endedAt: number): number {
+  return broadcastTimestamp(endedAt + DISMISSAL_DELAY_MS);
+}
+
+const DISMISSAL_DELAY_MS = 30 * 60_000;
+
+/**
  * Hands each race the calendar lists to its Durable Object (`RaceActivity`), all at once, with
  * the run's APNs provider tokens: objects signing their own at once would renew them more often
  * than the 20 minutes APNs accepts. A race whose update fails is logged, and tried again by its
@@ -176,14 +188,16 @@ export async function givenTokens(tokens: ProviderTokens): Promise<ProviderToken
  * The channel the app subscribes a race's Live Activity to, for its APNs environment,
  * with the state last published on it: the channel stores no messages, so a new
  * activity starts from it. Once the end is sent, which a new subscriber would miss,
- * only the final state, for the app to end the activities that missed it. None while
+ * only the final state and its dismissal date, for the app to end the activities that missed it. None while
  * a dropped channel waits for its replacement.
  */
 export async function channelFor(
   db: D1Database,
   raceId: string,
   environment: APNsEnvironment,
-): Promise<{ channelId: string; state: LiveState; timestamp: number } | { ended: LiveState } | undefined> {
+): Promise<
+  { channelId: string; state: LiveState; timestamp: number } | { ended: LiveState; dismissalDate: number } | undefined
+> {
   const row = await db
     .prepare(
       `SELECT channel_id AS channelId, state, published_at AS publishedAt, ended_at AS endedAt, deleted_at AS deletedAt
@@ -199,7 +213,7 @@ export async function channelFor(
     }>();
   if (!row) return undefined;
   const state = JSON.parse(row.state) as LiveState;
-  if (row.endedAt !== null) return { ended: state };
+  if (row.endedAt !== null) return { ended: state, dismissalDate: dismissalDate(row.endedAt) };
   return row.deletedAt === null
     ? { channelId: row.channelId, state, timestamp: broadcastTimestamp(row.publishedAt) }
     : undefined;

@@ -73,19 +73,26 @@ extension Competition.State {
                 Leader(rank: "2", name: "LAEGREID S.", nation: "NOR", result: "+4.2"),
                 Leader(rank: "3", name: "SAMUELSSON S.", nation: "SWE", result: "+9.8"),
             ]
-            let finalPodium = [
-                Leader(rank: "1", name: "JACQUELIN E.", nation: "FRA", result: "24:58.3"),
-                Leader(rank: "2", name: "PERROT E.", nation: "FRA", result: "+2.1"),
-                Leader(rank: "3", name: "LAEGREID S.", nation: "NOR", result: "+6.4"),
-            ]
+            let result = demoResult(startTime: startTime)
             return [
                 RaceLiveState(phase: .scheduled, startTime: startTime, leaders: []),
                 RaceLiveState(phase: .live, startTime: startTime, leaders: []),
                 RaceLiveState(phase: .live, startTime: startTime, leaders: firstPodium),
-                RaceLiveState(phase: .live, startTime: startTime, leaders: finalPodium),
-                RaceLiveState(phase: .finished, startTime: startTime, leaders: finalPodium),
+                RaceLiveState(phase: .live, startTime: startTime, leaders: result.leaders),
+                result,
                 RaceLiveState(phase: .cancelled, startTime: startTime, leaders: []),
             ]
+        }
+
+        /// The demo race's result, which its activity shows once ended.
+        public static func demoResult(startTime: Date) -> RaceLiveState {
+            RaceLiveState(
+                phase: .finished, startTime: startTime,
+                leaders: [
+                    Leader(rank: "1", name: "JACQUELIN E.", nation: "FRA", result: "24:58.3"),
+                    Leader(rank: "2", name: "PERROT E.", nation: "FRA", result: "+2.1"),
+                    Leader(rank: "3", name: "LAEGREID S.", nation: "NOR", result: "+6.4"),
+                ])
         }
     }
 #endif

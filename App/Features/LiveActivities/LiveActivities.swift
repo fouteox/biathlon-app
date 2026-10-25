@@ -14,8 +14,8 @@ final class LiveActivities {
     enum Failure: Error, Equatable {
         /// The server has no channel for the race yet.
         case noChannel
-        /// The race's activity is over, with its final state.
-        case ended(RaceLiveState)
+        /// The race's activity is over.
+        case ended(LiveActivityEnd)
     }
 
     /// Races with an activity on the Lock Screen or scheduled to show there, and races
@@ -94,9 +94,9 @@ final class LiveActivities {
             if try await replaceOutdatedActivities(raceID: raceID) {
                 try await replaceOutdatedActivities(raceID: raceID)
             }
-        } catch let Failure.ended(finalState) {
+        } catch let Failure.ended(end) {
             // The end was sent while the device was offline, which the channel doesn't keep.
-            await Self.end(raceID: raceID, finalState: finalState)
+            await Self.end(raceID: raceID, end)
         } catch Failure.noChannel {
             // A dropped channel the server hasn't replaced yet: looked up again at the next pass.
         } catch {
@@ -231,14 +231,13 @@ final class LiveActivities {
         }
     }
 
-    /// Ends the race's activities, or only `activityID`: showing `finalState` until the system
-    /// dismisses them, like the server's end event, or removing them at once without it.
-    @concurrent static func end(
-        raceID: String, activityID: String? = nil, finalState: RaceLiveState? = nil
-    ) async {
-        let content = finalState?.activityContent
+    /// Ends the race's activities, or only `activityID`: showing the final state of `end` until
+    /// its dismissal date, like the server's end event, or removing them at once without it.
+    @concurrent static func end(raceID: String, activityID: String? = nil, _ end: LiveActivityEnd? = nil) async {
+        let content = end?.finalState.activityContent
+        let dismissalPolicy = end.map { ActivityUIDismissalPolicy.after($0.dismissalDate) } ?? .immediate
         for activity in activities(of: raceID) where activityID == nil || activity.id == activityID {
-            await activity.end(content, dismissalPolicy: content == nil ? .immediate : .default)
+            await activity.end(content, dismissalPolicy: dismissalPolicy)
         }
     }
 
@@ -288,7 +287,7 @@ final class LiveActivities {
         switch try await server.liveChannel(raceID: raceID, environment: .current) {
         case .open(let channel): return channel
         case .notOpen: throw Failure.noChannel
-        case .ended(let finalState): throw Failure.ended(finalState)
+        case .ended(let end): throw Failure.ended(end)
         }
     }
 }
