@@ -1,15 +1,14 @@
-import { broadcast, createChannel, deleteChannel, ENVIRONMENTS, type APNsEnvironment } from "./apns";
-import { fetchIBU, parseIBUDate, raceStatus, type IBUCompetition, type RaceSnapshot, type RaceStatus } from "./ibu";
-import { ProviderTokens } from "./providerTokens";
-import { SubrequestBudget } from "./subrequests";
+import { ENVIRONMENTS, type APNsEnvironment } from "./apns";
+import { parseIBUDate, raceStatus, type IBUCompetition, type RaceSnapshot, type RaceStatus } from "./ibu";
+import type { ProviderTokens, ProviderTokenSet } from "./providerTokens";
 
 /**
  * One Live Activity per race, updated through an APNs broadcast channel: one request
  * per update reaches every subscriber, whatever their number (Apple, WWDC24 session
- * 10069). The watcher opens a channel per race and APNs environment while the race
- * is upcoming, publishes each change of its state, then ends the activity and
- * deletes the channel at APNs a while after the race is over (channels are limited
- * to 10,000).
+ * 10069). Each race's Durable Object (`RaceActivity`, raceActivity.ts) opens a channel
+ * per APNs environment while the race is upcoming, publishes each change of its state,
+ * then ends the activity and deletes the channel at APNs a while after the race is over
+ * (channels are limited to 10,000).
  */
 
 /** `Results?RaceId=`: the race and its rows. */
@@ -71,37 +70,20 @@ const RELEVANCE_SCORES: Record<RaceStatus, number> = { live: 1, scheduled: 0.5, 
 /** Seconds between the UNIX epoch and the reference date of Foundation's `Date`. */
 const REFERENCE_DATE_S = 978_307_200;
 /**
- * Each creation is one subrequest; the Free plan allows 50 per invocation. Counted
- * per environment, so failures in one never hold up the other.
+ * How long after its race's start an activity can be on screen: a Live Activity lasts at most
+ * 8 hours, then stays on the Lock Screen for up to 4 more (ActivityKit, "Displaying live data
+ * with Live Activities"). A race followed no longer gets one past it.
  */
-const MAX_CHANNEL_CREATIONS_PER_ENVIRONMENT = 2;
-/**
- * Channels are deleted a few per run: a couple of races end at a time, and failures
- * can't use up the budget of the races still followed.
- */
-const MAX_CHANNEL_DELETIONS_PER_RUN = 4;
-/**
- * The channels store no messages, as Apple advises for frequent updates like sports
- * scores, so a device offline when the end is sent never gets it: the end is sent
- * again at this interval, until the channel is deleted.
- */
-const END_RESEND_INTERVAL_MS = 10 * 60_000;
-const END_GRACE_MS = 60 * 60_000;
-/**
- * A race the calendar stops listing, which a partial response can do, keeps its activity
- * until the system has ended it: a Live Activity lasts at most 8 hours, then stays on the
- * Lock Screen for up to 4 more (ActivityKit, "Displaying live data with Live Activities").
- */
-const UNLISTED_GRACE_MS = 12 * 60 * 60_000;
+export const ACTIVITY_LIFETIME_MS = 12 * 60 * 60_000;
 
 /**
  * Deletes the channels deleted at APNs whose activity ended longer ago than an activity can
- * stay on screen (`UNLISTED_GRACE_MS`): until then, `channelFor` tells the app it ended.
+ * stay on screen (`ACTIVITY_LIFETIME_MS`): until then, `channelFor` tells the app it ended.
  */
 export async function pruneChannels(db: D1Database, now: number): Promise<void> {
   await db
     .prepare("DELETE FROM live_channels WHERE ended_at < ?1 AND deleted_at IS NOT NULL")
-    .bind(now - UNLISTED_GRACE_MS)
+    .bind(now - ACTIVITY_LIFETIME_MS)
     .run();
 }
 
@@ -129,12 +111,8 @@ export function liveState(results: IBUResults): LiveState | undefined {
 /** What the calendar tells of a race: everything but its leaders. */
 type CalendarFields = Pick<LiveState, "phase" | "startTime">;
 
-function calendarFields(race: RaceSnapshot): CalendarFields {
+export function calendarFields(race: RaceSnapshot): CalendarFields {
   return { phase: race.status, startTime: referenceSeconds(race.startTime) };
-}
-
-function isTerminal(phase: RaceStatus): boolean {
-  return phase === "finished" || phase === "cancelled";
 }
 
 function referenceSeconds(time: string): number {
@@ -142,370 +120,56 @@ function referenceSeconds(time: string): number {
 }
 
 /** UNIX milliseconds of a `startTime` in seconds since 2001-01-01. */
-function referenceMs(seconds: number): number {
+export function referenceMs(seconds: number): number {
   return (seconds + REFERENCE_DATE_S) * 1000;
-}
-
-interface ChannelRow {
-  raceId: string;
-  environment: APNsEnvironment;
-  channelId: string;
-  state: string;
-  endedAt: number | null;
-  endSentAt: number | null;
-  deletedAt: number | null;
-}
-
-/**
- * Opens the channels of upcoming races, broadcasts each new state of the races
- * that have channels, and ends the activities of races that are over or no longer
- * watched (`races` is the watcher's current list). Without `races`, when the
- * calendar can't be read, only the activities already ended are looked after.
- * What the budget can't cover waits for the next run.
- */
-export async function syncLiveActivities(
-  env: Env,
-  races: RaceSnapshot[] | undefined,
-  now: number,
-  budget = new SubrequestBudget(),
-): Promise<void> {
-  const tokens = new ProviderTokens(env, now, budget);
-  const { results: rows } = await env.DB.prepare(
-    `SELECT race_id AS raceId, environment, channel_id AS channelId, state, ended_at AS endedAt, end_sent_at AS endSentAt, deleted_at AS deletedAt
-     FROM live_channels ORDER BY attempted_at, race_id, environment`,
-  ).all<ChannelRow>();
-  const watched = new Map(races?.map((race) => [race.id, race]));
-  const open: ChannelRow[] = [];
-  const kept: ChannelRow[] = [];
-  const ended: ChannelRow[] = [];
-  for (const channel of rows) {
-    if (channel.endedAt === null) {
-      open.push(channel);
-      kept.push(channel);
-    } else if (isFollowable(watched.get(channel.raceId)) && now > channel.endedAt) {
-      // A race followable again, like a cancellation called off, gets new channels, in
-      // a run started after the end: an older run's snapshot may predate it.
-      await replace(env, channel);
-    } else {
-      if (channel.deletedAt === null) ended.push(channel);
-      kept.push(channel);
-    }
-  }
-  if (races) {
-    // The races already followed first, then the new channels.
-    await updateOpenChannels(env, tokens, open, watched, now, budget);
-    await openChannels(env, tokens, races, kept, now, budget);
-  }
-  // After the races followed in the budget, the ends least recently tried first, then the deletions.
-  for (const channel of ended) await sendEnd(env, tokens, channel, now);
-  await deleteRetiredChannels(env, tokens, now);
-}
-
-async function updateOpenChannels(
-  env: Env,
-  tokens: ProviderTokens,
-  open: ChannelRow[],
-  watched: Map<string, RaceSnapshot>,
-  now: number,
-  budget: SubrequestBudget,
-) {
-  // The races least recently looked up first: a budget too short for all of them takes turns among them.
-  for (const [raceId, channels] of Map.groupBy(open, (row) => row.raceId)) {
-    const race = watched.get(raceId);
-    if (!race && mayStillBeShown(channels, now)) continue;
-    // A lookup waits for a run that can also broadcast its result to every channel.
-    if (needsResults(race) && !budget.has(1 + channels.length)) continue;
-    const known = await currentState(raceId, race, budget);
-    for (const channel of channels) {
-      const state: LiveState = { ...(JSON.parse(channel.state) as LiveState), ...known };
-      if (!race || isTerminal(race.status)) {
-        // Over, or unlisted for longer than an activity lasts: it ends with the latest state there is.
-        await end(env, tokens, channel, state, now);
-      } else if (JSON.stringify(state) !== channel.state) {
-        await publish(env, tokens, channel, state, now);
-      }
-    }
-    if (needsResults(race)) {
-      await env.DB.prepare("UPDATE live_channels SET attempted_at = ?1 WHERE race_id = ?2 AND ended_at IS NULL")
-        .bind(now, raceId)
-        .run();
-    }
-  }
-}
-
-/** Whether the activity of these channels' race may still be on screen (`UNLISTED_GRACE_MS`). */
-function mayStillBeShown(channels: ChannelRow[], now: number): boolean {
-  return channels.some(
-    (channel) => now < referenceMs((JSON.parse(channel.state) as LiveState).startTime) + UNLISTED_GRACE_MS,
-  );
 }
 
 export function isFollowable(race: RaceSnapshot | undefined): race is RaceSnapshot {
   return race?.status === "scheduled" || race?.status === "live";
 }
 
-/** Whether the race has leaders to look up: not before it starts, nor once cancelled. */
-function needsResults(race: RaceSnapshot | undefined): boolean {
-  return race?.status !== "scheduled" && race?.status !== "cancelled";
-}
-
-/**
- * What is known of a race now, over its last published state. The calendar decides
- * its phase and start time, which the results can lag behind or be ahead of: an ended
- * channel then always means the calendar ended the race, or stopped listing it, so a
- * race it lists as followable again gets new channels. The results give the leaders
- * of the races under way, which keep their last ones when the results can't be read
- * or don't describe the race; upcoming and cancelled races have none.
- */
-async function currentState(
-  raceId: string,
-  race: RaceSnapshot | undefined,
-  budget: SubrequestBudget,
-): Promise<Partial<LiveState> | undefined> {
-  if (race && !needsResults(race)) return { ...calendarFields(race), leaders: [] };
-  try {
-    const state = liveState(await fetchIBU<IBUResults>("Results", { RaceId: raceId }, budget));
-    return { ...state, ...(race && calendarFields(race)) };
-  } catch (error) {
-    console.warn("Live Activity results unavailable", raceId, String(error));
-    return race && calendarFields(race);
-  }
-}
-
-async function openChannels(
-  env: Env,
-  tokens: ProviderTokens,
-  races: RaceSnapshot[],
-  rows: ChannelRow[],
-  now: number,
-  budget: SubrequestBudget,
-) {
-  const key = (raceId: string, environment: APNsEnvironment) => `${raceId} ${environment}`;
-  const open = new Set(rows.filter((row) => !isDropped(row)).map((row) => key(row.raceId, row.environment)));
-  const dropped = new Map(rows.filter(isDropped).map((row) => [key(row.raceId, row.environment), row]));
-  const followable = races.filter(isFollowable);
-  const missing = ENVIRONMENTS.flatMap((environment) =>
-    followable
-      .filter((race) => !open.has(key(race.id, environment)))
-      .slice(0, MAX_CHANNEL_CREATIONS_PER_ENVIRONMENT)
-      .map((race) => ({ race, environment })),
-  );
-
-  for (const { race, environment } of missing) {
-    // A creation keeps a subrequest back, to delete its channel if it can't be recorded.
-    if (!budget.has(2)) return;
-    const outcome = await tokens.send(environment, (token) => createChannel(environment, env.APNS_TOPIC, token));
-    if (outcome.kind === "deferred") return;
-    if (outcome.kind !== "created") {
-      console.error("APNs channel creation failed", race.id, environment, outcome);
-      continue;
-    }
-    // A live race starts from the calendar too: its first results are published at the next run.
-    // The new channel replaces a dropped one, with the leaders last recorded on it while the race runs.
-    const replaced = dropped.get(key(race.id, environment));
-    const stored = race.status === "live" ? replaced?.state : undefined;
-    const state: LiveState = { leaders: [], ...(stored && (JSON.parse(stored) as LiveState)), ...calendarFields(race) };
-    try {
-      const { meta } = await env.DB.prepare(
-        `INSERT INTO live_channels (race_id, environment, channel_id, state, published_at, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?5)
-         ON CONFLICT (race_id, environment) DO UPDATE
-         SET channel_id = excluded.channel_id, state = excluded.state, published_at = excluded.published_at,
-           created_at = excluded.created_at, deleted_at = NULL
-         WHERE ended_at IS NULL AND deleted_at IS NOT NULL AND live_channels.state = ?6`,
-      )
-        .bind(race.id, environment, outcome.channelId, JSON.stringify(state), now, replaced?.state ?? null)
-        .run();
-      // An overlapping run recorded its channel first, or a newer state on the dropped one, which a
-      // next run's replacement starts from: this channel has no row to be deleted with.
-      if (meta.changes === 0) await retire(env, environment, outcome.channelId).run();
-    } catch (error) {
-      // Recorded nowhere, the channel would count against the limit forever: deleted before the run
-      // stops, or queued for a later run, and logged in case D1 can't take it either.
-      const deletion = await tokens.send(environment, (token) =>
-        deleteChannel(environment, env.APNS_TOPIC, outcome.channelId, token),
-      );
-      if (deletion.kind !== "sent" && deletion.kind !== "unregistered") {
-        console.error("APNs channel left to delete", environment, outcome.channelId, deletion);
-        await retire(env, environment, outcome.channelId).run();
-      }
-      throw error;
-    }
-  }
-}
-
-/**
- * Broadcasts the new state and records it. A channel APNs no longer knows only records it,
- * dropped: its replacement starts from it.
- */
-async function publish(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
-  if (!isDropped(channel)) {
-    const outcome = await send(env, tokens, channel, "update", state, now);
-    if (outcome === "unregistered") {
-      // Dropped, whatever state an overlapping run stored since: a new channel replaces it at a
-      // next run while the race is still upcoming or live, and the row keeps the state for the
-      // end if the race is over first.
-      await env.DB.prepare(`UPDATE live_channels SET deleted_at = ?1 WHERE ${OPEN_CHANNEL}`)
-        .bind(now, channel.raceId, channel.environment, channel.channelId)
-        .run();
-    } else if (outcome !== "sent") {
-      return;
-    }
-  }
-  const stored = JSON.stringify(state);
-  const { meta } = await env.DB.prepare(
-    `UPDATE live_channels SET state = ?1, published_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`,
-  )
-    .bind(stored, channel.raceId, channel.environment, channel.channelId, channel.state, now)
-    .run();
-  if (meta.changes > 0) channel.state = stored;
-}
-
-/** An open channel APNs no longer knows, waiting for its replacement. */
-function isDropped(channel: ChannelRow): boolean {
-  return channel.endedAt === null && channel.deletedAt !== null;
-}
-
-/** The open row of the channel a run read. Binds ?2 to ?4. */
-const OPEN_CHANNEL = "race_id = ?2 AND environment = ?3 AND channel_id = ?4 AND ended_at IS NULL";
-
-/**
- * Cron runs can overlap: a run only changes the row it read, while it is still open
- * and holds the state it read, so an older run never overwrites a newer state or end.
- * Binds ?2 to ?5.
- */
-const UNCHANGED_OPEN_CHANNEL = `${OPEN_CHANNEL} AND state = ?5`;
-
-/**
- * Ends the channel with the final state, recorded before the end event is sent: an
- * overlapping run that stored a newer state since, like a race reinstated, keeps the
- * channel open. The app learns the final state from the row whether the broadcast goes
- * through or not.
- */
-async function end(env: Env, tokens: ProviderTokens, channel: ChannelRow, state: LiveState, now: number) {
-  const { meta } = await env.DB.prepare(
-    `UPDATE live_channels SET state = ?1, published_at = ?6, ended_at = ?6 WHERE ${UNCHANGED_OPEN_CHANNEL}`,
-  )
-    .bind(JSON.stringify(state), channel.raceId, channel.environment, channel.channelId, channel.state, now)
-    .run();
-  // A dropped channel, already unknown to APNs, has no subscriber left to tell.
-  if (meta.changes === 0 || isDropped(channel)) return;
-  await sendEnd(env, tokens, { ...channel, state: JSON.stringify(state), endedAt: now, endSentAt: null }, now);
-}
-
-/** The ended row a run read, not the open one an overlapping run may have replaced it with. Binds ?2 to ?4. */
-const SAME_ENDED_CHANNEL = "race_id = ?2 AND environment = ?3 AND channel_id = ?4 AND ended_at IS NOT NULL";
-
-/**
- * Sends the end, then again for devices that were offline, and retires the channel once
- * the grace period is over. The row stays, marked deleted, for the app to learn the final state.
- */
-async function sendEnd(env: Env, tokens: ProviderTokens, channel: ChannelRow, now: number) {
-  const markDeleted = () =>
-    env.DB.prepare(`UPDATE live_channels SET deleted_at = ?1 WHERE ${SAME_ENDED_CHANNEL}`).bind(
-      now,
-      channel.raceId,
-      channel.environment,
-      channel.channelId,
-    );
-  if (now - (channel.endedAt ?? now) >= END_GRACE_MS) {
-    await env.DB.batch([retire(env, channel.environment, channel.channelId), markDeleted()]);
-    return;
-  }
-  // An end never sent goes at once.
-  if (channel.endSentAt !== null && now - channel.endSentAt < END_RESEND_INTERVAL_MS) return;
-  const outcome = await send(env, tokens, channel, "end", JSON.parse(channel.state) as LiveState, now);
-  if (outcome === "deferred") return;
-  if (outcome === "unregistered") {
-    await markDeleted().run();
-    return;
-  }
-  // Tried: a failing end goes behind the others, which it can't hold back.
-  await env.DB.prepare(
-    `UPDATE live_channels SET attempted_at = ?1, end_sent_at = COALESCE(?5, end_sent_at) WHERE ${SAME_ENDED_CHANNEL}`,
-  )
-    .bind(now, channel.raceId, channel.environment, channel.channelId, outcome === "sent" ? now : null)
-    .run();
-}
-
-/** Drops an ended channel's row, for a new channel to open, and retires the channel if APNs still has it. */
-async function replace(env: Env, channel: ChannelRow) {
-  const deleteRow = env.DB.prepare(
-    "DELETE FROM live_channels WHERE race_id = ?1 AND environment = ?2 AND channel_id = ?3",
-  ).bind(channel.raceId, channel.environment, channel.channelId);
-  await env.DB.batch(
-    channel.deletedAt === null ? [retire(env, channel.environment, channel.channelId), deleteRow] : [deleteRow],
-  );
-}
-
-/** Queues a channel for its deletion at APNs (`deleteRetiredChannels`). */
-function retire(env: Env, environment: APNsEnvironment, channelId: string) {
-  return env.DB.prepare(
-    "INSERT INTO retired_channels (environment, channel_id) VALUES (?1, ?2) ON CONFLICT DO NOTHING",
-  ).bind(environment, channelId);
-}
-
-/**
- * Deletes a few retired channels at APNs, the least recently attempted first: failed
- * deletions are retried at later runs without starving the races or the other channels.
- */
-async function deleteRetiredChannels(env: Env, tokens: ProviderTokens, now: number) {
-  const { results } = await env.DB.prepare(
-    "SELECT environment, channel_id AS channelId FROM retired_channels ORDER BY attempted_at LIMIT ?1",
-  )
-    .bind(MAX_CHANNEL_DELETIONS_PER_RUN)
-    .all<{ environment: APNsEnvironment; channelId: string }>();
-  for (const { environment, channelId } of results) {
-    const deletion = await tokens.send(environment, (token) =>
-      deleteChannel(environment, env.APNS_TOPIC, channelId, token),
-    );
-    if (deletion.kind === "sent" || deletion.kind === "unregistered") {
-      await env.DB.prepare("DELETE FROM retired_channels WHERE environment = ?1 AND channel_id = ?2")
-        .bind(environment, channelId)
-        .run();
-      continue;
-    }
-    if (deletion.kind !== "deferred") console.error("APNs channel deletion failed", environment, channelId, deletion);
-    await env.DB.prepare("UPDATE retired_channels SET attempted_at = ?3 WHERE environment = ?1 AND channel_id = ?2")
-      .bind(environment, channelId, now)
-      .run();
-  }
-}
-
 /** The `timestamp` of an ActivityKit push, in seconds since 1970, from a time in milliseconds. */
-function broadcastTimestamp(ms: number): number {
+export function broadcastTimestamp(ms: number): number {
   return Math.floor(ms / 1000);
 }
 
 /**
- * Broadcasts an ActivityKit event; "unregistered" when APNs no longer knows the channel,
- * "deferred" when the run has no subrequest left.
+ * Hands each race the calendar lists to its Durable Object (`RaceActivity`), all at once, with
+ * the run's APNs provider tokens: objects signing their own at once would renew them more often
+ * than the 20 minutes APNs accepts. A race whose update fails is logged, and tried again by its
+ * object's alarm.
  */
-async function send(
+export async function syncLiveActivities(
   env: Env,
-  tokens: ProviderTokens,
-  channel: ChannelRow,
-  event: "update" | "end",
-  state: LiveState,
+  races: RaceSnapshot[],
   now: number,
-): Promise<"sent" | "unregistered" | "deferred" | "failed"> {
-  const payload = {
-    aps: {
-      timestamp: broadcastTimestamp(now),
-      event,
-      "relevance-score": relevanceScore(state),
-      "content-state": state,
-    },
-  };
-  const outcome = await tokens.send(channel.environment, (token) =>
-    broadcast(
-      { environment: channel.environment, bundleId: env.APNS_TOPIC, channelId: channel.channelId, payload },
-      token,
-    ),
+  tokens: ProviderTokens,
+): Promise<void> {
+  if (races.length === 0) return;
+  const providerTokens = await givenTokens(tokens);
+  const updates = await Promise.allSettled(
+    races.map((race) => env.RACE_ACTIVITY.getByName(race.id).sync(race, now, providerTokens)),
   );
-  if (outcome.kind === "sent" || outcome.kind === "unregistered" || outcome.kind === "deferred") return outcome.kind;
-  console.error("APNs broadcast failed", channel.raceId, channel.environment, outcome);
-  return "failed";
+  updates.forEach((update, index) => {
+    if (update.status === "rejected")
+      console.error("Live Activity update failed", races[index]!.id, String(update.reason));
+  });
+}
+
+/**
+ * The run's provider tokens, for the objects. One that can't be loaded, like a broken APNs key,
+ * is left out: its environment's requests then fail in each object, without holding up the other's.
+ */
+export async function givenTokens(tokens: ProviderTokens): Promise<ProviderTokenSet> {
+  const given: ProviderTokenSet = {};
+  for (const environment of ENVIRONMENTS) {
+    try {
+      given[environment] = await tokens.token(environment);
+    } catch (error) {
+      console.error("APNs provider token unavailable", environment, String(error));
+    }
+  }
+  return given;
 }
 
 /**
