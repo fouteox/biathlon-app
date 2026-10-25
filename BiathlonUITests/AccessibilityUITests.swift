@@ -11,7 +11,7 @@ final class AccessibilityUITests: XCTestCase {
     /// Data comes from the network.
     private static let timeout: TimeInterval = 30
 
-    func testStandingsRowsReadAsOneElementWithTheirPoints() throws {
+    @MainActor func testStandingsRowsReadAsOneElementWithTheirPoints() throws {
         let app = launch()
         app.tabBars.buttons["Standings"].tap()
         assertRowsReadAsOneElement(in: app)
@@ -28,7 +28,7 @@ final class AccessibilityUITests: XCTestCase {
     }
 
     /// The photo says nothing the name beside it doesn't: VoiceOver skips it.
-    func testAthleteScreenReadsTheProfileAndEachResultAsOneElement() throws {
+    @MainActor func testAthleteScreenReadsTheProfileAndEachResultAsOneElement() throws {
         let app = launch()
         openFirstAthlete(in: app)
         let profile = firstRow(in: app)
@@ -37,7 +37,7 @@ final class AccessibilityUITests: XCTestCase {
         try app.performAccessibilityAudit(for: Self.auditTypes)
     }
 
-    func testCalendarAndEventRowsReadAsOneElement() throws {
+    @MainActor func testCalendarAndEventRowsReadAsOneElement() throws {
         let app = launch()
         app.tabBars.buttons["Calendar"].tap()
         assertRowsReadAsOneElement(in: app)
@@ -48,7 +48,7 @@ final class AccessibilityUITests: XCTestCase {
         try app.performAccessibilityAudit(for: Self.auditTypes)
     }
 
-    func testFavoriteRowsReadAsOneElement() throws {
+    @MainActor func testFavoriteRowsReadAsOneElement() throws {
         let app = launch()
         openFirstAthlete(in: app)
         let star = app.navigationBars.buttons["Add to favorites"]
@@ -66,25 +66,25 @@ final class AccessibilityUITests: XCTestCase {
         app.navigationBars.buttons["Remove from favorites"].tap()
     }
 
-    func testHomeRowsReadAsOneElement() throws {
+    @MainActor func testHomeRowsReadAsOneElement() throws {
         let app = launch()
         XCTAssertTrue(firstRow(in: app).waitForExistence(timeout: Self.timeout))
         assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
     }
 
-    private func launch() -> XCUIApplication {
+    @MainActor private func launch() -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
         app.launch()
         return app
     }
 
-    private func firstRow(in app: XCUIApplication) -> XCUIElement {
+    @MainActor private func firstRow(in app: XCUIApplication) -> XCUIElement {
         app.cells.firstMatch
     }
 
-    private func openFirstAthlete(in app: XCUIApplication) {
+    @MainActor private func openFirstAthlete(in app: XCUIApplication) {
         app.tabBars.buttons["Standings"].tap()
         let row = firstRow(in: app)
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
@@ -93,12 +93,12 @@ final class AccessibilityUITests: XCTestCase {
     }
 
     /// The athlete's team, from the button below the profile.
-    private func teamButton(in app: XCUIApplication, titled prefix: String) -> XCUIElement {
+    @MainActor private func teamButton(in app: XCUIApplication, titled prefix: String) -> XCUIElement {
         app.cells.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
     }
 
     /// The score reads with its unit, not as a bare number.
-    private func assertFirstRowReadsItsPoints(
+    @MainActor private func assertFirstRowReadsItsPoints(
         in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line
     ) {
         let row = firstRow(in: app)
@@ -108,7 +108,7 @@ final class AccessibilityUITests: XCTestCase {
 
     /// VoiceOver reads each visible row in one go: a row holds a single text or image element
     /// (none when the row is a link, which reads its label itself), beside its own buttons.
-    private func assertRowsReadAsOneElement(
+    @MainActor private func assertRowsReadAsOneElement(
         in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line
     ) {
         XCTAssertTrue(firstRow(in: app).waitForExistence(timeout: Self.timeout), file: file, line: line)

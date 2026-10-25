@@ -6,3 +6,7 @@ CODE_SIGN_STYLE = Automatic
 GENERATE_INFOPLIST_FILE = YES
 
 TEST_TARGET_NAME = Biathlon
+
+// XCTestCase's initializers are nonisolated: a MainActor default would clash with them, so the
+// tests and their helpers are marked @MainActor one by one, as XCUIApplication requires.
+SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated
