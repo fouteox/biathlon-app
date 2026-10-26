@@ -18,6 +18,9 @@ struct StandingsView: View {
                     ForEach(standings.rows) { row in
                         StandingRow(row: row)
                     }
+                } header: {
+                    // Says which standings the filters menu shows, with the title left as on the other tabs.
+                    Text("\(category.title) · \(Text(discipline.label))")
                 } footer: {
                     if loaded.isFallback {
                         Text(
@@ -31,7 +34,6 @@ struct StandingsView: View {
             .refreshable { await load() }
         }
         .navigationTitle("Standings")
-        .navigationSubtitle(Text("\(category.title) · \(Text(discipline.label))"))
         // The filters sit in a toolbar menu rather than a bar pinned under the title: a large title
         // under that bar's scroll edge effect showed blurred and flickered (FB21613303).
         .toolbar {
