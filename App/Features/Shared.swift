@@ -83,6 +83,50 @@ struct LoadableView<Value, Content: View>: View {
     }
 }
 
+/// How a list row lays out its columns. At the accessibility text sizes they
+/// stack, text above the secondary columns, so the text keeps the row's whole
+/// width (HIG Typography and Layout).
+enum RowColumns: Equatable {
+    case sideBySide
+    case stacked
+
+    init(_ size: DynamicTypeSize) {
+        self = size.isAccessibilitySize ? .stacked : .sideBySide
+    }
+
+    func layout(spacing: CGFloat?) -> AnyLayout {
+        switch self {
+        case .sideBySide: AnyLayout(HStackLayout(spacing: spacing))
+        case .stacked: AnyLayout(VStackLayout(alignment: .leading))
+        }
+    }
+
+    /// The alignment of a trailing column's lines: on the row's trailing edge
+    /// side by side, on the text above once stacked.
+    var trailingAlignment: HorizontalAlignment {
+        switch self {
+        case .sideBySide: .trailing
+        case .stacked: .leading
+        }
+    }
+}
+
+/// A row's columns, laid out for the current text size. The main text column
+/// takes the free width (`.frame(maxWidth: .infinity, alignment: .leading)`)
+/// rather than a `Spacer`, which would add height once the columns stack.
+struct RowStack<Content: View>: View {
+    /// The space between columns side by side.
+    var spacing: CGFloat?
+    @ViewBuilder let content: (RowColumns) -> Content
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    var body: some View {
+        let columns = RowColumns(dynamicTypeSize)
+        let layout = columns.layout(spacing: spacing)
+        layout { content(columns) }
+    }
+}
+
 /// What a first load shows: placeholder rows in the shape of the lists every screen holds,
 /// rather than a spinner on an empty screen. VoiceOver reads it as the spinner it replaces.
 private struct LoadingPlaceholder: View {
@@ -117,14 +161,14 @@ struct RaceRow: View {
     let race: Competition
 
     var body: some View {
-        HStack {
+        RowStack { _ in
             VStack(alignment: .leading, spacing: 2) {
                 Text(race.title).font(.headline)
                 RaceStart(race: race)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            Spacer()
+            .frame(maxWidth: .infinity, alignment: .leading)
             race.state.badge?.font(.caption.bold())
         }
     }
