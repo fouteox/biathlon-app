@@ -40,8 +40,12 @@ final class AccessibilityUITests: XCTestCase {
         openFirstAthlete(in: app)
         // The results load on their own, after the profile; once they show, the list on screen is
         // the athlete's, not the standings left behind.
-        let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Latest results")).firstMatch
+        let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Results")).firstMatch
         XCTAssertTrue(results.waitForExistence(timeout: Self.timeout))
+        // The first athlete of the standings has a rank in them, for the season the toolbar picks.
+        let standing = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "World Cup standings"))
+        XCTAssertTrue(standing.firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(Self.seasonPicker(in: app).exists)
         // The profile reads its texts and nothing else: the photo, or the symbol shown in its
         // place, adds no words of its own.
         let profile = try XCTUnwrap(Self.readElements(of: try firstRow(in: app).snapshot()).first)
@@ -58,11 +62,7 @@ final class AccessibilityUITests: XCTestCase {
         try app.performAccessibilityAudit(for: Self.auditTypes)
 
         // The last season is over: its events all have their schedule, whatever today's date.
-        // The season picker in the toolbar reads the season shown, such as "2026-27".
-        let season = app.navigationBars.buttons.matching(
-            NSPredicate(format: "label MATCHES %@", ".*20[0-9]{2}-[0-9]{2}")
-        )
-        .firstMatch
+        let season = Self.seasonPicker(in: app)
         let current = String(season.label.suffix(7))
         season.tap()
         app.buttons.matching(NSPredicate(format: "label == %@", Self.season(before: current))).firstMatch.tap()
@@ -157,6 +157,11 @@ final class AccessibilityUITests: XCTestCase {
         snapshot.children.flatMap { child in
             child.elementType == .other && child.label.isEmpty ? readElements(of: child) : [child]
         }
+    }
+
+    /// The season picker in the toolbar, which reads the season shown, such as "2026-27".
+    @MainActor private static func seasonPicker(in app: XCUIApplication) -> XCUIElement {
+        app.navigationBars.buttons.matching(NSPredicate(format: "label MATCHES %@", ".*20[0-9]{2}-[0-9]{2}")).firstMatch
     }
 
     /// "2025-26" for "2026-27".

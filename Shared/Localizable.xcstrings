@@ -451,22 +451,6 @@
         }
       }
     },
-    "Latest results": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Neueste Ergebnisse"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Derniers résultats"
-          }
-        }
-      }
-    },
     "Live": {
       "localizations": {
         "de": {
@@ -691,6 +675,38 @@
         }
       }
     },
+    "No World Cup results this season": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Weltcupergebnisse in dieser Saison"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun résultat en Coupe du monde cette saison"
+          }
+        }
+      }
+    },
+    "Not ranked": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht platziert"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Non classé"
+          }
+        }
+      }
+    },
     "Notifications": {
       "localizations": {
         "de": {
@@ -831,6 +847,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Général"
+          }
+        }
+      }
+    },
+    "Points": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Punkte"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Points"
           }
         }
       }
@@ -1385,6 +1417,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mondiaux"
+          }
+        }
+      }
+    },
+    "World Cup standings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weltcupwertung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Classement de la Coupe du monde"
           }
         }
       }

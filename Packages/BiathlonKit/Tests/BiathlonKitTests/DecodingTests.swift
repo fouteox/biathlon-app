@@ -81,6 +81,8 @@ struct DecodingTests {
         #expect(SeasonID.recent(3, now: date("2026-10-19T12:00:00Z")).map(\.rawValue) == ["2627", "2526", "2425"])
         #expect(SeasonID(rawValue: "2627").previous.rawValue == "2526")
         #expect(SeasonID(rawValue: "2627").displayName == "2026-27")
+        #expect(SeasonID(rawValue: "9899") < SeasonID(rawValue: "0001"))
+        #expect(SeasonID(rawValue: "0001").previous.rawValue == "9900")
     }
 
     /// Real IDs: `BT2425SWRLCP01` (Kontiolahti), `BT2425SWRLCH__` (Lenzerheide).

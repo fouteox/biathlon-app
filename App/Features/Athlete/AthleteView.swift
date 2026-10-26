@@ -7,14 +7,16 @@ struct AthleteView: View {
 
     @Environment(\.ibu) private var ibu
     @State private var bio = Loader<AthleteBio>()
-    /// Loaded on its own: the profile shows without waiting for it, and without it. Only the
-    /// World Cup, World Championships and Olympic races, which the rest of the app follows.
-    @State private var history = Loader<[AthleteResult]>()
+    /// Loaded on its own: the profile shows without waiting for it, and without it.
+    @State private var history = Loader<AthleteHistory>()
+    /// The season picked in the toolbar; until then, the one the history opens on.
+    @State private var pickedSeason: SeasonID?
+    /// The athlete's row in the season's overall standings, `nil` when they scored no points.
+    @State private var standing = Loader<CupRow?>()
     @ScaledMetric private var photoSize = 72.0
 
     var body: some View {
         LoadableView(state: bio.state, retry: load) { bio in
-            let results = history.state.value ?? []
             List {
                 Section {
                     RowStack(spacing: 16) { _ in
@@ -56,15 +58,31 @@ struct AthleteView: View {
                             subject: Nation.namedTitle(nation))
                     }
                 }
-                if !results.isEmpty {
-                    Section("Latest results") {
-                        ForEach(results.prefix(30)) { result in
+                if let history = history.state.value, let season {
+                    if case .loaded(let row) = standing.state {
+                        Section("World Cup standings") {
+                            if let row {
+                                LabeledContent("Overall", value: row.rank ?? "–")
+                                if let score = row.score {
+                                    LabeledContent("Points", value: score)
+                                }
+                            } else {
+                                Text("Not ranked").foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    Section("Results") {
+                        let results = history.results(in: season)
+                        if results.isEmpty {
+                            ContentUnavailableView("No World Cup results this season", systemImage: "list.number")
+                        }
+                        ForEach(results) { result in
                             RowStack { _ in
                                 VStack(alignment: .leading) {
                                     Text(RaceKind.title(ofRace: result.raceID ?? "", ibuName: result.competition ?? ""))
-                                    Text([result.place, result.season].compactMap(\.self).joined(separator: " · "))
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                    if let place = result.place {
+                                        Text(place).font(.caption).foregroundStyle(.secondary)
+                                    }
                                 }
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 RankText(rank: result.rank)
@@ -79,9 +97,41 @@ struct AthleteView: View {
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if let history = history.state.value {
+                Picker("Season", selection: seasonSelection(default: history.initialSeason)) {
+                    ForEach(history.seasons, id: \.self) { Text($0.displayName).tag($0) }
+                }
+            }
             FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.state.value?.nation)
         }
         .task { await load() }
+        // Only a new season shows the standing as loading.
+        .onChange(of: standingQuery) { standing.reset() }
+        .task(id: standingQuery) { await loadStanding() }
+    }
+
+    /// The season shown: the one picked, or the one the history opens on.
+    private var season: SeasonID? {
+        pickedSeason ?? history.state.value?.initialSeason
+    }
+
+    private func seasonSelection(default initial: SeasonID) -> Binding<SeasonID> {
+        Binding {
+            pickedSeason ?? initial
+        } set: {
+            pickedSeason = $0
+        }
+    }
+
+    /// The standing shown depends on the season and on the athlete's category, once both are known.
+    private var standingQuery: StandingQuery? {
+        guard let season, let category = bio.state.value?.gender?.category else { return nil }
+        return StandingQuery(season: season, category: category)
+    }
+
+    private struct StandingQuery: Hashable {
+        let season: SeasonID
+        let category: RaceCategory
     }
 
     /// Birthdates arrive at midnight UTC, so they are formatted in UTC.
@@ -94,8 +144,16 @@ struct AthleteView: View {
     private func load() async {
         async let bioLoad: Void = bio.load { try await ibu.athlete(id: athleteID) }
         async let historyLoad: Void = history.load {
-            try await ibu.athleteResults(id: athleteID).filter(\.isWorldCupCircuit)
+            AthleteHistory(results: try await ibu.athleteResults(id: athleteID), now: .now)
         }
-        _ = await (bioLoad, historyLoad)
+        async let standingLoad: Void = loadStanding()
+        _ = await (bioLoad, historyLoad, standingLoad)
+    }
+
+    private func loadStanding() async {
+        guard let query = standingQuery else { return }
+        await standing.load {
+            try await ibu.worldCupStanding(of: athleteID, category: query.category, season: query.season)
+        }
     }
 }

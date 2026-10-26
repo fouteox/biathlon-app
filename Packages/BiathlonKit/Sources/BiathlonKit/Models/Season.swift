@@ -1,7 +1,7 @@
 import Foundation
 
 /// IBU season ID, for example `2627` for the 2026-27 winter.
-public struct SeasonID: RawRepresentable, Hashable, Sendable, Codable, CustomStringConvertible {
+public struct SeasonID: RawRepresentable, Hashable, Comparable, Sendable, Codable, CustomStringConvertible {
     public let rawValue: String
 
     public init(rawValue: String) { self.rawValue = rawValue }
@@ -28,8 +28,17 @@ public struct SeasonID: RawRepresentable, Hashable, Sendable, Codable, CustomStr
     }
 
     public var previous: SeasonID {
-        let start = 2000 + (Int(rawValue.prefix(2)) ?? 0)
-        return SeasonID(start: start - 1)
+        SeasonID(start: start - 1)
+    }
+
+    /// The year the season starts: athletes' histories go back to the 1990s ("98/99").
+    private var start: Int {
+        let year = Int(rawValue.prefix(2)) ?? 0
+        return year < 50 ? 2000 + year : 1900 + year
+    }
+
+    public static func < (lhs: SeasonID, rhs: SeasonID) -> Bool {
+        lhs.start < rhs.start
     }
 
     /// `2026-27`
