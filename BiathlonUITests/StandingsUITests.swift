@@ -11,8 +11,10 @@ final class StandingsUITests: XCTestCase {
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
         let bars = [app.navigationBars.firstMatch, app.segmentedControls.firstMatch]
         let atRest = bars.map(\.frame)
+        print("DIAG at rest", app.debugDescription)
 
         list.swipeUp()
+        print("DIAG scrolled", app.debugDescription)
         XCTAssertEqual(bars.map(\.frame), atRest, "Scrolled down")
         list.swipeDown()
         list.swipeDown()
