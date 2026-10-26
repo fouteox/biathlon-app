@@ -47,6 +47,10 @@ struct StandingsView: View {
             .padding(.bottom, 8)
         }
         .navigationTitle("Standings")
+        // A collapsing large title would resize the bar above the filters, which moves the list,
+        // which moves the title again: near the top, the title and the filters flickered. Inline
+        // large keeps the title large at one height.
+        .toolbarTitleDisplayMode(.inlineLarge)
         // The task also runs again each time the screen reappears (back from an
         // athlete): it refreshes the list in place, so the scroll position stays.
         // Only a new filter shows the loading state.
