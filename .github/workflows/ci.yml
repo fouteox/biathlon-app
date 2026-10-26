@@ -49,12 +49,23 @@ jobs:
           # The image's newest iPhone simulator.
           device=$(xcrun simctl list devices available --json \
             | jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))] | last | .udid')
+          xcrun simctl boot "$device" || true
+          xcrun simctl bootstatus "$device"
+          xcrun simctl io "$device" recordVideo --codec=h264 --force "$RUNNER_TEMP/standings.mov" &
+          rec=$!
           xcodebuild test \
             -project Biathlon.xcodeproj \
             -scheme Biathlon \
             -destination "id=$device" \
             -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO | tee build.log
+            -only-testing:BiathlonUITests/StandingsUITests \
+            CODE_SIGNING_ALLOWED=NO | tee build.log || true
+          kill -INT $rec; wait $rec || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: standings-video
+          path: ${{ runner.temp }}/standings.mov
       # The concurrency and language settings come from Configs/*.xcconfig:
       # check that the compiler actually received them.
       - name: Check compiler settings
