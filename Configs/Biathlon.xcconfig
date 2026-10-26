@@ -11,3 +11,7 @@ CODE_SIGN_ENTITLEMENTS = Configs/Biathlon.entitlements
 // Cloudflare Worker base URL (see server/README.md); push alerts stay off while empty.
 // The double slash is escaped: xcconfig files treat // as the start of a comment.
 BIATHLON_SERVER_URL = https:/$()/biathlon-server.fouteox.workers.dev
+
+// Privacy policy page, linked from Settings > About and in App Store Connect (App Review 5.1.1).
+// The link stays hidden while empty. Same // escape as above.
+BIATHLON_PRIVACY_POLICY_URL =

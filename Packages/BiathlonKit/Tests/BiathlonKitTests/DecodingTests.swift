@@ -56,6 +56,24 @@ struct DecodingTests {
         #expect(bio.isDeceased)
     }
 
+    /// `GenderId` of `CISBios`: "M" for Sivert Guttorm Bakken, "W" for Julia Simon.
+    @Test(arguments: [("M", Gender.man), ("W", Gender.woman), ("X", nil)])
+    func athleteGender(id: String, gender: Gender?) throws {
+        let bio: AthleteBio = try decode(#"{"IBUId":"BTFRA20910199601","GenderId":"\#(id)"}"#)
+        #expect(bio.gender == gender)
+    }
+
+    /// As `CupResults?CupId=BT2526SWRLCP__SWNC` returns them: a nation's `IBUId` is its code.
+    @Test func nationsStandingsRowsAreNations() throws {
+        let cup: CupStandings = try decode(
+            #"{"Rows":[{"Rank":"1","IBUId":"SWE","Name":"Sweden","ShortName":"Sweden","Nat":"SWE","Score":"6815"}]}"#
+        )
+        let row = try #require(cup.rows.first)
+        #expect(row.isNation)
+        #expect(row.athleteID == nil)
+        #expect(row.nation == "SWE")
+    }
+
     @Test func seasonIDs() {
         #expect(SeasonID.containing(date("2026-10-19T12:00:00Z")).rawValue == "2627")
         #expect(SeasonID.containing(date("2027-03-01T12:00:00Z")).rawValue == "2627")

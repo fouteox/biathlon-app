@@ -77,6 +77,9 @@ struct SettingsView: View {
                 Link(destination: URL(string: "https://www.biathlonresults.com")!) {
                     LabeledContent("Data", value: "IBU Datacenter")
                 }
+                if let privacyPolicy = Bundle.main.privacyPolicyURL {
+                    Link("Privacy Policy", destination: privacyPolicy)
+                }
                 if let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String {
                     LabeledContent("Version", value: version)
                 }
@@ -96,10 +99,11 @@ struct SettingsView: View {
     }
 
     /// Apple recommends asking for permission in context, when the user turns a notification on.
+    /// `providesAppNotificationSettings` adds a button to this screen in Settings > Notifications.
     private func requestAuthorization() async {
         let center = UNUserNotificationCenter.current()
         do {
-            _ = try await center.requestAuthorization(options: [.alert, .sound])
+            _ = try await center.requestAuthorization(options: [.alert, .sound, .providesAppNotificationSettings])
         } catch {
             Logger.notifications.error("Authorization request failed: \(String(describing: error), privacy: .public)")
         }

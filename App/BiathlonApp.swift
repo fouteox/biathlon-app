@@ -11,6 +11,7 @@ struct BiathlonApp: App {
         WindowGroup {
             RootView()
                 .environment(appDelegate.settings)
+                .environment(appDelegate.settingsPresentation)
                 .environment(appDelegate.liveActivities)
                 .environment(appDelegate.liveActivityStarts)
                 .environment(\.ibu, appDelegate.client)
@@ -36,9 +37,11 @@ extension EnvironmentValues {
 
 struct RootView: View {
     @Environment(LiveActivityStarts.self) private var liveActivityStarts
+    @Environment(SettingsPresentation.self) private var settingsPresentation
     @Query private var favorites: [Favorite]
 
     var body: some View {
+        @Bindable var settingsPresentation = settingsPresentation
         TabView {
             Tab("Home", systemImage: "house") {
                 NavigationStack { HomeView().navigationDestinations() }
@@ -54,6 +57,10 @@ struct RootView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        // Here rather than in Home, so the system can open it whichever tab is selected.
+        .sheet(isPresented: $settingsPresentation.isPresented) {
+            NavigationStack { SettingsView() }
+        }
         // At launch, and whenever the favorites, the setting or the token change, wherever in
         // the app. A change cancels the sync still waiting, which coalesces quick successive ones.
         .task(id: registration) {

@@ -27,14 +27,16 @@ struct AthleteView: View {
                         }
                         .frame(width: photoSize, height: photoSize)
                         .clipShape(.circle)
+                        // The name beside it says who it is.
+                        .accessibilityHidden(true)
 
                         VStack(alignment: .leading, spacing: 4) {
                             Text(bio.fullName).font(.title3.bold())
                             if bio.isDeceased {
-                                Text("Deceased").foregroundStyle(.secondary)
+                                Text(.deceased(bio.gender)).foregroundStyle(.secondary)
                             }
                             if let nation = bio.nation {
-                                Text(Nation.titled(nation, nation: nation))
+                                Text(Nation.namedTitle(nation))
                             }
                             if let birthdate = bio.birthdate {
                                 Text(birthdate, format: Self.birthdateStyle)
@@ -44,12 +46,13 @@ struct AthleteView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .accessibilityElement(children: .combine)
                 }
                 if let nation = bio.nation {
                     Section {
                         FavoriteButton(
-                            kind: .nation, key: nation, name: nation, nation: nation,
-                            subject: Nation.titled(nation, nation: nation))
+                            kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation,
+                            subject: Nation.namedTitle(nation))
                     }
                 }
                 if !results.isEmpty {
@@ -65,6 +68,7 @@ struct AthleteView: View {
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 RankText(rank: result.rank)
                             }
+                            .accessibilityElement(children: .combine)
                         }
                     }
                 }

@@ -48,6 +48,7 @@ struct StandingsView: View {
             .padding(.bottom, 8)
         }
         .navigationTitle("Standings")
+        .modifier(PinnedNavigationBar())
         // The task also runs again each time the screen reappears (back from an
         // athlete): it refreshes the list in place, so the scroll position stays.
         // Only a new filter shows the loading state.
@@ -60,6 +61,19 @@ struct StandingsView: View {
 
     private func load() async {
         await loader.load { try await ibu.worldCupStandings(category: category, discipline: discipline, now: .now) }
+    }
+}
+
+/// On iOS 27 the navigation bar minimizes as this list scrolls, which shrinks the safe area the
+/// filters bar sits in: the list moves, the bar restores, and near the top the title and the
+/// filters flickered. The filters already stay pinned, so the bar above them stays too.
+private struct PinnedNavigationBar: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 27, *) {
+            content.toolbarMinimizationBehavior(.never, for: .navigationBar)
+        } else {
+            content
+        }
     }
 }
 
@@ -81,35 +95,41 @@ private struct StandingRow: View {
     @ScaledMetric(relativeTo: .headline) private var rankWidth = 36.0
 
     var body: some View {
-        let content = RowStack(spacing: 12) { _ in
-            HStack(spacing: 12) {
-                RankText(rank: row.rank).frame(width: rankWidth, alignment: .leading)
-                NationMark(code: row.isNation ? row.nation ?? row.name : row.nation)
-            }
-            HStack(spacing: 12) {
-                Text(row.shortName ?? row.name)
-                if row.bibColors.contains("yellow") {
-                    // The leader's bib is yellow: here the color is the information.
-                    Image(systemName: "tshirt.fill")
-                        .foregroundStyle(.yellow)
-                        .accessibilityLabel("Yellow bib")
+        let content = HStack(spacing: 12) {
+            // VoiceOver reads the standing in one go; the star stays a button of its own.
+            RowStack(spacing: 12) { _ in
+                HStack(spacing: 12) {
+                    RankText(rank: row.rank).frame(width: rankWidth, alignment: .leading)
+                    NationMark(code: row.isNation ? row.nation ?? row.name : row.nation)
+                }
+                HStack(spacing: 12) {
+                    Text(row.isNation ? Nation.localizedName(row.nation ?? row.name) : row.shortName ?? row.name)
+                    if row.bibColors.contains("yellow") {
+                        // The leader's bib is yellow: here the color is the information.
+                        Image(systemName: "tshirt.fill")
+                            .foregroundStyle(.yellow)
+                            .accessibilityLabel("Yellow bib")
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 12) {
+                    if let change = row.rankChange, change != 0 {
+                        Image(systemName: change < 0 ? "arrow.up" : "arrow.down")
+                            .font(.caption)
+                            .foregroundStyle(change < 0 ? .green : .red)
+                            .accessibilityLabel(change < 0 ? Text("Up") : Text("Down"))
+                    }
+                    if let score = row.score {
+                        Text(score)
+                            .font(.subheadline.monospacedDigit().bold())
+                            .accessibilityLabel(Int(score).map { Text("\($0) points") } ?? Text(score))
+                    }
                 }
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(spacing: 12) {
-                if let change = row.rankChange, change != 0 {
-                    Image(systemName: change < 0 ? "arrow.up" : "arrow.down")
-                        .font(.caption)
-                        .foregroundStyle(change < 0 ? .green : .red)
-                        .accessibilityLabel(change < 0 ? Text("Up") : Text("Down"))
-                }
-                if let score = row.score {
-                    Text(score).font(.subheadline.monospacedDigit().bold())
-                }
-                if row.isNation, let nation = row.nation {
-                    FavoriteButton(kind: .nation, key: nation, name: row.name, nation: nation)
-                        .labelStyle(.iconOnly)
-                }
+            .accessibilityElement(children: .combine)
+            if row.isNation, let nation = row.nation {
+                FavoriteButton(kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation)
+                    .labelStyle(.iconOnly)
             }
         }
         if let id = row.athleteID {

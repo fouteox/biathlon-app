@@ -36,7 +36,7 @@ public struct ServerClient: Sendable {
         switch status {
         case 200: return .open(try Self.decode(route) { try JSONDecoder().decode(LiveChannel.self, from: data) })
         case 404: return .notOpen
-        case 410: return .ended(try Self.decode(route) { try JSONDecoder().decode(Ended.self, from: data) }.state)
+        case 410: return .ended(try Self.decode(route) { try JSONDecoder().decode(LiveActivityEnd.self, from: data) })
         default: throw ServerError(status: status, body: data)
         }
     }
@@ -117,10 +117,6 @@ public struct ServerClient: Sendable {
         let attestation: String
         let challenge: String
     }
-
-    private struct Ended: Decodable {
-        let state: RaceLiveState
-    }
 }
 
 /// Failures of the notification server.
@@ -160,8 +156,34 @@ public enum LiveChannelLookup: Equatable, Sendable {
     case open(LiveChannel)
     /// The server has no channel for the race yet.
     case notOpen
-    /// The race's activity is over, with its final state.
-    case ended(RaceLiveState)
+    /// The race's activity is over.
+    case ended(LiveActivityEnd)
+}
+
+/// How a race's Live Activity ended, for an activity that missed the end the server sent.
+public struct LiveActivityEnd: Decodable, Equatable, Sendable {
+    public let finalState: RaceLiveState
+    /// When the Lock Screen stops showing `finalState`, the end's `dismissal-date`
+    /// (`dismissalDate` in `server/src/live.ts`): already past for a device that was offline long enough.
+    public let dismissalDate: Date
+
+    public init(finalState: RaceLiveState, dismissalDate: Date) {
+        self.finalState = finalState
+        self.dismissalDate = dismissalDate
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case finalState = "state"
+        case dismissalDate
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        finalState = try container.decode(RaceLiveState.self, forKey: .finalState)
+        // Seconds since 1970, like `LiveChannel.timestamp`; the decoder keeps the default
+        // `Date` strategy for `finalState`, ActivityKit's.
+        dismissalDate = Date(timeIntervalSince1970: try container.decode(TimeInterval.self, forKey: .dismissalDate))
+    }
 }
 
 /// A race's APNs broadcast channel, with the state last published on it: the channel stores no messages.
