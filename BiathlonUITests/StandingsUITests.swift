@@ -9,7 +9,10 @@ final class StandingsUITests: XCTestCase {
         app.openTab("Standings")
         let list = app.collectionViews.firstMatch
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
-        let bars = [app.navigationBars.firstMatch, app.segmentedControls.firstMatch]
+        let bars = [
+            app.navigationBars.firstMatch, app.navigationBars.staticTexts["Standings"],
+            app.segmentedControls.firstMatch,
+        ]
         let atRest = bars.map(\.frame)
 
         list.swipeUp()
