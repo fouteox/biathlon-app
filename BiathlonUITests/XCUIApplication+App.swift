@@ -2,7 +2,7 @@ import XCTest
 
 extension XCUIApplication {
     /// Data comes from the network.
-    static let dataTimeout: TimeInterval = 30
+    nonisolated static let dataTimeout: TimeInterval = 30
 
     /// The app in English, whatever the simulator's language, so tests find elements by label.
     @MainActor static func launchInEnglish() -> XCUIApplication {
