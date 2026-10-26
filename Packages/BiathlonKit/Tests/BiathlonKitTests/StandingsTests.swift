@@ -29,4 +29,21 @@ struct StandingsTests {
         #expect(standings.requestedSeason.rawValue == "2627")
         #expect(standings.isFallback)
     }
+
+    /// A nation's screen lists its athletes in the order of the standings, without the nation's own row.
+    @Test func athletesOfANation() throws {
+        let cup: CupStandings = try decode(
+            #"""
+            {"Rows":[{"Rank":"1","IBUId":"BTFRA1","Name":"A","Nat":"FRA"},{"Rank":"2","IBUId":"BTNOR1","Name":"B","Nat":"NOR"},
+             {"Rank":"3","IBUId":"BTFRA2","Name":"C","Nat":"FRA"},{"Rank":"1","IBUId":"FRA","Name":"France","Nat":"FRA"}]}
+            """#)
+        #expect(cup.athletes(of: "FRA").map(\.athleteID) == ["BTFRA1", "BTFRA2"])
+        #expect(cup.athletes(of: "SWE").isEmpty)
+    }
+
+    /// An athlete's standings are those of their gender.
+    @Test(arguments: [(Gender.man, RaceCategory.men), (.woman, .women)])
+    func standingsCategoryOfAGender(gender: Gender, category: RaceCategory) {
+        #expect(gender.category == category)
+    }
 }

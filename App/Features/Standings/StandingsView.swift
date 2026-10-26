@@ -1,11 +1,7 @@
 import BiathlonKit
-import SwiftData
 import SwiftUI
 
 struct StandingsView: View {
-    /// Standings exist for men and women only.
-    private static let categories: [RaceCategory] = [.men, .women]
-
     @Environment(\.ibu) private var ibu
     @State private var category = RaceCategory.men
     @State private var discipline = StandingsDiscipline.total
@@ -17,7 +13,7 @@ struct StandingsView: View {
             List {
                 Section {
                     ForEach(standings.rows) { row in
-                        StandingRow(row: row)
+                        StandingRow(row: row, category: category)
                     }
                 } header: {
                     // Says which standings the filters menu shows, with the title left as on the other tabs.
@@ -40,7 +36,7 @@ struct StandingsView: View {
         .toolbar {
             Menu("Filters", systemImage: "line.3.horizontal.decrease") {
                 Picker("Category", selection: $category) {
-                    ForEach(Self.categories) { Text($0.title).tag($0) }
+                    ForEach(RaceCategory.withStandings) { Text($0.title).tag($0) }
                 }
                 .pickerStyle(.inline)
                 Picker("Discipline", selection: $discipline) {
@@ -64,6 +60,11 @@ struct StandingsView: View {
     }
 }
 
+extension RaceCategory {
+    /// Standings exist for men and women only.
+    static let withStandings: [RaceCategory] = [.men, .women]
+}
+
 extension StandingsDiscipline {
     var label: LocalizedStringResource {
         switch self {
@@ -77,13 +78,16 @@ extension StandingsDiscipline {
     }
 }
 
-private struct StandingRow: View {
+/// A row of the World Cup standings, which opens its athlete or its nation.
+struct StandingRow: View {
     let row: CupRow
+    /// The standings' category, which a nation's screen opens on.
+    let category: RaceCategory
     @ScaledMetric(relativeTo: .headline) private var rankWidth = 36.0
 
     var body: some View {
-        let content = HStack(spacing: 12) {
-            // VoiceOver reads the standing in one go; the star stays a button of its own.
+        NavigationLink(value: route) {
+            // VoiceOver reads the standing in one go.
             RowStack(spacing: 12) { _ in
                 HStack(spacing: 12) {
                     RankText(rank: row.rank).frame(width: rankWidth, alignment: .leading)
@@ -114,15 +118,14 @@ private struct StandingRow: View {
                 }
             }
             .accessibilityElement(children: .combine)
-            if row.isNation, let nation = row.nation {
-                FavoriteButton(kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation)
-                    .labelStyle(.iconOnly)
-            }
         }
+    }
+
+    private var route: Route {
         if let id = row.athleteID {
-            NavigationLink(value: Route.athlete(id: id, name: row.name)) { content }
+            .athlete(id: id, name: row.name)
         } else {
-            content
+            .nation(code: row.nation ?? row.name, category: category)
         }
     }
 }
@@ -140,10 +143,9 @@ private struct StandingRow: View {
                 """#.utf8))
         NavigationStack {
             List {
-                ForEach(rows ?? []) { StandingRow(row: $0) }
+                ForEach(rows ?? []) { StandingRow(row: $0, category: .men) }
             }
         }
         .environment(\.dynamicTypeSize, .accessibility5)
-        .modelContainer(for: Favorite.self, inMemory: true)
     }
 #endif

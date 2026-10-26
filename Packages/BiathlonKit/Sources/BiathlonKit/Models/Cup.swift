@@ -37,6 +37,12 @@ public struct CupStandings: Decodable, Sendable {
         asOf = try c.decodeLooseString(forKey: .asOf)
         rows = try c.decodeIfPresent([CupRow].self, forKey: .rows) ?? []
     }
+
+    /// The rows of `nation`'s athletes, in the standings' order. The API lists a nation's
+    /// athletes nowhere else: its screen shows those who scored points.
+    public func athletes(of nation: String) -> [CupRow] {
+        rows.filter { !$0.isNation && $0.nation == nation }
+    }
 }
 
 public struct CupRow: Decodable, Identifiable, Hashable, Sendable {

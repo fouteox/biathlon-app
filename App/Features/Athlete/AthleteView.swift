@@ -35,9 +35,6 @@ struct AthleteView: View {
                             if bio.isDeceased {
                                 Text(.deceased(bio.gender)).foregroundStyle(.secondary)
                             }
-                            if let nation = bio.nation {
-                                Text(Nation.namedTitle(nation))
-                            }
                             if let birthdate = bio.birthdate {
                                 Text(birthdate, format: Self.birthdateStyle)
                                     .font(.subheadline)
@@ -49,7 +46,11 @@ struct AthleteView: View {
                     .accessibilityElement(children: .combine)
                 }
                 if let nation = bio.nation {
+                    // The nation opens on the athlete's standings, the men's when the IBU gives no gender.
                     Section {
+                        NavigationLink(
+                            Nation.namedTitle(nation),
+                            value: Route.nation(code: nation, category: bio.gender?.category ?? .men))
                         FavoriteButton(
                             kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation,
                             subject: Nation.namedTitle(nation))
