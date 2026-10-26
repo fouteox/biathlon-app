@@ -63,6 +63,9 @@ struct StandingsView: View {
     }
 }
 
+/// On iOS 27 the navigation bar minimizes as this list scrolls, which shrinks the safe area the
+/// filters bar sits in: the list moves, the bar restores, and near the top the title and the
+/// filters flickered. The filters already stay pinned, so the bar above them stays too.
 private struct PinnedNavigationBar: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 27, *) {
