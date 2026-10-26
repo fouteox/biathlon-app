@@ -1,24 +1,42 @@
 import XCTest
 
-/// The standings keep their filters pinned under the title while the list scrolls.
+/// The standings read like the other tabs: a large title, with their filters in the navigation bar.
 final class StandingsUITests: XCTestCase {
-    /// A title or a bar that changed with the scroll flickered near the top: a large title under the
-    /// filters' edge effect, or a bar whose height moved the list it sits above.
-    @MainActor func testTitleAndFiltersStayPutWhileTheListScrolls() {
+    /// A large title under a pinned filters bar showed blurred at the top of the list and flickered on
+    /// the way back up; an inline title fixed that but no longer matched the other tabs.
+    @MainActor func testTitleIsLargeLikeTheOtherTabsAndSettlesBackAtTheTop() {
         let app = XCUIApplication.launchInEnglish()
+        app.openTab("Calendar")
+        let calendarTitle = app.navigationBars.staticTexts["Calendar"]
+        XCTAssertTrue(calendarTitle.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        let largeTitleHeight = calendarTitle.frame.height
+
         app.openTab("Standings")
         let list = app.collectionViews.firstMatch
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
-        let bars = [
-            app.navigationBars.firstMatch, app.navigationBars.staticTexts["Standings"],
-            app.segmentedControls.firstMatch,
-        ]
-        let atRest = bars.map(\.frame)
+        let title = app.navigationBars.staticTexts["Standings"]
+        let atRest = title.frame
+        XCTAssertEqual(atRest.height, largeTitleHeight, "Large like the Calendar title")
 
         list.swipeUp()
-        XCTAssertEqual(bars.map(\.frame), atRest, "Scrolled down")
         list.swipeDown()
         list.swipeDown()
-        XCTAssertEqual(bars.map(\.frame), atRest, "Back at the top")
+        XCTAssertEqual(title.frame, atRest, "Back at the top")
+    }
+
+    /// The filters sit in a toolbar menu and the subtitle says which standings are shown.
+    @MainActor func testFiltersMenuChangesTheStandingsShownInTheSubtitle() {
+        let app = XCUIApplication.launchInEnglish()
+        app.openTab("Standings")
+        XCTAssertTrue(app.collectionViews.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        XCTAssertTrue(app.navigationBars.staticTexts["Men · Overall"].exists)
+
+        app.navigationBars.buttons["Filters"].tap()
+        app.buttons["Women"].tap()
+        XCTAssertTrue(app.navigationBars.staticTexts["Women · Overall"].waitForExistence(timeout: 5))
+
+        app.navigationBars.buttons["Filters"].tap()
+        app.buttons["Sprint"].tap()
+        XCTAssertTrue(app.navigationBars.staticTexts["Women · Sprint"].waitForExistence(timeout: 5))
     }
 }

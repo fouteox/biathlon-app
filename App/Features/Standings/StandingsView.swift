@@ -30,27 +30,22 @@ struct StandingsView: View {
             }
             .refreshable { await load() }
         }
-        // Filters live in system bars rather than a custom header, so the
-        // list scrolls under the glass with the scroll edge effect.
-        .safeAreaBar(edge: .top) {
-            HStack {
+        .navigationTitle("Standings")
+        .navigationSubtitle(Text("\(category.title) · \(Text(discipline.label))"))
+        // The filters sit in a toolbar menu rather than a bar pinned under the title: a large title
+        // under that bar's scroll edge effect showed blurred and flickered (FB21613303).
+        .toolbar {
+            Menu("Filters", systemImage: "line.3.horizontal.decrease") {
                 Picker("Category", selection: $category) {
                     ForEach(Self.categories) { Text($0.title).tag($0) }
                 }
-                .pickerStyle(.segmented)
+                .pickerStyle(.inline)
                 Picker("Discipline", selection: $discipline) {
                     ForEach(StandingsDiscipline.allCases) { Text($0.label).tag($0) }
                 }
-                .pickerStyle(.menu)
+                .pickerStyle(.inline)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
         }
-        .navigationTitle("Standings")
-        // A large title sits under the filters bar's scroll edge effect: it showed blurred at the
-        // top of the list and flickered on the way back up. Inline, it stays in the bar.
-        .toolbarTitleDisplayMode(.inline)
-        .modifier(PinnedNavigationBar())
         // The task also runs again each time the screen reappears (back from an
         // athlete): it refreshes the list in place, so the scroll position stays.
         // Only a new filter shows the loading state.
@@ -63,19 +58,6 @@ struct StandingsView: View {
 
     private func load() async {
         await loader.load { try await ibu.worldCupStandings(category: category, discipline: discipline, now: .now) }
-    }
-}
-
-/// On iOS 27 the navigation bar minimizes as this list scrolls: the title leaves the bar and the
-/// safe area the filters bar sits in shrinks, so the list moves under it. The filters already stay
-/// pinned, so the bar and its title above them stay too.
-private struct PinnedNavigationBar: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 27, *) {
-            content.toolbarMinimizationBehavior(.never, for: .navigationBar)
-        } else {
-            content
-        }
     }
 }
 
