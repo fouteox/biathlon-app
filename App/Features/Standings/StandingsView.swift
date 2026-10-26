@@ -47,6 +47,7 @@ struct StandingsView: View {
             .padding(.bottom, 8)
         }
         .navigationTitle("Standings")
+        .modifier(PinnedNavigationBar())
         // The task also runs again each time the screen reappears (back from an
         // athlete): it refreshes the list in place, so the scroll position stays.
         // Only a new filter shows the loading state.
@@ -59,6 +60,16 @@ struct StandingsView: View {
 
     private func load() async {
         await loader.load { try await ibu.worldCupStandings(category: category, discipline: discipline, now: .now) }
+    }
+}
+
+private struct PinnedNavigationBar: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 27, *) {
+            content.toolbarMinimizationBehavior(.never, for: .navigationBar)
+        } else {
+            content
+        }
     }
 }
 
