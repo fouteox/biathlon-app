@@ -51,7 +51,7 @@ jobs:
             | jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))] | last | .udid')
           xcrun simctl boot "$device" || true
           xcrun simctl bootstatus "$device"
-          xcrun simctl io "$device" recordVideo --codec=h264 --force "$RUNNER_TEMP/standings.mov" &
+          xcrun simctl io "$device" recordVideo --display=1 --codec=h264 --force "$RUNNER_TEMP/standings.mov" &
           rec=$!
           xcodebuild test \
             -project Biathlon.xcodeproj \
@@ -59,8 +59,9 @@ jobs:
             -destination "id=$device" \
             -derivedDataPath build \
             -only-testing:BiathlonUITests/StandingsUITests \
-            CODE_SIGNING_ALLOWED=NO | tee build.log || true
+            CODE_SIGNING_ALLOWED=NO | tee build.log && status=0 || status=$?
           kill -INT $rec; wait $rec || true
+          exit $status
       - uses: actions/upload-artifact@v4
         if: always()
         with:
