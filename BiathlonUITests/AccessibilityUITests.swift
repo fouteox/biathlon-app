@@ -8,12 +8,11 @@ final class AccessibilityUITests: XCTestCase {
     private static let auditTypes = XCUIAccessibilityAuditType.all.subtracting([
         .dynamicType, .textClipped, .contrast,
     ])
-    /// Data comes from the network.
-    private static let timeout: TimeInterval = 30
+    private static let timeout = XCUIApplication.dataTimeout
 
     @MainActor func testStandingsRowsReadAsOneElementWithTheirPoints() throws {
-        let app = launch()
-        Self.openTab("Standings", in: app)
+        let app = XCUIApplication.launchInEnglish()
+        app.openTab("Standings")
         try assertRowsReadAsOneElement(in: app)
         assertFirstRowReadsItsPoints(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
@@ -30,7 +29,7 @@ final class AccessibilityUITests: XCTestCase {
 
     /// The photo says nothing the name beside it doesn't: VoiceOver skips it.
     @MainActor func testAthleteScreenReadsTheProfileAndEachResultAsOneElement() throws {
-        let app = launch()
+        let app = XCUIApplication.launchInEnglish()
         openFirstAthlete(in: app)
         // The results load on their own, after the profile; once they show, the list on screen is
         // the athlete's, not the standings left behind.
@@ -46,8 +45,8 @@ final class AccessibilityUITests: XCTestCase {
     }
 
     @MainActor func testCalendarAndEventRowsReadAsOneElement() throws {
-        let app = launch()
-        Self.openTab("Calendar", in: app)
+        let app = XCUIApplication.launchInEnglish()
+        app.openTab("Calendar")
         try assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
 
@@ -67,7 +66,7 @@ final class AccessibilityUITests: XCTestCase {
     }
 
     @MainActor func testFavoriteRowsReadAsOneElement() throws {
-        let app = launch()
+        let app = XCUIApplication.launchInEnglish()
         openFirstAthlete(in: app)
         let star = app.navigationBars.buttons["Add to favorites"]
         XCTAssertTrue(star.waitForExistence(timeout: Self.timeout))
@@ -75,7 +74,7 @@ final class AccessibilityUITests: XCTestCase {
         // Leaves the favorites as they were for the next run, even when a step below fails: the
         // store persists on the simulator.
         addTeardownBlock { @MainActor in
-            Self.openTab("Standings", in: app)
+            app.openTab("Standings")
             for remove in [
                 Self.teamButton(in: app, titled: "Remove "), app.navigationBars.buttons["Remove from favorites"],
             ] where remove.exists {
@@ -87,23 +86,16 @@ final class AccessibilityUITests: XCTestCase {
         XCTAssertTrue(team.waitForExistence(timeout: Self.timeout))
         team.tap()
 
-        Self.openTab("Favorites", in: app)
+        app.openTab("Favorites")
         try assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
     }
 
     @MainActor func testHomeRowsReadAsOneElement() throws {
-        let app = launch()
+        let app = XCUIApplication.launchInEnglish()
         XCTAssertTrue(firstRow(in: app).waitForExistence(timeout: Self.timeout))
         try assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
-    }
-
-    @MainActor private func launch() -> XCUIApplication {
-        let app = XCUIApplication()
-        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
-        app.launch()
-        return app
     }
 
     @MainActor private func firstRow(in app: XCUIApplication) -> XCUIElement {
@@ -111,7 +103,7 @@ final class AccessibilityUITests: XCTestCase {
     }
 
     @MainActor private func openFirstAthlete(in app: XCUIApplication) {
-        Self.openTab("Standings", in: app)
+        app.openTab("Standings")
         let row = firstRow(in: app)
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
         row.tap()
@@ -158,12 +150,5 @@ final class AccessibilityUITests: XCTestCase {
     private static func season(before season: String) -> String {
         let start = Int(season.prefix(4)) ?? 0
         return "\(start - 1)-\(String(start).suffix(2))"
-    }
-
-    /// Tab bar items are buttons, whatever the tab bar shows as on this iOS version.
-    @MainActor private static func openTab(_ title: String, in app: XCUIApplication) {
-        let tab = app.buttons[title].firstMatch
-        XCTAssertTrue(tab.waitForExistence(timeout: timeout))
-        tab.tap()
     }
 }
