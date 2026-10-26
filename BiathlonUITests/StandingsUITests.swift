@@ -9,6 +9,7 @@ final class StandingsUITests: XCTestCase {
         app.openTab("Calendar")
         let calendarTitle = app.navigationBars.staticTexts["Calendar"]
         XCTAssertTrue(calendarTitle.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        print("DIAG calendar\n\(app.navigationBars.firstMatch.debugDescription)")
         let largeTitleHeight = calendarTitle.frame.height
 
         app.openTab("Standings")
@@ -16,6 +17,7 @@ final class StandingsUITests: XCTestCase {
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
         let title = app.navigationBars.staticTexts["Standings"]
         let atRest = title.frame
+        print("DIAG standings\n\(app.debugDescription)")
         XCTAssertEqual(atRest.height, largeTitleHeight, "Large like the Calendar title")
 
         list.swipeUp()
@@ -29,13 +31,14 @@ final class StandingsUITests: XCTestCase {
         let app = XCUIApplication.launchInEnglish()
         app.openTab("Standings")
         XCTAssertTrue(app.collectionViews.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        print("DIAG filters\n\(app.debugDescription)")
         XCTAssertTrue(app.navigationBars.staticTexts["Men · Overall"].exists)
 
-        app.navigationBars.buttons["Filters"].tap()
+        app.buttons["Filters"].tap()
         app.buttons["Women"].tap()
         XCTAssertTrue(app.navigationBars.staticTexts["Women · Overall"].waitForExistence(timeout: 5))
 
-        app.navigationBars.buttons["Filters"].tap()
+        app.buttons["Filters"].tap()
         app.buttons["Sprint"].tap()
         XCTAssertTrue(app.navigationBars.staticTexts["Women · Sprint"].waitForExistence(timeout: 5))
     }
