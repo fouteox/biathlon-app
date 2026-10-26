@@ -14,16 +14,16 @@ final class AccessibilityUITests: XCTestCase {
         let app = XCUIApplication.launchInEnglish()
         app.openTab("Standings")
         try assertRowsReadAsOneElement(in: app)
-        assertFirstRowReadsItsPoints(in: app)
+        assertFirstStandingReadsItsPoints(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
 
-        // A menu picker reads its title and its value: "Discipline, Overall".
-        app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Discipline")).firstMatch.tap()
+        // The discipline picker sits in the toolbar's filters menu.
+        app.buttons["Filters"].tap()
         app.buttons["Nations"].tap()
         // The star stays a button of its own beside the nation it adds.
-        XCTAssertTrue(firstRow(in: app).buttons["Add to favorites"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(firstStanding(in: app).buttons["Add to favorites"].waitForExistence(timeout: Self.timeout))
         try assertRowsReadAsOneElement(in: app)
-        assertFirstRowReadsItsPoints(in: app)
+        assertFirstStandingReadsItsPoints(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
     }
 
@@ -102,9 +102,15 @@ final class AccessibilityUITests: XCTestCase {
         app.cells.firstMatch
     }
 
+    /// The standings' first row: the list's header, which names the standings shown, comes before it
+    /// as a cell of its own.
+    @MainActor private func firstStanding(in app: XCUIApplication) -> XCUIElement {
+        app.cells.containing(.button, identifier: nil).firstMatch
+    }
+
     @MainActor private func openFirstAthlete(in app: XCUIApplication) {
         app.openTab("Standings")
-        let row = firstRow(in: app)
+        let row = firstStanding(in: app)
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
         row.tap()
         XCTAssertTrue(app.navigationBars.buttons["Add to favorites"].waitForExistence(timeout: Self.timeout))
@@ -116,10 +122,10 @@ final class AccessibilityUITests: XCTestCase {
     }
 
     /// The score reads with its unit, not as a bare number.
-    @MainActor private func assertFirstRowReadsItsPoints(
+    @MainActor private func assertFirstStandingReadsItsPoints(
         in app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line
     ) {
-        let row = firstRow(in: app)
+        let row = firstStanding(in: app)
         let points = row.descendants(matching: .any).matching(NSPredicate(format: "label CONTAINS %@", " points"))
         XCTAssertTrue(points.firstMatch.exists, row.debugDescription, file: file, line: line)
     }
