@@ -47,6 +47,9 @@ struct StandingsView: View {
             .padding(.bottom, 8)
         }
         .navigationTitle("Standings")
+        // A large title sits under the filters bar's scroll edge effect: it showed blurred at the
+        // top of the list and flickered on the way back up. Inline, it stays in the bar.
+        .toolbarTitleDisplayMode(.inline)
         .modifier(PinnedNavigationBar())
         // The task also runs again each time the screen reappears (back from an
         // athlete): it refreshes the list in place, so the scroll position stays.
@@ -63,9 +66,9 @@ struct StandingsView: View {
     }
 }
 
-/// On iOS 27 the navigation bar minimizes as this list scrolls, which shrinks the safe area the
-/// filters bar sits in: the list moves, the bar restores, and near the top the title and the
-/// filters flickered. The filters already stay pinned, so the bar above them stays too.
+/// On iOS 27 the navigation bar minimizes as this list scrolls: the title leaves the bar and the
+/// safe area the filters bar sits in shrinks, so the list moves under it. The filters already stay
+/// pinned, so the bar and its title above them stay too.
 private struct PinnedNavigationBar: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 27, *) {
