@@ -5,6 +5,8 @@ import SwiftUI
 enum Route: Hashable {
     case event(BiathlonEvent)
     case race(Competition)
+    /// A race known by its ID alone, such as an athlete's result, with its title.
+    case raceID(String, title: String)
     case athlete(id: String, name: String)
     /// A nation's athletes in the standings of `category`.
     case nation(code: String, category: RaceCategory)
@@ -16,6 +18,7 @@ extension View {
             switch route {
             case .event(let event): EventView(event: event)
             case .race(let race): RaceView(race: race)
+            case .raceID(let id, let title): RaceByIDView(raceID: id, title: title)
             case .athlete(let id, let name): AthleteView(athleteID: id, name: name)
             case .nation(let code, let category): NationView(nation: code, category: category)
             }
