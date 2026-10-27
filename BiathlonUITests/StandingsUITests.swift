@@ -44,25 +44,24 @@ final class StandingsUITests: XCTestCase {
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 
-    /// The seasons go back to the first World Cup, 1977-78, whose men's standings the IBU holds
-    /// (`CupResults?CupId=BT7778SWRLCP__SMTS`).
-    @MainActor func testSeasonPickerGoesBackToTheFirstWorldCup() {
+    /// A past season keeps the category. How far back the seasons go is `SeasonID.since`'s, which
+    /// BiathlonKit tests: a menu shows only the seasons it has room for, and a swipe closes it.
+    @MainActor func testSeasonPickerShowsAPastSeason() {
         let app = XCUIApplication.launchInEnglish()
         app.openTab("Standings")
         let list = app.collectionViews.firstMatch
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        app.navigationBars.buttons["category"].tap()
+        app.buttons["Women"].tap()
 
         app.navigationBars.buttons["season"].tap()
-        // The menu only holds the seasons it shows: it scrolls down to the oldest.
-        let seasons = app.buttons.matching(NSPredicate(format: "label MATCHES %@", "[0-9]{4}-[0-9]{2}"))
-        let oldest = seasons["1977-78"]
-        for _ in 0..<20 where !oldest.exists {
-            // The menu also lists, off screen, a few seasons past those it shows.
-            seasons.allElementsBoundByIndex.last(where: \.isHittable)?.swipeUp()
-        }
-        oldest.tap()
-        XCTAssertTrue(Self.picker("season", in: app, shows: "1977-78").waitForExistence(timeout: 5))
-        XCTAssertTrue(Self.picker("category", in: app, shows: "Men").exists)
+        // Two seasons before the current one: always over, with its standings.
+        let past = app.buttons.matching(NSPredicate(format: "label MATCHES %@", "[0-9]{4}-[0-9]{2}")).element(
+            boundBy: 2)
+        let name = past.label
+        past.tap()
+        XCTAssertTrue(Self.picker("season", in: app, shows: name).waitForExistence(timeout: 5))
+        XCTAssertTrue(Self.picker("category", in: app, shows: "Women").exists)
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 
