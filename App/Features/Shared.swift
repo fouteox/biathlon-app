@@ -216,7 +216,10 @@ struct RaceRow: View {
 struct RaceStart: View {
     let race: Competition
 
+    /// With the year, since the calendar goes back to 1957-58.
+    static let format = Date.FormatStyle.dateTime.weekday(.wide).day().month().year().hour().minute()
+
     var body: some View {
-        Text(race.startTime, format: .dateTime.weekday(.wide).day().month().hour().minute())
+        Text(race.startTime, format: Self.format)
     }
 }
