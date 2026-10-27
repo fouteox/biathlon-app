@@ -20,8 +20,15 @@ final class AccessibilityUITests: XCTestCase {
         // The discipline picker sits in the toolbar's filters menu.
         app.buttons["Filters"].tap()
         app.buttons["Nations"].tap()
-        // The star stays a button of its own beside the nation it adds.
-        XCTAssertTrue(firstStanding(in: app).buttons["Add to favorites"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.collectionViews.staticTexts["Men · Nations"].waitForExistence(timeout: Self.timeout))
+        try assertRowsReadAsOneElement(in: app)
+        assertFirstStandingReadsItsPoints(in: app)
+        try app.performAccessibilityAudit(for: Self.auditTypes)
+
+        // A nation opens on its athletes in the overall standings, with its star in the toolbar.
+        firstStanding(in: app).tap()
+        XCTAssertTrue(app.navigationBars.buttons["Add to favorites"].waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(app.collectionViews.staticTexts["Men · Overall"].waitForExistence(timeout: Self.timeout))
         try assertRowsReadAsOneElement(in: app)
         assertFirstStandingReadsItsPoints(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)

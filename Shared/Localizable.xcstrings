@@ -627,6 +627,22 @@
         }
       }
     },
+    "No athletes in the standings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Athleten in der Wertung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun athlète au classement"
+          }
+        }
+      }
+    },
     "No favorites": {
       "localizations": {
         "de": {
@@ -1193,6 +1209,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Équipes"
+          }
+        }
+      }
+    },
+    "The athletes who scored World Cup points in %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Athletinnen und Athleten mit Weltcuppunkten in der Saison %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Les athlètes ayant marqué des points en Coupe du monde en %@."
           }
         }
       }

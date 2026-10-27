@@ -6,6 +6,8 @@ enum Route: Hashable {
     case event(BiathlonEvent)
     case race(Competition)
     case athlete(id: String, name: String)
+    /// A nation's athletes in the standings of `category`.
+    case nation(code: String, category: RaceCategory)
 }
 
 extension View {
@@ -15,6 +17,7 @@ extension View {
             case .event(let event): EventView(event: event)
             case .race(let race): RaceView(race: race)
             case .athlete(let id, let name): AthleteView(athleteID: id, name: name)
+            case .nation(let code, let category): NationView(nation: code, category: category)
             }
         }
     }

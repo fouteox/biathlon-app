@@ -112,7 +112,9 @@ struct FavoritesView: View {
         switch favorite.kind {
         case .athlete:
             NavigationLink(value: Route.athlete(id: favorite.key, name: favorite.name)) { label }
-        case .nation, nil:
+        case .nation:
+            NavigationLink(value: Route.nation(code: favorite.key, category: .men)) { label }
+        case nil:
             label
         }
     }

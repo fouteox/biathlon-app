@@ -47,6 +47,14 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
 public enum Gender: String, Sendable {
     case man = "M"
     case woman = "W"
+
+    /// The category of the athlete's standings.
+    public var category: RaceCategory {
+        switch self {
+        case .man: .men
+        case .woman: .women
+        }
+    }
 }
 
 /// One row of `AllResults?IBUId=`: an athlete's history.
