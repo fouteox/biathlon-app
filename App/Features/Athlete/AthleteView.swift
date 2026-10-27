@@ -65,9 +65,12 @@ struct AthleteView: View {
                     if case .loaded(let row) = standing.state {
                         Section("World Cup standings") {
                             if let row {
+                                // A labeled row otherwise also exposes its label on its own.
                                 LabeledContent("Overall", value: row.rank ?? "–")
+                                    .accessibilityElement(children: .combine)
                                 if let score = row.score {
                                     LabeledContent("Points", value: score)
+                                        .accessibilityElement(children: .combine)
                                 }
                             } else {
                                 Text("Not ranked").foregroundStyle(.secondary)
