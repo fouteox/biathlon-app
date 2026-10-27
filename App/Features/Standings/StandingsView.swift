@@ -5,6 +5,8 @@ struct StandingsView: View {
     @Environment(\.ibu) private var ibu
     @State private var category = RaceCategory.men
     @State private var discipline = StandingsDiscipline.total
+    /// The season picked in the filters; until then, the one the standings open on.
+    @State private var pickedSeason: SeasonID?
     @State private var loader = Loader<SeasonStandings>()
 
     var body: some View {
@@ -17,7 +19,7 @@ struct StandingsView: View {
                     }
                 } header: {
                     // Says which standings the filters menu shows, with the title left as on the other tabs.
-                    Text("\(category.title) · \(Text(discipline.label))")
+                    Text("\(category.title) · \(Text(discipline.label)) · \(loaded.season.displayName)")
                 } footer: {
                     if loaded.isFallback {
                         Text(
@@ -29,6 +31,15 @@ struct StandingsView: View {
                 }
             }
             .refreshable { await load() }
+            .overlay {
+                // A season picked before its first race.
+                if standings.rows.isEmpty {
+                    ContentUnavailableView(
+                        "No standings yet", systemImage: "list.number",
+                        description: Text(
+                            "The \(loaded.season.displayName) standings will appear after the first race."))
+                }
+            }
         }
         .navigationTitle("Standings")
         // The filters sit in a toolbar menu rather than a bar pinned under the title: a large title
@@ -43,6 +54,10 @@ struct StandingsView: View {
                     ForEach(StandingsDiscipline.allCases) { Text($0.label).tag($0) }
                 }
                 .pickerStyle(.inline)
+                SeasonPicker(
+                    seasons: SeasonID.pickable, selection: Binding(picked: $pickedSeason, opening: openingSeason)
+                )
+                .pickerStyle(.inline)
             }
         }
         // The task also runs again each time the screen reappears (back from an
@@ -52,11 +67,22 @@ struct StandingsView: View {
         .task(id: filters) { await load() }
     }
 
-    /// The standings shown depend on both pickers.
-    private var filters: [String] { [category.rawValue, discipline.rawValue] }
+    /// The standings shown depend on every picker.
+    private var filters: [String?] { [category.rawValue, discipline.rawValue, pickedSeason?.rawValue] }
+
+    /// The season shown until one is picked: the current one, or the previous before its first race.
+    private var openingSeason: SeasonID {
+        loader.state.value?.season ?? .containing(.now)
+    }
 
     private func load() async {
-        await loader.load { try await ibu.worldCupStandings(category: category, discipline: discipline, now: .now) }
+        await loader.load {
+            if let pickedSeason {
+                try await ibu.worldCupStandings(category: category, discipline: discipline, season: pickedSeason)
+            } else {
+                try await ibu.worldCupStandings(category: category, discipline: discipline, now: .now)
+            }
+        }
     }
 }
 

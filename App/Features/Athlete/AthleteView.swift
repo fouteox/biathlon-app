@@ -41,9 +41,16 @@ struct AthleteView: View {
                                 Text(.deceased(bio.gender)).foregroundStyle(.secondary)
                             }
                             if let birthdate = bio.birthdate {
-                                Text(birthdate, format: Self.birthdateStyle)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                Group {
+                                    let date = Text(birthdate, format: Self.birthdateStyle)
+                                    if let age = bio.age(on: .now) {
+                                        Text("\(date) · \(Text("\(age) years old"))")
+                                    } else {
+                                        date
+                                    }
+                                }
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -104,9 +111,8 @@ struct AthleteView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let history = history.state.value {
-                Picker("Season", selection: seasonSelection(default: history.initialSeason)) {
-                    ForEach(history.seasons, id: \.self) { Text($0.displayName).tag($0) }
-                }
+                SeasonPicker(
+                    seasons: history.seasons, selection: Binding(picked: $pickedSeason, opening: history.initialSeason))
             }
             FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.state.value?.nation)
         }
@@ -119,14 +125,6 @@ struct AthleteView: View {
     /// The season shown: the one picked, or the one the history opens on.
     private var season: SeasonID? {
         pickedSeason ?? history.state.value?.initialSeason
-    }
-
-    private func seasonSelection(default initial: SeasonID) -> Binding<SeasonID> {
-        Binding {
-            pickedSeason ?? initial
-        } set: {
-            pickedSeason = $0
-        }
     }
 
     /// The standing shown depends on the season and on the athlete's category, once both are known.

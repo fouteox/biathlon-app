@@ -42,6 +42,43 @@ extension LocalizedStringResource {
     }
 }
 
+extension SeasonID {
+    /// The seasons the calendar and the standings offer: the current one and the four before it.
+    static var pickable: [SeasonID] { recent(5, now: .now) }
+}
+
+/// The picker of the season a screen shows.
+struct SeasonPicker: View {
+    let seasons: [SeasonID]
+    @Binding var selection: SeasonID
+
+    var body: some View {
+        Picker("Season", selection: $selection) {
+            ForEach(seasons, id: \.self) { Text($0.displayName).tag($0) }
+        }
+    }
+}
+
+extension Binding<SeasonID> {
+    /// The season picked, or the one the screen opens on until one is.
+    init(picked: Binding<SeasonID?>, opening: SeasonID) {
+        self.init {
+            picked.wrappedValue ?? opening
+        } set: {
+            picked.wrappedValue = $0
+        }
+    }
+}
+
+/// Where an event is held, as the calendar lists it: the host nation's flag and the place.
+struct EventPlace: View {
+    let event: BiathlonEvent
+
+    var body: some View {
+        Label(Nation.titled(event.shortDescription, nation: event.nation), systemImage: "mappin.and.ellipse")
+    }
+}
+
 /// A nation's flag, or its IOC code when no flag is known.
 struct NationMark: View {
     let code: String?

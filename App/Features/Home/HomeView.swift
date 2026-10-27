@@ -53,11 +53,7 @@ struct HomeView: View {
 
                 if let event = feed.event {
                     Section {
-                        NavigationLink(value: Route.event(event)) {
-                            Label(
-                                Nation.titled(event.shortDescription, nation: event.nation),
-                                systemImage: "mappin.and.ellipse")
-                        }
+                        NavigationLink(value: Route.event(event)) { EventPlace(event: event) }
                     } header: {
                         Text("Event")
                     }

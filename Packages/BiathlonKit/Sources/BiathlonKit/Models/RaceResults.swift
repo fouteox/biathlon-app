@@ -5,12 +5,15 @@ public struct RaceResults: Decodable, Sendable {
     public let isStartList: Bool
     public let isResult: Bool
     public let competition: Competition?
+    /// The event the race belongs to, where it is held.
+    public let event: BiathlonEvent?
     public let rows: [ResultRow]
 
     enum CodingKeys: String, CodingKey {
         case isStartList = "IsStartList"
         case isResult = "IsResult"
         case competition = "Competition"
+        case event = "SportEvt"
         case rows = "Results"
     }
 
@@ -19,6 +22,7 @@ public struct RaceResults: Decodable, Sendable {
         isStartList = try c.decodeIfPresent(Bool.self, forKey: .isStartList) ?? false
         isResult = try c.decodeIfPresent(Bool.self, forKey: .isResult) ?? false
         competition = try c.decodeIfPresent(Competition.self, forKey: .competition)
+        event = try c.decodeIfPresent(BiathlonEvent.self, forKey: .event)
         rows = try c.decodeIfPresent([ResultRow].self, forKey: .rows) ?? []
     }
 

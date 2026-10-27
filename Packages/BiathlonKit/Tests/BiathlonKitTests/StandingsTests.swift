@@ -30,6 +30,24 @@ struct StandingsTests {
         #expect(standings.isFallback)
     }
 
+    /// A season picked on the standings screen shows as it is, even before its first race.
+    @Test func pickedSeasonWithoutFallback() async throws {
+        let client = stubClient(["CupResults?CupId=BT2627SWRLCP__SMTS": Self.empty])
+        let standings = try await client.worldCupStandings(
+            category: .men, discipline: .total, season: SeasonID(rawValue: "2627"))
+        #expect(standings.season.rawValue == "2627")
+        #expect(!standings.isFallback)
+        #expect(standings.standings.rows.isEmpty)
+    }
+
+    @Test func pickedPastSeason() async throws {
+        let client = stubClient(["CupResults?CupId=BT2425SWRLCP__SWPU": Self.one])
+        let standings = try await client.worldCupStandings(
+            category: .women, discipline: .pursuit, season: SeasonID(rawValue: "2425"))
+        #expect(standings.season.rawValue == "2425")
+        #expect(standings.standings.rows.count == 1)
+    }
+
     /// A nation's screen lists its athletes in the order of the standings, without the nation's own row.
     @Test func athletesOfANation() throws {
         let cup: CupStandings = try decode(

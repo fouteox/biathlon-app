@@ -41,6 +41,15 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
         isDeceased = try c.decodeIfPresent(String.self, forKey: .functions) == "Deceased"
         gender = try c.decodeIfPresent(String.self, forKey: .gender).flatMap(Gender.init(rawValue:))
     }
+
+    /// The athlete's age on `date`, counted in UTC like the birthdate; `nil` without a birthdate
+    /// or once the IBU records their death, as it gives no date of death.
+    public func age(on date: Date) -> Int? {
+        guard let birthdate, !isDeceased else { return nil }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .gmt
+        return calendar.dateComponents([.year], from: birthdate, to: date).year
+    }
 }
 
 /// An athlete's gender, as `GenderId` gives it.
