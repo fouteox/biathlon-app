@@ -20,7 +20,9 @@ final class AccessibilityUITests: XCTestCase {
         // The discipline picker sits in the toolbar's filters menu.
         app.buttons["Filters"].tap()
         app.buttons["Nations"].tap()
-        XCTAssertTrue(app.collectionViews.staticTexts["Men · Nations"].waitForExistence(timeout: Self.timeout))
+        let nationsHeader = NSPredicate(format: "label BEGINSWITH %@", "Men · Nations · ")
+        XCTAssertTrue(
+            app.collectionViews.staticTexts.matching(nationsHeader).firstMatch.waitForExistence(timeout: Self.timeout))
         try assertRowsReadAsOneElement(in: app)
         assertFirstStandingReadsItsPoints(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
