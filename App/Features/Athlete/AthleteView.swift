@@ -83,17 +83,14 @@ struct AthleteView: View {
                             ContentUnavailableView("No World Cup results this season", systemImage: "list.number")
                         }
                         ForEach(results) { result in
-                            RowStack { _ in
-                                VStack(alignment: .leading) {
-                                    Text(RaceKind.title(ofRace: result.raceID ?? "", ibuName: result.competition ?? ""))
-                                    if let place = result.place {
-                                        Text(place).font(.caption).foregroundStyle(.secondary)
-                                    }
+                            let title = RaceKind.title(ofRace: result.raceID ?? "", ibuName: result.competition ?? "")
+                            if let raceID = result.raceID {
+                                NavigationLink(value: Route.raceID(raceID, title: title)) {
+                                    ResultSummary(result: result, title: title)
                                 }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                RankText(rank: result.rank)
+                            } else {
+                                ResultSummary(result: result, title: title)
                             }
-                            .accessibilityElement(children: .combine)
                         }
                     }
                 }
@@ -168,5 +165,25 @@ struct AthleteView: View {
         await standing.load {
             try await ibu.worldCupStanding(of: athleteID, category: query.category, season: query.season)
         }
+    }
+}
+
+/// One of an athlete's results: the race, where it was held and the athlete's rank.
+private struct ResultSummary: View {
+    let result: AthleteResult
+    let title: String
+
+    var body: some View {
+        RowStack { _ in
+            VStack(alignment: .leading) {
+                Text(title)
+                if let place = result.place {
+                    Text(place).font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            RankText(rank: result.rank)
+        }
+        .accessibilityElement(children: .combine)
     }
 }

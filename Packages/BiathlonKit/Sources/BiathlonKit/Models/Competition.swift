@@ -55,8 +55,10 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
         case scheduled, live, cancelled, finished
     }
 
+    public var eventID: String { Self.eventID(ofRace: id) }
+
     /// A `RaceId` starts with its 14-character `EventId`, as biathlonresults.com reads it.
-    public var eventID: String { String(id.prefix(14)) }
+    public static func eventID(ofRace raceID: String) -> String { String(raceID.prefix(14)) }
 
     public var category: RaceCategory? { categoryID.flatMap(RaceCategory.init(rawValue:)) }
 

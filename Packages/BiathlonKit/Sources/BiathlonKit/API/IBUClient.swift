@@ -30,6 +30,13 @@ public struct IBUClient: Sendable {
         try await get("Competitions", ["EventId": eventID])
     }
 
+    /// The race `id`, among its event's: a race known by its ID alone, such as an athlete's result.
+    public func race(id: String) async throws -> Competition {
+        let races = try await competitions(eventID: Competition.eventID(ofRace: id))
+        guard let race = races.first(where: { $0.id == id }) else { throw IBUError.unknownRace(id) }
+        return race
+    }
+
     /// Races of each event, requested together, in the order of `events`.
     func competitions(of events: [BiathlonEvent]) async throws -> [Competition] {
         try await withThrowingTaskGroup { group in
@@ -98,4 +105,6 @@ public enum IBUError: Error {
     case invalidResponse
     case http(Int)
     case decoding(path: String, underlying: any Error)
+    /// The race isn't among its event's races.
+    case unknownRace(String)
 }

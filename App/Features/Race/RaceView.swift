@@ -161,3 +161,24 @@ struct RaceView: View {
         await loader.load { try await ibu.results(raceID: race.id) }
     }
 }
+
+/// A race known by its ID alone, such as an athlete's result: found among its event's races first.
+struct RaceByIDView: View {
+    let raceID: String
+    let title: String
+    @Environment(\.ibu) private var ibu
+    @State private var loader = Loader<Competition>()
+
+    var body: some View {
+        LoadableView(state: loader.state, retry: load) { race in
+            RaceView(race: race)
+        }
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
+        .task { await load() }
+    }
+
+    private func load() async {
+        await loader.load { try await ibu.race(id: raceID) }
+    }
+}

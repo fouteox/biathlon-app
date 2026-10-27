@@ -55,6 +55,20 @@ final class AccessibilityUITests: XCTestCase {
         try app.performAccessibilityAudit(for: Self.auditTypes)
     }
 
+    /// An athlete's result opens its race, which the athlete finished.
+    @MainActor func testAthleteResultOpensItsRace() {
+        let app = XCUIApplication.launchInEnglish()
+        openFirstAthlete(in: app)
+        let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Results")).firstMatch
+        XCTAssertTrue(results.waitForExistence(timeout: Self.timeout))
+        // The season's first race, at the end of the list.
+        let list = app.collectionViews.firstMatch
+        for _ in 0..<3 { list.swipeUp() }
+        list.cells.element(boundBy: list.cells.count - 1).tap()
+        XCTAssertTrue(app.staticTexts["Finished"].waitForExistence(timeout: Self.timeout))
+        XCTAssertFalse(app.navigationBars.buttons["Add to favorites"].exists)
+    }
+
     @MainActor func testCalendarAndEventRowsReadAsOneElement() throws {
         let app = XCUIApplication.launchInEnglish()
         app.openTab("Calendar")

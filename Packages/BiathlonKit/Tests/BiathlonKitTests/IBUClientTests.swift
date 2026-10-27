@@ -48,4 +48,21 @@ struct IBUClientTests {
         }
         #expect(path == "Results")
     }
+
+    /// An athlete's result names its race by ID alone: the race is found among its event's.
+    @Test func findsARaceByItsID() async throws {
+        let client = stubClient([
+            "Competitions?EventId=BT2526SWRLCP09": """
+            [\(race("BT2526SWRLCP09SWSP", start: "2026-03-19T15:15:00Z", category: "SW", status: 11)),
+             \(race("BT2526SWRLCP09SMSP", start: "2026-03-20T15:15:00Z", status: 11))]
+            """
+        ])
+        let found = try await client.race(id: "BT2526SWRLCP09SMSP")
+        #expect(found.id == "BT2526SWRLCP09SMSP")
+        let error = await #expect(throws: IBUError.self) { try await client.race(id: "BT2526SWRLCP09SMPU") }
+        guard case .unknownRace("BT2526SWRLCP09SMPU")? = error else {
+            Issue.record("Expected an unknown race, got \(String(describing: error))")
+            return
+        }
+    }
 }
