@@ -57,7 +57,8 @@ final class StandingsUITests: XCTestCase {
         let seasons = app.buttons.matching(NSPredicate(format: "label MATCHES %@", "[0-9]{4}-[0-9]{2}"))
         let oldest = seasons["1977-78"]
         for _ in 0..<20 where !oldest.exists {
-            seasons.element(boundBy: seasons.count - 1).swipeUp()
+            // The menu also lists, off screen, a few seasons past those it shows.
+            seasons.allElementsBoundByIndex.last(where: \.isHittable)?.swipeUp()
         }
         oldest.tap()
         XCTAssertTrue(Self.picker("season", in: app, shows: "1977-78").waitForExistence(timeout: 5))
