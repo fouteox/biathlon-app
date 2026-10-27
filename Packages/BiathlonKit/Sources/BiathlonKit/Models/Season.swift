@@ -43,7 +43,7 @@ public struct SeasonID: RawRepresentable, Hashable, Comparable, Sendable, Codabl
 
     /// `2026-27`
     public var displayName: String {
-        "20\(rawValue.prefix(2))-\(rawValue.suffix(2))"
+        "\(start)-\(rawValue.suffix(2))"
     }
 
     public var description: String { rawValue }

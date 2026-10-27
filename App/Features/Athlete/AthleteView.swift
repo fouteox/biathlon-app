@@ -13,6 +13,9 @@ struct AthleteView: View {
     @State private var pickedSeason: SeasonID?
     /// The athlete's row in the season's overall standings, `nil` when they scored no points.
     @State private var standing = Loader<CupRow?>()
+    /// Counts the pulls to refresh, which reload the standing through its own task: a new
+    /// season cancels that task, so a refresh of the previous one can't land after it.
+    @State private var refreshes = 0
     @ScaledMetric private var photoSize = 72.0
 
     var body: some View {
@@ -92,7 +95,10 @@ struct AthleteView: View {
                     }
                 }
             }
-            .refreshable { await load() }
+            .refreshable {
+                refreshes += 1
+                await load()
+            }
         }
         .navigationTitle(name)
         .navigationBarTitleDisplayMode(.inline)
@@ -107,7 +113,7 @@ struct AthleteView: View {
         .task { await load() }
         // Only a new season shows the standing as loading.
         .onChange(of: standingQuery) { standing.reset() }
-        .task(id: standingQuery) { await loadStanding() }
+        .task(id: StandingLoad(query: standingQuery, refresh: refreshes)) { await loadStanding() }
     }
 
     /// The season shown: the one picked, or the one the history opens on.
@@ -134,6 +140,11 @@ struct AthleteView: View {
         let category: RaceCategory
     }
 
+    private struct StandingLoad: Hashable {
+        let query: StandingQuery?
+        let refresh: Int
+    }
+
     /// Birthdates arrive at midnight UTC, so they are formatted in UTC.
     private static let birthdateStyle: Date.FormatStyle = {
         var style = Date.FormatStyle.dateTime.day().month(.wide).year()
@@ -146,8 +157,7 @@ struct AthleteView: View {
         async let historyLoad: Void = history.load {
             AthleteHistory(results: try await ibu.athleteResults(id: athleteID), now: .now)
         }
-        async let standingLoad: Void = loadStanding()
-        _ = await (bioLoad, historyLoad, standingLoad)
+        _ = await (bioLoad, historyLoad)
     }
 
     private func loadStanding() async {
