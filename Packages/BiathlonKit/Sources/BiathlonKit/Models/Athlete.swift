@@ -90,9 +90,15 @@ public struct AthleteResult: Decodable, Identifiable, Hashable, Sendable {
     }
 
     /// The races the app follows everywhere else.
-    public var isWorldCupCircuit: Bool { level.map(Self.worldCupLevels.contains) ?? false }
+    var isWorldCupCircuit: Bool { level.map(Self.worldCupLevels.contains) ?? false }
 
     public var kind: RaceKind? { raceID.flatMap(RaceKind.init(raceID:)) }
+
+    /// The season of `Season`, which reads "25/26" (`SeasonId` comes empty).
+    public var seasonID: SeasonID? {
+        guard let season, season.wholeMatch(of: /\d\d\/\d\d/) != nil else { return nil }
+        return SeasonID(rawValue: season.replacing("/", with: ""))
+    }
 
     private static let worldCupLevels: Set = ["WC", "WCH", "OWG"]
 }
