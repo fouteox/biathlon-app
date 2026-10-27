@@ -17,12 +17,14 @@ final class AccessibilityUITests: XCTestCase {
         assertFirstStandingReadsItsPoints(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
 
-        // The discipline picker sits in the toolbar's filters menu.
-        app.buttons["Filters"].tap()
+        // The discipline is a pop-up button in the toolbar.
+        let discipline = app.navigationBars.buttons["discipline"]
+        discipline.tap()
         app.buttons["Nations"].tap()
-        let nationsHeader = NSPredicate(format: "label BEGINSWITH %@", "Men · Nations · ")
         XCTAssertTrue(
-            app.collectionViews.staticTexts.matching(nationsHeader).firstMatch.waitForExistence(timeout: Self.timeout))
+            app.navigationBars.buttons.matching(identifier: "discipline")
+                .matching(NSPredicate(format: "label CONTAINS %@", "Nations")).firstMatch
+                .waitForExistence(timeout: Self.timeout))
         try assertRowsReadAsOneElement(in: app)
         assertFirstStandingReadsItsPoints(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)

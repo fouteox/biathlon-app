@@ -99,7 +99,13 @@ struct DecodingTests {
         #expect(SeasonID.containing(date("2026-10-19T12:00:00Z")).rawValue == "2627")
         #expect(SeasonID.containing(date("2027-03-01T12:00:00Z")).rawValue == "2627")
         #expect(SeasonID.containing(date("2026-06-30T23:59:00Z")).rawValue == "2526")
-        #expect(SeasonID.recent(3, now: date("2026-10-19T12:00:00Z")).map(\.rawValue) == ["2627", "2526", "2425"])
+        #expect(
+            SeasonID.since(SeasonID(rawValue: "2425"), now: date("2026-10-19T12:00:00Z")).map(\.rawValue) == [
+                "2627", "2526", "2425",
+            ])
+        // The oldest seasons biathlonresults.com lists: `Seasons` goes back to 1957-58.
+        #expect(SeasonID.since(.firstWithRaces, now: date("2026-10-19T12:00:00Z")).last?.displayName == "1957-58")
+        #expect(SeasonID.since(.firstWorldCup, now: date("2026-10-19T12:00:00Z")).count == 50)
         #expect(SeasonID(rawValue: "2627").previous.rawValue == "2526")
         #expect(SeasonID(rawValue: "2627").displayName == "2026-27")
         #expect(SeasonID(rawValue: "9899") < SeasonID(rawValue: "0001"))

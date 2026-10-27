@@ -42,11 +42,6 @@ extension LocalizedStringResource {
     }
 }
 
-extension SeasonID {
-    /// The seasons the calendar and the standings offer: the current one and the four before it.
-    static var pickable: [SeasonID] { recent(5, now: .now) }
-}
-
 /// The picker of the season a screen shows.
 struct SeasonPicker: View {
     let seasons: [SeasonID]

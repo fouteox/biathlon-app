@@ -22,10 +22,17 @@ public struct SeasonID: RawRepresentable, Hashable, Comparable, Sendable, Codabl
         rawValue = String(format: "%02d%02d", a, b)
     }
 
-    /// The season containing `now` and the `count - 1` before it, newest first.
-    public static func recent(_ count: Int, now: Date) -> [SeasonID] {
-        Array(sequence(first: containing(now)) { $0.previous }.prefix(count))
+    /// The seasons from `first` to the one containing `now`, newest first.
+    public static func since(_ first: SeasonID, now: Date) -> [SeasonID] {
+        sequence(first: containing(now)) { $0.previous }.prefix { $0 >= first }
     }
+
+    /// The oldest season of biathlonresults.com, whose `Seasons` start in 1957-58: its races are
+    /// those of the 1958 World Championships in Saalfelden (`BT5758SWRLCH__`).
+    public static let firstWithRaces = SeasonID(start: 1957)
+
+    /// The first World Cup season, the oldest with standings (`CupResults?CupId=BT7778SWRLCP__SMTS`).
+    public static let firstWorldCup = SeasonID(start: 1977)
 
     public var previous: SeasonID {
         SeasonID(start: start - 1)
