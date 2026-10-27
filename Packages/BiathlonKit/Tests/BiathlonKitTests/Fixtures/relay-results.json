@@ -1,6 +1,6 @@
 {"RaceId":"BT2526SWRLCP01SMRL","IsStartList":false,"IsResult":true,
 "Competition":{"RaceId":"BT2526SWRLCP01SMRL","km":"4x7.5","StatusId":11,"StatusText":"Final","ScheduleStatus":"FINISHED","ResultStatus":"OFFICIAL","HasLiveData":false,"IsLive":false,"StartTime":"2025-11-29T15:55:00Z","ShortDescription":"Men's 4x7.5km Relay","NrLegs":4},
-"SportEvt":{},
+"SportEvt":{"SeasonId":"2526","EventId":"BT2526SWRLCP01","StartDate":"2025-11-29T12:00:00Z","EndDate":"2025-12-07T12:00:00Z","Description":"BMW IBU World Cup Biathlon","ShortDescription":"Oestersund","OrganizerId":"OST","Organizer":"Oestersund","Nat":"SWE","NatLong":null,"EventClassificationId":"BTSWRLCP","Level":1,"UTCOffset":1},
 "Results":[
 {"StartOrder":1,"ResultOrder":1,"IRM":null,"IBUId":null,"IsTeam":true,"Name":"NORWAY","ShortName":"NORWAY","Nat":"NOR","Bib":"1","Leg":0,"Rank":"1","Shootings":"1+6 0+4","ShootingTotal":"1+10","TotalTime":"1:11:10.1","Behind":"0.0","TeamId":"NOR1"},
 {"StartOrder":1,"ResultOrder":1,"IRM":null,"IBUId":"BTNOR00000000001","IsTeam":false,"Name":"ULDAL Martin","ShortName":"ULDAL M.","Nat":"NOR","Bib":"1-1","Leg":1,"Rank":"1","Shootings":"0+2 0+2","ShootingTotal":"0+4","TotalTime":"17:25.7","Behind":"0.0","TeamId":"NOR1"}

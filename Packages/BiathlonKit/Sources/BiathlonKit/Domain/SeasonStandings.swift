@@ -1,7 +1,7 @@
 import Foundation
 
-/// World Cup standings, from the previous season until the current one has
-/// its first race.
+/// World Cup standings of a season: by default the current one, or the previous
+/// until the current one has its first race.
 public struct SeasonStandings: Sendable {
     /// The season shown.
     public let season: SeasonID
@@ -13,20 +13,26 @@ public struct SeasonStandings: Sendable {
 }
 
 extension IBUClient {
+    /// The current season's standings, or the previous season's until the current one has its first race.
     public func worldCupStandings(
         category: RaceCategory, discipline: StandingsDiscipline, now: Date
     ) async throws -> SeasonStandings {
-        let current = SeasonID.containing(now)
-        let standings = try await cupStandings(
-            cupID: Cup.worldCupID(current, category: category, discipline: discipline))
-        guard standings.rows.isEmpty else {
-            return SeasonStandings(season: current, requestedSeason: current, standings: standings)
-        }
-        let previous = current.previous
-        return SeasonStandings(
-            season: previous,
-            requestedSeason: current,
+        let current = try await worldCupStandings(
+            category: category, discipline: discipline, season: SeasonID.containing(now))
+        guard current.standings.rows.isEmpty else { return current }
+        let previous = try await worldCupStandings(
+            category: category, discipline: discipline, season: current.season.previous)
+        return SeasonStandings(season: previous.season, requestedSeason: current.season, standings: previous.standings)
+    }
+
+    /// The standings of `season`, as they are, even empty before its first race.
+    public func worldCupStandings(
+        category: RaceCategory, discipline: StandingsDiscipline, season: SeasonID
+    ) async throws -> SeasonStandings {
+        SeasonStandings(
+            season: season,
+            requestedSeason: season,
             standings: try await cupStandings(
-                cupID: Cup.worldCupID(previous, category: category, discipline: discipline)))
+                cupID: Cup.worldCupID(season, category: category, discipline: discipline)))
     }
 }

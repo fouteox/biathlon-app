@@ -25,6 +25,9 @@ struct RaceView: View {
             List {
                 // The title already names the race.
                 Section {
+                    if let event = results.event {
+                        EventPlace(event: event)
+                    }
                     LabeledContent {
                         competition.state.badge
                     } label: {

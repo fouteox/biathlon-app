@@ -17,6 +17,22 @@
         }
       }
     },
+    "%@ · %@ · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@ · %3$@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ · %2$@ · %3$@"
+          }
+        }
+      }
+    },
     "%lld points": {
       "localizations": {
         "de": {
@@ -68,6 +84,65 @@
                 "stringUnit": {
                   "state": "translated",
                   "value": "%lld points"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld years old": {
+      "comment": "An athlete's age, after their birthdate.",
+      "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Jahr alt"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Jahre alt"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld year old"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld years old"
+                }
+              }
+            }
+          }
+        },
+        "fr": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld an"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld ans"
                 }
               }
             }
@@ -659,6 +734,22 @@
         }
       }
     },
+    "No standings yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Wertung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore de classement"
+          }
+        }
+      }
+    },
     "No start list yet": {
       "localizations": {
         "de": {
@@ -1241,6 +1332,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Équipes"
+          }
+        }
+      }
+    },
+    "The %@ standings will appear after the first race.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Wertung %@ erscheint nach dem ersten Rennen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le classement %@ apparaîtra après la première course."
           }
         }
       }

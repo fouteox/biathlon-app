@@ -6,9 +6,6 @@ struct CalendarView: View {
     @State private var season = SeasonID.containing(.now)
     @State private var loader = Loader<[BiathlonEvent]>()
 
-    /// Current season and the four before it.
-    private let seasons = SeasonID.recent(5, now: .now)
-
     var body: some View {
         LoadableView(state: loader.state, retry: load) { events in
             List(events) { event in
@@ -39,9 +36,7 @@ struct CalendarView: View {
         }
         .navigationTitle("Calendar")
         .toolbar {
-            Picker("Season", selection: $season) {
-                ForEach(seasons, id: \.self) { Text($0.displayName).tag($0) }
-            }
+            SeasonPicker(seasons: SeasonID.pickable, selection: $season)
         }
         // The task also runs again each time the screen reappears (back from an
         // event): it refreshes the list in place, so the scroll position stays.

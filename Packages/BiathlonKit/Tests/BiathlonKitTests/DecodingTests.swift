@@ -33,6 +33,14 @@ struct DecodingTests {
         #expect(results.legs(of: norway).map(\.name) == ["ULDAL Martin"])
     }
 
+    /// `SportEvt` of `Results?RaceId=BT2526SWRLCP01SMRL`: the event the race belongs to.
+    @Test func raceResultsNameTheirEvent() throws {
+        let results: RaceResults = try fixture("relay-results")
+        let event = try #require(results.event)
+        #expect(event.shortDescription == "Oestersund")
+        #expect(event.nation == "SWE")
+    }
+
     @Test func cupStandingsAcceptNumericScores() throws {
         let cup: CupStandings = try fixture("cup-results")
         #expect(cup.rows.count == 2)
@@ -54,6 +62,19 @@ struct DecodingTests {
             #"{"IBUId":"BTNOR11807199801","FullName":"Sivert Guttorm BAKKEN","NAT":"NOR","Age":null,"Functions":"Deceased"}"#
         )
         #expect(bio.isDeceased)
+        #expect(bio.age(on: date("2026-10-27T12:00:00Z")) == nil)
+    }
+
+    /// Eric Perrot, born on 29 June 2001: the age turns on the birthday, in UTC like the birthdate.
+    @Test(arguments: [("2026-06-28T23:59:00Z", 24), ("2026-06-29T00:00:00Z", 25), ("2026-10-27T12:00:00Z", 25)])
+    func athleteAge(on day: String, age: Int) throws {
+        let bio: AthleteBio = try fixture("athlete")
+        #expect(bio.age(on: date(day)) == age)
+    }
+
+    @Test func noAgeWithoutABirthdate() throws {
+        let bio: AthleteBio = try decode(#"{"IBUId":"BTFRA20910199601"}"#)
+        #expect(bio.age(on: date("2026-10-27T12:00:00Z")) == nil)
     }
 
     /// `GenderId` of `CISBios`: "M" for Sivert Guttorm Bakken, "W" for Julia Simon.
