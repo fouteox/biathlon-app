@@ -24,46 +24,52 @@ final class StandingsUITests: XCTestCase {
         XCTAssertEqual(title.frame, atRest, "Back at the top")
     }
 
-    /// The filters sit in a toolbar menu and the list's header says which standings are shown.
-    @MainActor func testFiltersMenuChangesTheStandingsNamedInTheListHeader() {
+    /// Each choice is a pop-up button in the toolbar, which shows the standings shown.
+    @MainActor func testToolbarPickersChangeTheStandingsShown() {
         let app = XCUIApplication.launchInEnglish()
         app.openTab("Standings")
         let list = app.collectionViews.firstMatch
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
-        // The season it opens on depends on the date.
-        XCTAssertTrue(
-            list.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Men · Overall · '")).firstMatch.exists)
+        XCTAssertTrue(Self.picker("category", in: app, shows: "Men").exists)
+        XCTAssertTrue(Self.picker("discipline", in: app, shows: "Overall").exists)
 
-        app.buttons["Filters"].tap()
+        app.navigationBars.buttons["category"].tap()
         app.buttons["Women"].tap()
-        XCTAssertTrue(
-            list.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Women · Overall · '")).firstMatch
-                .waitForExistence(timeout: 5))
+        XCTAssertTrue(Self.picker("category", in: app, shows: "Women").waitForExistence(timeout: 5))
 
-        app.buttons["Filters"].tap()
+        app.navigationBars.buttons["discipline"].tap()
         app.buttons["Sprint"].tap()
-        XCTAssertTrue(
-            list.staticTexts.matching(NSPredicate(format: "label BEGINSWITH 'Women · Sprint · '")).firstMatch
-                .waitForExistence(timeout: 5))
+        XCTAssertTrue(Self.picker("discipline", in: app, shows: "Sprint").waitForExistence(timeout: 5))
+        XCTAssertTrue(Self.picker("category", in: app, shows: "Women").exists)
+        XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 
-    /// A past season picked in the filters keeps the category and the discipline.
-    @MainActor func testFiltersMenuPicksASeason() throws {
+    /// A past season keeps the category. How far back the seasons go is `SeasonID.since`'s, which
+    /// BiathlonKit tests: a menu shows only the seasons it has room for, and a swipe closes it.
+    @MainActor func testSeasonPickerShowsAPastSeason() {
         let app = XCUIApplication.launchInEnglish()
         app.openTab("Standings")
         let list = app.collectionViews.firstMatch
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
-
-        app.buttons["Filters"].tap()
+        app.navigationBars.buttons["category"].tap()
         app.buttons["Women"].tap()
-        // The oldest season the menu offers, four before the current one, always has its standings.
-        app.buttons["Filters"].tap()
-        let season = try XCTUnwrap(
-            app.buttons.matching(NSPredicate(format: "label MATCHES '[0-9]{4}-[0-9]{2}'")).allElementsBoundByIndex.last)
-        let name = season.label
-        season.tap()
-        XCTAssertTrue(
-            list.staticTexts["Women · Overall · \(name)"].waitForExistence(timeout: XCUIApplication.dataTimeout))
+
+        app.navigationBars.buttons["season"].tap()
+        // Two seasons before the current one: always over, with its standings.
+        let past = app.buttons.matching(NSPredicate(format: "label MATCHES %@", "[0-9]{4}-[0-9]{2}")).element(
+            boundBy: 2)
+        let name = past.label
+        past.tap()
+        XCTAssertTrue(Self.picker("season", in: app, shows: name).waitForExistence(timeout: 5))
+        XCTAssertTrue(Self.picker("category", in: app, shows: "Women").exists)
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
+    }
+
+    /// The toolbar's pop-up button `identifier` once it shows `value`.
+    @MainActor private static func picker(_ identifier: String, in app: XCUIApplication, shows value: String)
+        -> XCUIElement
+    {
+        app.navigationBars.buttons.matching(identifier: identifier)
+            .matching(NSPredicate(format: "label CONTAINS %@", value)).firstMatch
     }
 }

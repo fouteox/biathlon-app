@@ -17,22 +17,6 @@
         }
       }
     },
-    "%@ · %@ · %@": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ · %2$@ · %3$@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ · %2$@ · %3$@"
-          }
-        }
-      }
-    },
     "%lld points": {
       "localizations": {
         "de": {
@@ -446,22 +430,6 @@
         }
       }
     },
-    "Filters": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Filter"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Filtres"
-          }
-        }
-      }
-    },
     "Finished": {
       "localizations": {
         "de": {
@@ -730,6 +698,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucune course"
+          }
+        }
+      }
+    },
+    "No standings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Wertung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun classement"
           }
         }
       }
@@ -1364,6 +1348,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Les athlètes ayant marqué des points en Coupe du monde en %@."
+          }
+        }
+      }
+    },
+    "The IBU has no standings for %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die IBU hat keine Wertung für %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "L'IBU n'a pas de classement pour %@."
           }
         }
       }

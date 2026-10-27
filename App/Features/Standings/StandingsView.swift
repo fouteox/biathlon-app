@@ -5,9 +5,12 @@ struct StandingsView: View {
     @Environment(\.ibu) private var ibu
     @State private var category = RaceCategory.men
     @State private var discipline = StandingsDiscipline.total
-    /// The season picked in the filters; until then, the one the standings open on.
+    /// The season picked in the toolbar; until then, the one the standings open on.
     @State private var pickedSeason: SeasonID?
     @State private var loader = Loader<SeasonStandings>()
+
+    /// Every season with standings, back to the first World Cup.
+    private let seasons = SeasonID.since(.firstWorldCup, now: .now)
 
     var body: some View {
         LoadableView(state: loader.state, retry: load) { loaded in
@@ -17,9 +20,6 @@ struct StandingsView: View {
                     ForEach(standings.rows) { row in
                         StandingRow(row: row, category: category)
                     }
-                } header: {
-                    // Says which standings the filters menu shows, with the title left as on the other tabs.
-                    Text("\(category.title) · \(Text(discipline.label)) · \(loaded.season.displayName)")
                 } footer: {
                     if loaded.isFallback {
                         Text(
@@ -32,33 +32,36 @@ struct StandingsView: View {
             }
             .refreshable { await load() }
             .overlay {
-                // A season picked before its first race.
                 if standings.rows.isEmpty {
-                    ContentUnavailableView(
-                        "No standings yet", systemImage: "list.number",
-                        description: Text(
-                            "The \(loaded.season.displayName) standings will appear after the first race."))
+                    if loaded.season < .containing(.now) {
+                        ContentUnavailableView(
+                            "No standings", systemImage: "list.number",
+                            description: Text("The IBU has no standings for \(loaded.season.displayName)."))
+                    } else {
+                        // A season picked before its first race.
+                        ContentUnavailableView(
+                            "No standings yet", systemImage: "list.number",
+                            description: Text(
+                                "The \(loaded.season.displayName) standings will appear after the first race."))
+                    }
                 }
             }
         }
         .navigationTitle("Standings")
-        // The filters sit in a toolbar menu rather than a bar pinned under the title: a large title
-        // under that bar's scroll edge effect showed blurred and flickered (FB21613303).
+        // Each choice is a pop-up button in the toolbar, which shows its value (HIG Pop-up buttons),
+        // rather than a bar pinned under the title: a large title under that bar's scroll edge effect
+        // showed blurred and flickered (FB21613303).
         .toolbar {
-            Menu("Filters", systemImage: "line.3.horizontal.decrease") {
-                Picker("Category", selection: $category) {
-                    ForEach(RaceCategory.withStandings) { Text($0.title).tag($0) }
-                }
-                .pickerStyle(.inline)
-                Picker("Discipline", selection: $discipline) {
-                    ForEach(StandingsDiscipline.allCases) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.inline)
-                SeasonPicker(
-                    seasons: SeasonID.pickable, selection: Binding(picked: $pickedSeason, opening: openingSeason)
-                )
-                .pickerStyle(.inline)
+            Picker("Category", selection: $category) {
+                ForEach(RaceCategory.withStandings) { Text($0.title).tag($0) }
             }
+            .accessibilityIdentifier("category")
+            Picker("Discipline", selection: $discipline) {
+                ForEach(StandingsDiscipline.allCases) { Text($0.label).tag($0) }
+            }
+            .accessibilityIdentifier("discipline")
+            SeasonPicker(seasons: seasons, selection: Binding(picked: $pickedSeason, opening: openingSeason))
+                .accessibilityIdentifier("season")
         }
         // The task also runs again each time the screen reappears (back from an
         // athlete): it refreshes the list in place, so the scroll position stays.
