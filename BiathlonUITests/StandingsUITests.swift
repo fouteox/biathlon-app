@@ -44,23 +44,24 @@ final class StandingsUITests: XCTestCase {
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 
-    /// The seasons go back to the first World Cup, 1977-78, and a past season keeps the category.
+    /// The seasons go back to the first World Cup, 1977-78, whose men's standings the IBU holds
+    /// (`CupResults?CupId=BT7778SWRLCP__SMTS`).
     @MainActor func testSeasonPickerGoesBackToTheFirstWorldCup() {
         let app = XCUIApplication.launchInEnglish()
         app.openTab("Standings")
         let list = app.collectionViews.firstMatch
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
-        app.navigationBars.buttons["category"].tap()
-        app.buttons["Women"].tap()
 
         app.navigationBars.buttons["season"].tap()
+        // The menu only holds the seasons it shows: it scrolls down to the oldest.
         let seasons = app.buttons.matching(NSPredicate(format: "label MATCHES %@", "[0-9]{4}-[0-9]{2}"))
-        XCTAssertTrue(seasons["1977-78"].exists)
-        let past = seasons.element(boundBy: 2)
-        let name = past.label
-        past.tap()
-        XCTAssertTrue(Self.picker("season", in: app, shows: name).waitForExistence(timeout: 5))
-        XCTAssertTrue(Self.picker("category", in: app, shows: "Women").exists)
+        let oldest = seasons["1977-78"]
+        for _ in 0..<20 where !oldest.exists {
+            seasons.element(boundBy: seasons.count - 1).swipeUp()
+        }
+        oldest.tap()
+        XCTAssertTrue(Self.picker("season", in: app, shows: "1977-78").waitForExistence(timeout: 5))
+        XCTAssertTrue(Self.picker("category", in: app, shows: "Men").exists)
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 
