@@ -1,13 +1,15 @@
 import XCTest
 
 extension XCUIApplication {
-    /// Data comes from the network.
+    /// The app loads its data asynchronously, on a CI machine that can be busy.
     nonisolated static let dataTimeout: TimeInterval = 30
 
-    /// The app in English, whatever the simulator's language, so tests find elements by label.
+    /// The app in English, whatever the simulator's language, so tests find elements by label. With
+    /// `--sample-data` (`AppDelegate.asksForSampleData`), it runs on fictional data rather than the network,
+    /// and starts with no favorites, whatever an earlier test added.
     @MainActor static func launchInEnglish() -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US"]
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "--sample-data"]
         app.launch()
         return app
     }

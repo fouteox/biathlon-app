@@ -18,7 +18,7 @@ cd Packages/BiathlonKit && swift test
 
 Tests de l'app (cible `BiathlonTests`, Swift Testing, hébergée par l'app) et de `BiathlonKit` sur le simulateur : Product > Test (⌘U) dans Xcode, ou `xcodebuild test -scheme Biathlon -destination 'platform=iOS Simulator,name=<iPhone>'`. Le transport HTTP, App Attest et le centre de notifications y sont remplacés par des doublures : tout se teste sans serveur ni course.
 
-Tests d'interface (cible `BiathlonUITests`, XCTest) dans le même schéma : ils parcourent les listes de l'app et vérifient que VoiceOver lit chaque ligne d'un seul tenant, avec l'audit d'accessibilité de Xcode (`performAccessibilityAudit`). Ils lisent les vraies données par le cache du serveur, hors saison comme en saison : aucune course n'est nécessaire, mais le réseau l'est.
+Tests d'interface (cible `BiathlonUITests`, XCTest) dans le même schéma : ils parcourent les listes de l'app et vérifient que VoiceOver lit chaque ligne d'un seul tenant, avec l'audit d'accessibilité de Xcode (`performAccessibilityAudit`). Ils lancent l'app avec `--sample-data` : en Debug, elle lit alors une Coupe du monde fictive placée autour de la date du jour (`IBUClient.sample`, dans BiathlonKit), sans serveur ni réseau. Aucune course n'est nécessaire, et les données de l'IBU ne sont pas recopiées dans le dépôt.
 
 Mise en forme du code Swift (`swift format`, inclus dans la toolchain Swift 6 ; règles dans `.swift-format`) :
 

@@ -14,15 +14,21 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     let liveActivities: LiveActivities
     let liveActivityStarts: LiveActivityStarts
     private let notificationCenter = UNUserNotificationCenter.current()
-    /// IBU data goes through the server's cache when there is a server, to spare the IBU API.
-    let client = IBUClient(baseURL: Bundle.main.serverURL?.appending(path: "ibu/") ?? IBUClient.ibuBaseURL)
+    let client: IBUClient
+    /// A Debug build launched with `--sample-data`, as the UI tests launch it, runs on the fictional data of
+    /// `IBUClient.sample`, without a server, and keeps its favorites in memory: nothing it shows depends
+    /// on the network or on an earlier launch.
+    let runsOnSampleData: Bool
 
     private var preferenceChanges: Task<Void, Never>?
     private var pendingChange: Task<Void, Never>?
     private var reminderRefresh: Task<Void, Never>?
 
     override init() {
-        let server = Bundle.main.serverURL.map { ServerClient(baseURL: $0) }
+        let runsOnSampleData = Self.asksForSampleData(arguments: ProcessInfo.processInfo.arguments)
+        self.runsOnSampleData = runsOnSampleData
+        let (client, server) = Self.clients(sampleData: runsOnSampleData)
+        self.client = client
         self.server = server
         // One for every request to the server: it attests a single key for the install.
         let appAttest = server.map { AppAttest(server: $0) }
@@ -30,6 +36,23 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         liveActivities = LiveActivities(server: server)
         liveActivityStarts = LiveActivityStarts(appAttest: appAttest)
         super.init()
+    }
+
+    static func asksForSampleData(arguments: [String]) -> Bool {
+        #if DEBUG
+            arguments.contains("--sample-data")
+        #else
+            false
+        #endif
+    }
+
+    /// IBU data goes through the server's cache when there is a server, to spare the IBU API.
+    static func clients(sampleData: Bool) -> (ibu: IBUClient, server: ServerClient?) {
+        #if DEBUG
+            if sampleData { return (.sample(now: .now), nil) }
+        #endif
+        let server = Bundle.main.serverURL.map { ServerClient(baseURL: $0) }
+        return (IBUClient(baseURL: server?.baseURL.appending(path: "ibu/") ?? IBUClient.ibuBaseURL), server)
     }
 
     func application(
