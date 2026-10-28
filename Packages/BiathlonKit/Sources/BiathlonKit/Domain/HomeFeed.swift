@@ -21,10 +21,16 @@ public struct HomeFeed: Sendable {
     public var next: Competition? { races.first { $0.state == .scheduled } }
     public var latestFinished: Competition? { races.last { $0.state == .finished } }
 
-    /// Event of the featured race (a `RaceId` starts with its `EventId`).
+    /// Event of the featured race.
     public var event: BiathlonEvent? {
         guard let race = live ?? next ?? latestFinished else { return events.last }
-        return events.first { race.id.hasPrefix($0.id) } ?? events.last
+        return event(of: race) ?? events.last
+    }
+
+    /// A race's event (a `RaceId` starts with its `EventId`): between two events, the latest
+    /// result belongs to the previous one.
+    public func event(of race: Competition) -> BiathlonEvent? {
+        events.first { race.id.hasPrefix($0.id) }
     }
 
     /// Nothing to feature: no race to show and no event to open.

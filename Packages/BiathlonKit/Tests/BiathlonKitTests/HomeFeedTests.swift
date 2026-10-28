@@ -65,6 +65,7 @@ struct HomeFeedTests {
         #expect(feed.next?.id == "E1-IN")
         #expect(feed.latestFinished?.id == "P9-MS")
         #expect(feed.event?.id == "E1")
+        #expect(feed.latestFinished.flatMap(feed.event(of:))?.id == "P9")
     }
 
     @Test func cancelledRacesAreNeverNext() throws {

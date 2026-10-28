@@ -35,7 +35,7 @@ struct FavoriteSetTests {
             {"IBUId":"BTSWE1","Name":"C","Nat":"SWE","TeamId":"SWE1","Leg":1},
             {"IsTeam":true,"Name":"NORWAY","Nat":"NOR","TeamId":"NOR1"}]}
             """#)
-        #expect(results.favoriteStandings(in: favorites).map(\.name) == ["FRANCE", "NORWAY"])
+        #expect(results.featuredStandings(top: 0, favorites: favorites).map(\.name) == ["FRANCE", "NORWAY"])
     }
 
     @Test func anIndividualRaceKeepsItsFavoriteRows() throws {
@@ -45,6 +45,20 @@ struct FavoriteSetTests {
             {"IBUId":"BTFRA1","Name":"A","Nat":"FRA"},
             {"IBUId":"BTFRA2","Name":"B","Nat":"FRA"}]}
             """#)
-        #expect(results.favoriteStandings(in: favorites).map(\.name) == ["A"])
+        #expect(results.featuredStandings(top: 0, favorites: favorites).map(\.name) == ["A"])
+    }
+
+    /// The top rows, then the favorites ranked below them, each row once.
+    @Test func featuresTheTopThenTheFavoritesBelowIt() throws {
+        let results: RaceResults = try decode(
+            #"""
+            {"IsResult":true,"Results":[
+            {"IBUId":"BTSWE1","Name":"A","Nat":"SWE"},
+            {"IBUId":"BTFRA1","Name":"B","Nat":"FRA"},
+            {"IBUId":"BTGER1","Name":"C","Nat":"GER"},
+            {"IBUId":"BTITA1","Name":"D","Nat":"ITA"},
+            {"IBUId":"BTNOR1","Name":"E","Nat":"NOR"}]}
+            """#)
+        #expect(results.featuredStandings(top: 3, favorites: favorites).map(\.name) == ["A", "B", "C", "E"])
     }
 }

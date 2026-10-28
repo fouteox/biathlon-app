@@ -11,20 +11,24 @@ struct HomeView: View {
     var body: some View {
         LoadableView(state: loader.state, retry: load) { feed in
             List {
+                // The event first: the races below are its own.
+                if let event = feed.event {
+                    Section("Event") {
+                        NavigationLink(value: Route.event(event)) { EventRow(event: event) }
+                    }
+                }
+
                 if let live = feed.live {
                     Section {
                         NavigationLink(value: Route.race(live)) {
                             LiveHeader(race: live)
                         }
                         if let results = feed.liveResults {
-                            TopResults(rows: results.standings.prefix(5), of: results, favorites: favoriteSet)
+                            featured(results, top: 5)
                         }
                     } header: {
                         Label("Live", systemImage: "dot.radiowaves.left.and.right")
                             .foregroundStyle(.red)
-                    }
-                    if let results = feed.liveResults {
-                        favoritesSection(results, of: live)
                     }
                 }
 
@@ -42,20 +46,11 @@ struct HomeView: View {
                 }
 
                 if let results = feed.latestResults, let race = feed.latestFinished {
-                    favoritesSection(results, of: race)
                     Section {
-                        TopResults(rows: results.standings.prefix(3), of: results, favorites: favoriteSet)
+                        featured(results, top: 3)
                         NavigationLink("All results", value: Route.race(race))
                     } header: {
-                        Text("Latest result · \(race.title)")
-                    }
-                }
-
-                if let event = feed.event {
-                    Section {
-                        NavigationLink(value: Route.event(event)) { EventPlace(event: event) }
-                    } header: {
-                        Text("Event")
+                        latestResultHeader(race, in: feed)
                     }
                 }
             }
@@ -86,15 +81,18 @@ struct HomeView: View {
 
     private var favoriteSet: FavoriteSet { FavoriteSet(favorites) }
 
-    /// Every favorite in the race, wherever they rank.
-    @ViewBuilder
-    private func favoritesSection(_ results: RaceResults, of race: Competition) -> some View {
-        let favoriteRows = results.favoriteStandings(in: favoriteSet)
-        if !favoriteRows.isEmpty {
-            Section("Favorites · \(race.title)") {
-                TopResults(rows: favoriteRows[...], of: results, favorites: favoriteSet)
-            }
+    /// The top of the standings, then the favorites ranked below it.
+    private func featured(_ results: RaceResults, top count: Int) -> some View {
+        TopResults(
+            rows: results.featuredStandings(top: count, favorites: favoriteSet), of: results, favorites: favoriteSet)
+    }
+
+    /// Names the race's event when it is not the one at the top, between two events.
+    private func latestResultHeader(_ race: Competition, in feed: HomeFeed) -> Text {
+        guard let event = feed.event(of: race), event != feed.event else {
+            return Text("Latest result · \(race.title)")
         }
+        return Text("Latest result · \(race.title) · \(Nation.titled(event.shortDescription, nation: event.nation))")
     }
 }
 
@@ -112,11 +110,11 @@ private struct LiveHeader: View {
 }
 
 struct TopResults: View {
-    let rows: ArraySlice<ResultRow>
+    let rows: [ResultRow]
     let results: RaceResults
     let favorites: FavoriteSet
 
-    init(rows: ArraySlice<ResultRow>, of results: RaceResults, favorites: FavoriteSet) {
+    init(rows: [ResultRow], of results: RaceResults, favorites: FavoriteSet) {
         self.rows = rows
         self.results = results
         self.favorites = favorites
