@@ -47,6 +47,7 @@ struct HomeView: View {
 
                 if let results = feed.latestResults, let race = feed.latestFinished {
                     Section {
+                        RaceRow(race: race)
                         featured(results, top: 3)
                         NavigationLink("All results", value: Route.race(race))
                     } header: {
@@ -90,9 +91,9 @@ struct HomeView: View {
     /// Names the race's event when it is not the one at the top, between two events.
     private func latestResultHeader(_ race: Competition, in feed: HomeFeed) -> Text {
         guard let event = feed.event(of: race), event != feed.event else {
-            return Text("Latest result · \(race.title)")
+            return Text("Latest result")
         }
-        return Text("Latest result · \(race.title) · \(Nation.titled(event.shortDescription, nation: event.nation))")
+        return Text("Latest result · \(Nation.titled(event.shortDescription, nation: event.nation))")
     }
 }
 

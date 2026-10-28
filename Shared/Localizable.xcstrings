@@ -462,6 +462,22 @@
         }
       }
     },
+    "Latest result": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuestes Ergebnis"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dernier résultat"
+          }
+        }
+      }
+    },
     "Latest result · %@": {
       "localizations": {
         "de": {
@@ -474,22 +490,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Dernier résultat · %@"
-          }
-        }
-      }
-    },
-    "Latest result · %@ · %@": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Neuestes Ergebnis · %1$@ · %2$@"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Dernier résultat · %1$@ · %2$@"
           }
         }
       }
