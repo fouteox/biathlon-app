@@ -14,15 +14,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     let liveActivities: LiveActivities
     let liveActivityStarts: LiveActivityStarts
     private let notificationCenter = UNUserNotificationCenter.current()
-    /// IBU data goes through the server's cache when there is a server, to spare the IBU API.
-    let client = IBUClient(baseURL: Bundle.main.serverURL?.appending(path: "ibu/") ?? IBUClient.ibuBaseURL)
+    let client: IBUClient
 
     private var preferenceChanges: Task<Void, Never>?
     private var pendingChange: Task<Void, Never>?
     private var reminderRefresh: Task<Void, Never>?
 
     override init() {
-        let server = Bundle.main.serverURL.map { ServerClient(baseURL: $0) }
+        let (client, server) = Self.clients(arguments: ProcessInfo.processInfo.arguments)
+        self.client = client
         self.server = server
         // One for every request to the server: it attests a single key for the install.
         let appAttest = server.map { AppAttest(server: $0) }
@@ -30,6 +30,17 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         liveActivities = LiveActivities(server: server)
         liveActivityStarts = LiveActivityStarts(appAttest: appAttest)
         super.init()
+    }
+
+    /// IBU data goes through the server's cache when there is a server, to spare the IBU API. A Debug
+    /// build launched with `--sample-data`, as the UI tests launch it, runs on the fictional data of
+    /// `IBUClient.sample` instead, without a server: nothing it shows depends on the network.
+    static func clients(arguments: [String]) -> (ibu: IBUClient, server: ServerClient?) {
+        #if DEBUG
+            if arguments.contains("--sample-data") { return (.sample(now: .now), nil) }
+        #endif
+        let server = Bundle.main.serverURL.map { ServerClient(baseURL: $0) }
+        return (IBUClient(baseURL: server?.baseURL.appending(path: "ibu/") ?? IBUClient.ibuBaseURL), server)
     }
 
     func application(

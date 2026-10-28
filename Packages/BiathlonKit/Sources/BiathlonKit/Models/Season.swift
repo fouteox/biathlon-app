@@ -39,7 +39,7 @@ public struct SeasonID: RawRepresentable, Hashable, Comparable, Sendable, Codabl
     }
 
     /// The year the season starts: athletes' histories go back to the 1990s ("98/99").
-    private var start: Int {
+    var start: Int {
         let year = Int(rawValue.prefix(2)) ?? 0
         return year < 50 ? 2000 + year : 1900 + year
     }

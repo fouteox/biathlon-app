@@ -1,3 +1,5 @@
+import BiathlonKit
+import Foundation
 import Observation
 import Testing
 import UserNotifications
@@ -14,5 +16,20 @@ struct AppDelegateTests {
             break
         }
         #expect(delegate.settingsPresentation.isPresented)
+    }
+
+    /// IBU data goes through the server's cache.
+    @Test func readsThroughTheServer() {
+        let (ibu, server) = AppDelegate.clients(arguments: [])
+        #expect(server?.baseURL == Bundle.main.serverURL)
+        #expect(ibu.baseURL == Bundle.main.serverURL?.appending(path: "ibu/"))
+    }
+
+    /// As the UI tests launch the app: fictional data, and no server to reach.
+    @Test func sampleDataNeedsNoNetwork() async throws {
+        let (ibu, server) = AppDelegate.clients(arguments: ["--sample-data"])
+        #expect(server == nil)
+        let standings = try await ibu.worldCupStandings(category: .men, discipline: .total, now: .now)
+        #expect(!standings.standings.rows.isEmpty)
     }
 }

@@ -1,7 +1,7 @@
 import XCTest
 
-/// How VoiceOver reads the app's lists. The app runs on the data the server's cache serves at the
-/// time, off season as well: the tests look for the shape of each screen, never for a given name.
+/// How VoiceOver reads the app's lists. The app runs on `IBUClient.sample`'s fictional World Cup, laid
+/// out around today's date: the tests look for the shape of each screen, never for a given name.
 final class AccessibilityUITests: XCTestCase {
     /// What the audits leave to other changes: the layout at accessibility text sizes, and the
     /// contrast of the system colors, which only a device shows faithfully.
