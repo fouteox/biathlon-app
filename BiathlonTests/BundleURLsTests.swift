@@ -8,6 +8,12 @@ struct BundleURLsTests {
         #expect(Bundle.main.serverURL == URL(string: "https://biathlon-server.fouteox.workers.dev"))
     }
 
+    /// Wikimedia asks for the app's name and version, with a way to reach its developer.
+    @Test func namesTheAppToWikimedia() throws {
+        let version = try #require(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String)
+        #expect(Bundle.main.wikimediaUserAgent == "Biathlon/\(version) (https://github.com/fouteox/biathlon-app)")
+    }
+
     @Test func hasNoURLForAMissingKey() {
         #expect(Bundle.main.url(forInfoDictionaryKey: "BiathlonMissingURL") == nil)
     }

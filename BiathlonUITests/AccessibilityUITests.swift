@@ -50,6 +50,8 @@ final class AccessibilityUITests: XCTestCase {
         let standing = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "World Cup standings"))
         XCTAssertTrue(standing.firstMatch.waitForExistence(timeout: Self.timeout))
         XCTAssertTrue(Self.seasonPicker(in: app).exists)
+        // The athlete's Wikipedia article, from the sample's Wikidata: a `Link` reads as a link, not a button.
+        XCTAssertTrue(app.links["Wikipedia"].waitForExistence(timeout: Self.timeout))
         // The profile reads its texts and nothing else: the photo, or the symbol shown in its
         // place, adds no words of its own.
         let profile = try XCTUnwrap(Self.readElements(of: try firstRow(in: app).snapshot()).first)

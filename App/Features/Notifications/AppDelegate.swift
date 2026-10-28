@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     let liveActivityStarts: LiveActivityStarts
     private let notificationCenter = UNUserNotificationCenter.current()
     let client: IBUClient
+    let wikidata: WikidataClient
     /// A Debug build launched with `--sample-data`, as the UI tests launch it, runs on the fictional data of
     /// `IBUClient.sample`, without a server, and keeps its favorites in memory: nothing it shows depends
     /// on the network or on an earlier launch.
@@ -30,6 +31,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let (client, server) = Self.clients(sampleData: runsOnSampleData)
         self.client = client
         self.server = server
+        wikidata = Self.wikidata(sampleData: runsOnSampleData)
         // One for every request to the server: it attests a single key for the install.
         let appAttest = server.map { AppAttest(server: $0) }
         push = PushRegistration(appAttest: appAttest)
@@ -53,6 +55,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         #endif
         let server = Bundle.main.serverURL.map { ServerClient(baseURL: $0) }
         return (IBUClient(baseURL: server?.baseURL.appending(path: "ibu/") ?? IBUClient.ibuBaseURL), server)
+    }
+
+    static func wikidata(sampleData: Bool) -> WikidataClient {
+        #if DEBUG
+            if sampleData { return .sample }
+        #endif
+        return WikidataClient(userAgent: Bundle.main.wikimediaUserAgent)
     }
 
     func application(

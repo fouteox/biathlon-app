@@ -6,7 +6,10 @@ struct AthleteView: View {
     let name: String
 
     @Environment(\.ibu) private var ibu
+    @Environment(\.wikidata) private var wikidata
     @State private var bio = Loader<AthleteBio>()
+    /// Loaded on its own, like the history: the profile goes without the link until it comes, or if it fails.
+    @State private var wikipedia = Loader<WikipediaArticles>()
     /// Loaded on its own: the profile shows without waiting for it, and without it.
     @State private var history = Loader<AthleteHistory>()
     /// The season picked in the toolbar; until then, the one the history opens on.
@@ -66,6 +69,11 @@ struct AthleteView: View {
                         FavoriteButton(
                             kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation,
                             subject: Nation.namedTitle(nation))
+                    }
+                }
+                if let article = wikipedia.state.value?.article(preferring: Locale.preferredLanguages) {
+                    Section {
+                        Link("Wikipedia", destination: article)
                     }
                 }
                 if let history = history.state.value, let season {
@@ -155,7 +163,8 @@ struct AthleteView: View {
         async let historyLoad: Void = history.load {
             AthleteHistory(results: try await ibu.athleteResults(id: athleteID), now: .now)
         }
-        _ = await (bioLoad, historyLoad)
+        async let wikipediaLoad: Void = wikipedia.load { try await wikidata.wikipediaArticles(ofAthlete: athleteID) }
+        _ = await (bioLoad, historyLoad, wikipediaLoad)
     }
 
     private func loadStanding() async {
