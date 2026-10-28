@@ -41,14 +41,21 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - run: xcodebuild -version && swift --version
+      # The image's newest iPhone simulator, booted before the tests: left to xcodebuild, the
+      # boot went on while the UI tests ran, and an app launch or the test runner's own start
+      # could stall for minutes ("does not have a process ID", "Failed to terminate").
+      # bootstatus -b boots the device and returns once its boot is complete.
+      - name: Boot the simulator
+        run: |
+          device=$(xcrun simctl list devices available --json \
+            | jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))] | last | .udid')
+          echo "device=$device" >> "$GITHUB_ENV"
+          xcrun simctl bootstatus "$device" -b
       # The scheme's tests: the app's (BiathlonTests), hosted by the app, its UI tests
       # (BiathlonUITests), and BiathlonKit's.
       - name: Build and test
         run: |
           set -o pipefail
-          # The image's newest iPhone simulator.
-          device=$(xcrun simctl list devices available --json \
-            | jq -r '[.devices | to_entries[] | select(.key | contains("iOS")) | .value[] | select(.name | startswith("iPhone"))] | last | .udid')
           xcodebuild test \
             -project Biathlon.xcodeproj \
             -scheme Biathlon \
