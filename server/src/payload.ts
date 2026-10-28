@@ -12,6 +12,8 @@ export const LOC_KEYS = {
   rescheduled: "push.rescheduled",
   /** The alert of a Live Activity started for a favorite (liveStarts.ts). */
   liveActivityStart: "push.liveActivity",
+  /** The alert of a Live Activity started for a race the device follows (liveStarts.ts). */
+  followedRaceStart: "push.followedRace",
 } as const;
 
 /**

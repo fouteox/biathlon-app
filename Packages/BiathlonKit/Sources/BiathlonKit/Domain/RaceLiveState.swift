@@ -24,21 +24,13 @@ public struct RaceLiveState: Codable, Hashable, Sendable {
 extension RaceLiveState {
     /// Activities show from this long before the start: ActivityKit ends a standard
     /// Live Activity after eight hours, so one started days ahead would end before the race.
+    /// The server starts those of later races then (server/src/liveStarts.ts).
     public static let activityLead: TimeInterval = 30 * 60
 
-    /// When to start the activity of a race starting at `raceStart`; `nil` for now.
+    /// When the activity of a race starting at `raceStart` shows; `nil` for now.
     public static func activityStart(raceStart: Date, now: Date) -> Date? {
         let start = raceStart - activityLead
         return start > now ? start : nil
-    }
-
-    /// Whether an activity shown from `scheduledStart` (`nil`: at once) must be requested
-    /// again, ActivityKit being unable to move its start: a pending one whose race moved,
-    /// or one already shown for a race postponed beyond the lead.
-    public func needsNewActivity(scheduledStart: Date?, isPending: Bool, now: Date) -> Bool {
-        guard phase.canBeFollowedLive else { return false }
-        let start = Self.activityStart(raceStart: startTime, now: now)
-        return start != scheduledStart && (start != nil || isPending)
     }
 }
 

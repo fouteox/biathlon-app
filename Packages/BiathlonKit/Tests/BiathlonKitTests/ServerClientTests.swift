@@ -118,7 +118,8 @@ struct ServerClientTests {
         let request = try SignedRequest.liveActivityStarts(
             token: "ab12",
             LiveActivityStartsRegistration(
-                environment: .sandbox, favorites: FavoriteSet(athleteIDs: ["B2", "A1"], nations: ["FRA"])))
+                environment: .sandbox, favorites: FavoriteSet(athleteIDs: ["B2", "A1"], nations: ["FRA"]),
+                races: ["R2", "R1"]))
         var clientData: Data?
         try await server.client.send(request) { data in
             clientData = data
@@ -129,7 +130,7 @@ struct ServerClientTests {
         #expect(sent.httpMethod == "PUT")
         #expect(
             try JSONDecoder().decode(StartsBody.self, from: body)
-                == StartsBody(environment: "sandbox", athletes: ["A1", "B2"], nations: ["FRA"]))
+                == StartsBody(environment: "sandbox", athletes: ["A1", "B2"], nations: ["FRA"], races: ["R1", "R2"]))
         #expect(clientData == Data("c1\nPUT /v1/live-activity-starts/ab12\n".utf8) + body)
         #expect(sent.value(forHTTPHeaderField: "Content-Type") == "application/json")
         #expect(sent.value(forHTTPHeaderField: "X-App-Attest-Key-Id") == "K1")
@@ -184,6 +185,7 @@ struct ServerClientTests {
         let environment: String
         let athletes: [String]
         let nations: [String]
+        let races: [String]
     }
 
     private struct DeviceBody: Decodable, Equatable {

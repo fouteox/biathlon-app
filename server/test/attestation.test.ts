@@ -395,6 +395,7 @@ describe("Live Activity start endpoint", () => {
       { ...favorites, athletes: [42] },
       { ...favorites, nations: ["France"] },
       { ...favorites, athletes: [], nations: [] },
+      { ...favorites, races: ["not a race"] },
       { ...favorites, athletes: Array.from({ length: 501 }, (_, index) => `BT${index}`) },
     ]) {
       expect((await call(await signed("PUT", token, body))).status).toBe(400);

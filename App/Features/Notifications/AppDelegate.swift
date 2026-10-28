@@ -33,8 +33,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // One for every request to the server: it attests a single key for the install.
         let appAttest = server.map { AppAttest(server: $0) }
         push = PushRegistration(appAttest: appAttest)
-        liveActivities = LiveActivities(server: server)
         liveActivityStarts = LiveActivityStarts(appAttest: appAttest)
+        liveActivities = LiveActivities(server: server, starts: liveActivityStarts)
         super.init()
     }
 

@@ -15,9 +15,10 @@ struct RaceView: View {
     @State private var liveActivityFailure = ""
     @Query private var favorites: [Favorite]
 
-    private var isLive: Bool {
-        (loader.state.value?.competition ?? race).state == .live
-    }
+    /// The race as its results last gave it, or as the calendar did.
+    private var latest: Competition { loader.state.value?.competition ?? race }
+
+    private var isLive: Bool { latest.state == .live }
 
     var body: some View {
         LoadableView(state: loader.state, retry: load) { results in
@@ -135,7 +136,8 @@ struct RaceView: View {
             Task {
                 guard follow else { return await liveActivities.stopFollowing(raceID: race.id) }
                 do {
-                    try await liveActivities.follow(raceID: race.id, name: race.shortDescription)
+                    try await liveActivities.follow(
+                        raceID: race.id, name: race.shortDescription, startTime: latest.startTime)
                 } catch {
                     Logger.notifications.error(
                         "Starting the Live Activity failed: \(String(describing: error), privacy: .public)")
@@ -150,7 +152,7 @@ struct RaceView: View {
     private static func message(for error: any Error) -> String {
         switch error {
         case LiveActivities.Failure.noChannel:
-            String(localized: "This race can't be followed live yet. Try again closer to the start.")
+            String(localized: "This race can't be followed live yet. Try again in a few minutes.")
         case LiveActivities.Failure.ended:
             String(localized: "This race is over.")
         case is ActivityAuthorizationError, is URLError:

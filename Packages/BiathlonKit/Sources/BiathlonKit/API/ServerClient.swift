@@ -227,7 +227,7 @@ public struct SignedRequest: Equatable, Sendable {
         try Self(path: "v1/devices/\(token)", registration)
     }
 
-    /// Registers the push-to-start token with the favorites, or deletes them without `registration`.
+    /// Registers the push-to-start token with the races and favorites, or deletes them without `registration`.
     public static func liveActivityStarts(token: String, _ registration: LiveActivityStartsRegistration?) throws
         -> Self
     {
@@ -264,15 +264,17 @@ public struct DeviceRegistration: Encodable, Sendable {
     }
 }
 
-/// The favorites the server starts Live Activities for (server/src/liveStarts.ts).
+/// The races and the favorites the server starts Live Activities for (server/src/liveStarts.ts).
 public struct LiveActivityStartsRegistration: Encodable, Sendable {
     let environment: APNsEnvironment
     let athletes: [String]
     let nations: [String]
+    let races: [String]
 
-    public init(environment: APNsEnvironment, favorites: FavoriteSet) {
+    public init(environment: APNsEnvironment, favorites: FavoriteSet, races: [String]) {
         self.environment = environment
         athletes = favorites.athleteIDs.sorted()
         nations = favorites.nations.sorted()
+        self.races = races.sorted()
     }
 }

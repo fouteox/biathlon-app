@@ -8,7 +8,8 @@ import os
 ///
 /// An activity subscribes to its race's APNs broadcast channel, which the server opens
 /// for upcoming races and publishes each new state on. The server is the only source of
-/// the activity's content: the app's cached results could be older than a push.
+/// the activity's content: the app's cached results could be older than a push. A later race
+/// can be followed whenever: the server starts its activity shortly before (`LiveActivityStarts`).
 @Observable
 final class LiveActivities {
     enum Failure: Error, Equatable {
@@ -18,9 +19,11 @@ final class LiveActivities {
         case ended(LiveActivityEnd)
     }
 
-    /// Races with an activity on the Lock Screen or scheduled to show there, and races
-    /// whose activity is being requested: a second tap meanwhile starts no duplicate.
-    var followedRaceIDs: Set<String> { startedRaceIDs.union(requests.keys) }
+    /// Races with an activity on the Lock Screen, races whose activity is being requested (a
+    /// second tap meanwhile starts no duplicate), and later races the server will start one for.
+    var followedRaceIDs: Set<String> {
+        startedRaceIDs.union(requests.keys).union(starts.followedRaces.raceIDs)
+    }
     private var startedRaceIDs: Set<String> = []
     /// The request in flight for each race, which `stopFollowing` cancels.
     private var requests: [String: UUID] = [:]
@@ -28,14 +31,16 @@ final class LiveActivities {
     private(set) var areEnabled = ActivityAuthorizationInfo().areActivitiesEnabled
 
     @ObservationIgnored private let server: ServerClient?
+    private let starts: LiveActivityStarts
     @ObservationIgnored private var observers: [Task<Void, Never>] = []
     /// Each activity's observation, by activity identifier, until the activity ends.
     @ObservationIgnored private let activityObservers = KeyedTasks<String>()
 
     var isAvailable: Bool { server != nil && areEnabled }
 
-    init(server: ServerClient?) {
+    init(server: ServerClient?, starts: LiveActivityStarts) {
         self.server = server
+        self.starts = starts
         refresh()
         observers = [
             Task { [weak self] in
@@ -45,10 +50,12 @@ final class LiveActivities {
             },
             Task { [weak self] in
                 for await activity in Activity<RaceActivityAttributes>.activityUpdates {
+                    // The activity now stands for the later race the server was to start it for.
+                    self?.starts.unfollow(activity.attributes.raceID)
                     self?.refresh()
                     self?.observeState(of: activity)
-                    // One the server started for a favorite (LiveActivityStarts) may join one the
-                    // app requested, and may have missed a broadcast during its start.
+                    // One the server started (LiveActivityStarts) may join one the app
+                    // requested, and may have missed a broadcast during its start.
                     await self?.reconcile(raceID: activity.attributes.raceID)
                 }
             },
@@ -60,25 +67,32 @@ final class LiveActivities {
         for observer in observers { observer.cancel() }
     }
 
-    /// Starts the race's activity on its broadcast channel, or schedules it to start
-    /// shortly before a later race (`RaceLiveState.activityStart`).
-    func follow(raceID: String, name: String) async throws {
+    /// Starts the race's activity on its broadcast channel, or has the server start it shortly
+    /// before a later race starting at `startTime` (`RaceLiveState.activityStart`): ActivityKit's
+    /// scheduled activities count toward its limit of simultaneous ones, and can't follow a
+    /// race that moves.
+    func follow(raceID: String, name: String, startTime: Date) async throws {
         guard !followedRaceIDs.contains(raceID) else { return }
+        if RaceLiveState.activityStart(raceStart: startTime, now: .now) != nil {
+            return starts.follow(raceID, startingAt: startTime)
+        }
         let requested = try await withChannel(raceID: raceID) { try Self.request(raceID: raceID, name: name, on: $0) }
         if requested { await reconcile(raceID: raceID) }
     }
 
-    /// Removes the race's activity from the Lock Screen at once, or cancels its request.
+    /// Removes the race's activity from the Lock Screen at once, or cancels its request or its
+    /// start by the server.
     func stopFollowing(raceID: String) async {
+        starts.unfollow(raceID)
         requests[raceID] = nil
         await Self.end(raceID: raceID)
         refresh()
     }
 
     /// Brings every followed race's activities in line with their channels while the app is
-    /// in the foreground, until cancelled: a broadcast can update an activity but can't move
-    /// its scheduled start or subscribe it to the channel the server opens in place of one
-    /// APNs dropped, and a lookup the network or the server failed is tried again.
+    /// in the foreground, until cancelled: a broadcast can update an activity but can't
+    /// subscribe it to the channel the server opens in place of one APNs dropped, and a lookup
+    /// the network or the server failed is tried again.
     func reconcileWhileActive() async {
         while !Task.isCancelled {
             for raceID in startedRaceIDs { await reconcile(raceID: raceID) }
@@ -105,13 +119,12 @@ final class LiveActivities {
         }
     }
 
-    /// Replaces the race's activities that no longer match its channel: the server opened
-    /// a new one, or the race moved since the activity was scheduled
-    /// (`RaceLiveState.needsNewActivity`), and ends all but one of those that match, the one
-    /// on screen if any: the server can start one for a favorite's race the app requested
-    /// an activity for. The replacement is requested first, so the race
-    /// stays followed if it can't be, and only when no activity matches already, like one
-    /// requested by a reconciliation the app was quit during; at the app's or the device's
+    /// Replaces the race's activities that no longer match its channel, the server having
+    /// opened a new one, and ends all but one of those that match, the one on screen if any:
+    /// the server can start one for a favorite's race the app requested an activity for. The
+    /// replacement is requested first, so the race stays followed if it can't be, and only when
+    /// no activity matches already, like one requested by a reconciliation the app was quit
+    /// during; at the app's or the device's
     /// limit of activities, once the outdated ones have made room. The one kept gets the
     /// channel's state, for a broadcast it missed while the device was offline: the
     /// channel stores none. The update carries that broadcast's timestamp, for ActivityKit to
@@ -126,13 +139,7 @@ final class LiveActivities {
         var full: LiveChannel?
         let checked = try await withChannel(raceID: raceID) { channel in
             let shown = Self.activities(of: raceID).filter { Self.shownStates.contains($0.activityState) }
-            let isCurrent = { (activity: Activity<RaceActivityAttributes>) in
-                activity.attributes.channelID == channel.id
-                    && !channel.state.needsNewActivity(
-                        scheduledStart: activity.attributes.scheduledStart,
-                        isPending: activity.activityState == .pending, now: .now)
-            }
-            let current = shown.filter(isCurrent)
+            let current = shown.filter { $0.attributes.channelID == channel.id }
             let kept = current.first { $0.activityState == .active } ?? current.first
             outdated = shown.filter { $0.id != kept?.id }.map(\.id)
             if let kept, kept.content.state != channel.state { missed = [kept.id] }
@@ -202,20 +209,8 @@ final class LiveActivities {
 
     /// Requests the race's activity on the channel `channelID`, showing `state`.
     static func request(raceID: String, name: String, channelID: String, state: RaceLiveState) throws {
-        let start = RaceLiveState.activityStart(raceStart: state.startTime, now: .now)
-        let attributes = RaceActivityAttributes(
-            raceID: raceID, name: name, channelID: channelID, scheduledStart: start)
-        let content = state.activityContent
-        if let start {
-            let minutes = Int(RaceLiveState.activityLead / 60)
-            _ = try Activity.request(
-                attributes: attributes, content: content, pushType: .channel(channelID), style: .standard,
-                alertConfiguration: AlertConfiguration(
-                    title: "Live Activity", body: "Starts in \(minutes) minutes", sound: .default),
-                start: start)
-        } else {
-            _ = try Activity.request(attributes: attributes, content: content, pushType: .channel(channelID))
-        }
+        let attributes = RaceActivityAttributes(raceID: raceID, name: name, channelID: channelID)
+        _ = try Activity.request(attributes: attributes, content: state.activityContent, pushType: .channel(channelID))
     }
 
     // `Activity` isn't `Sendable` and its `update` and `end` run off the main actor: the
@@ -248,7 +243,7 @@ final class LiveActivities {
     /// The server's cron runs every minute.
     private static let channelLookupInterval = Duration.seconds(60)
 
-    /// Activities on screen or scheduled to show.
+    /// Activities on screen, or scheduled to show by an earlier version of the app.
     static let shownStates: [ActivityState] = [.pending, .active, .stale]
 
     private func refresh() {
@@ -258,26 +253,15 @@ final class LiveActivities {
                 .map(\.attributes.raceID))
     }
 
-    /// Ended and dismissed activities leave `followedRaceIDs`, wherever they end, and a
-    /// broadcast that moves the race reschedules its activity while the app runs. The
-    /// observation stops once the activity ends: it won't update its content anymore.
+    /// Ended and dismissed activities leave `followedRaceIDs`, wherever they end. The
+    /// observation stops once the activity ends.
     private func observeState(of activity: Activity<RaceActivityAttributes>) {
-        let raceID = activity.attributes.raceID
-        let scheduledStart = activity.attributes.scheduledStart
         activityObservers.run(
             activity.id,
             { [weak self] in
                 for await state in activity.activityStateUpdates {
                     self?.refresh()
                     guard Self.shownStates.contains(state) else { return }
-                }
-            },
-            { [weak self] in
-                for await content in activity.contentUpdates
-                where content.state.needsNewActivity(
-                    scheduledStart: scheduledStart, isPending: activity.activityState == .pending, now: .now)
-                {
-                    await self?.reconcile(raceID: raceID)
                 }
             })
     }
