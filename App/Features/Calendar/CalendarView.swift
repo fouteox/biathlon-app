@@ -12,23 +12,7 @@ struct CalendarView: View {
     var body: some View {
         LoadableView(state: loader.state, retry: load) { events in
             List(events) { event in
-                NavigationLink(value: Route.event(event)) {
-                    HStack {
-                        NationMark(code: event.nation).font(.title2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(event.shortDescription).font(.headline)
-                            Text(event.dates, format: .interval.day().month())
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                            if event.isWorldChampionships {
-                                Text("World Championships").font(.caption.bold()).foregroundStyle(.tint)
-                            }
-                            if event.isOlympics {
-                                Text("Olympic Games").font(.caption.bold()).foregroundStyle(.tint)
-                            }
-                        }
-                    }
-                }
+                NavigationLink(value: Route.event(event)) { EventRow(event: event) }
             }
             .refreshable { await load() }
             .overlay {
@@ -76,6 +60,29 @@ struct EventView: View {
 
     private func load() async {
         await loader.load { try await ibu.competitions(eventID: event.id).sorted { $0.startTime < $1.startTime } }
+    }
+}
+
+/// An event's place, dates and championship, in the calendar and at the top of the home screen.
+struct EventRow: View {
+    let event: BiathlonEvent
+
+    var body: some View {
+        HStack {
+            NationMark(code: event.nation).font(.title2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(event.shortDescription).font(.headline)
+                Text(event.dates, format: .interval.day().month())
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                if event.isWorldChampionships {
+                    Text("World Championships").font(.caption.bold()).foregroundStyle(.tint)
+                }
+                if event.isOlympics {
+                    Text("Olympic Games").font(.caption.bold()).foregroundStyle(.tint)
+                }
+            }
+        }
     }
 }
 

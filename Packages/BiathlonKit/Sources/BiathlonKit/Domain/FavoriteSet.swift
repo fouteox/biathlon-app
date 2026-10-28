@@ -23,7 +23,8 @@ extension RaceResults {
         favorites.contains(row) || (row.isTeam && legs(of: row).contains(where: favorites.contains))
     }
 
-    public func favoriteStandings(in favorites: FavoriteSet) -> [ResultRow] {
-        standings.filter { isFavorite($0, in: favorites) }
+    /// The first `count` standings, then the favorites ranked below them: each row once.
+    public func featuredStandings(top count: Int, favorites: FavoriteSet) -> [ResultRow] {
+        standings.prefix(count) + standings.dropFirst(count).filter { isFavorite($0, in: favorites) }
     }
 }
