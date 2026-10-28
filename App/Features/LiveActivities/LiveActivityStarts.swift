@@ -32,6 +32,9 @@ final class LiveActivityStarts {
     @ObservationIgnored private var tokenUpdates: Task<Void, Never>?
     /// The last sync, which the next one waits for: the server and the stored token see them in order.
     @ObservationIgnored private var lastSync: Task<Void, Never>?
+    /// The registration the server last took during this launch: a sync of the same one sends
+    /// nothing, while one that failed is sent again at the next sync.
+    @ObservationIgnored private var acknowledged: Registration?
 
     init(appAttest: AppAttest?, defaults: UserDefaults = .standard) {
         self.appAttest = appAttest
@@ -85,31 +88,34 @@ final class LiveActivityStarts {
     }
 
     /// Sends the races and favorites to the server, or deletes them from it once nothing is left
-    /// to follow, after the previous sync. A failed sync is retried at the next launch or change.
+    /// to follow, after the previous sync, unless the server already took this registration.
     func sync(_ registration: Registration) async {
         let previous = lastSync
         let current = Task {
             await previous?.value
-            await send(registration)
+            guard registration != acknowledged else { return }
+            if await send(registration) { acknowledged = registration }
         }
         lastSync = current
         await current.value
     }
 
-    private func send(_ registration: Registration) async {
-        guard let appAttest else { return }
+    /// Whether the server took the registration, or there was nothing to delete.
+    private func send(_ registration: Registration) async -> Bool {
+        guard let appAttest else { return false }
         let body = registration.body(environment: .current)
         let wanted = body != nil
         // A deletion names the token the registration was sent with: ActivityKit gives none
         // while Live Activities are turned off in Settings.
         let token = wanted ? registration.token : defaults.string(forKey: Keys.registeredToken)
-        guard let token else { return }
+        guard let token else { return !wanted }
         do {
             let request = try SignedRequest.liveActivityStarts(token: token, body)
             // Set before the PUT: the server may store it even if its answer is lost.
             if wanted { defaults.set(token, forKey: Keys.registeredToken) }
             try await appAttest.send(request)
             if !wanted { defaults.removeObject(forKey: Keys.registeredToken) }
+            return true
         } catch AppAttest.Failure.unsupported {
             Logger.notifications.notice("App Attest is unavailable, the server starts no Live Activity")
         } catch {
@@ -117,6 +123,7 @@ final class LiveActivityStarts {
             Logger.notifications.error(
                 "Sending the Live Activity starts failed: \(String(describing: error), privacy: .private)")
         }
+        return false
     }
 
     private nonisolated static func hex(_ token: Data) -> String {

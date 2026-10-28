@@ -32,6 +32,24 @@ struct LiveActivityStartsTests {
             ])
     }
 
+    /// The app syncs again when it comes back: a registration the server didn't take is sent
+    /// again, one it took is not.
+    @Test func sendsARegistrationAgainOnlyUntilTheServerTakesIt() async throws {
+        let defaults = try UserDefaults.empty()
+        let server = ServerStub(["PUT /v1/live-activity-starts/aa": [.init(503), .init(204)]])
+        let starts = LiveActivityStarts(
+            appAttest: AppAttest(server: server.client, service: FakeAttestService(), defaults: defaults),
+            defaults: defaults)
+        let registration = LiveActivityStarts.Registration(
+            token: "aa", isEnabled: false, favorites: FavoriteSet(athleteIDs: [], nations: []), races: ["R1"])
+
+        await starts.sync(registration)
+        await starts.sync(registration)
+        await starts.sync(registration)
+
+        #expect(await server.requests(to: "PUT /v1/live-activity-starts/aa").count == 2)
+    }
+
     /// A followed race reaches the server whether or not starting for favorites is on.
     @Test func sendsTheFollowedRacesAndTheFavoritesOnlyWhileStartingForThemIsOn() async throws {
         let favorites = FavoriteSet(athleteIDs: ["A1"], nations: ["FRA"])

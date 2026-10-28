@@ -38,6 +38,7 @@ extension EnvironmentValues {
 struct RootView: View {
     @Environment(LiveActivityStarts.self) private var liveActivityStarts
     @Environment(SettingsPresentation.self) private var settingsPresentation
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var favorites: [Favorite]
 
     var body: some View {
@@ -61,9 +62,11 @@ struct RootView: View {
         .sheet(isPresented: $settingsPresentation.isPresented) {
             NavigationStack { SettingsView() }
         }
-        // At launch, and whenever the favorites, the setting or the token change, wherever in
-        // the app. A change cancels the sync still waiting, which coalesces quick successive ones.
-        .task(id: registration) {
+        // At launch, whenever the races, the favorites, the setting or the token change, wherever
+        // in the app, and when the app comes back, for a sync that failed. A change cancels the
+        // sync still waiting, which coalesces quick successive ones.
+        .task(id: scenePhase == .active ? registration : nil) {
+            guard scenePhase == .active else { return }
             let registration = registration
             do {
                 try await Task.sleep(for: .milliseconds(500))
