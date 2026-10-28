@@ -16,4 +16,13 @@ final class HomeUITests: XCTestCase {
             app.navigationBars.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", place)).firstMatch
                 .waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
+
+    /// The latest result says which race it was and when, above its podium.
+    @MainActor func testLatestResultSaysWhenItsRaceStarted() {
+        let app = XCUIApplication.launchInEnglish()
+        // The race reads as one element: its name, its start date with the year, and its state.
+        let race = app.cells.descendants(matching: .any).matching(
+            NSPredicate(format: "label CONTAINS %@ AND label MATCHES %@", "Finished", ".*\\b(19|20)[0-9]{2}\\b.*"))
+        XCTAssertTrue(race.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
+    }
 }

@@ -209,6 +209,8 @@ struct RaceRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             race.state.badge?.font(.caption.bold())
         }
+        // Read as one element even outside a link, as above the latest result.
+        .accessibilityElement(children: .combine)
     }
 }
 
