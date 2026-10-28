@@ -96,16 +96,6 @@ final class AccessibilityUITests: XCTestCase {
         let star = app.navigationBars.buttons["Add to favorites"]
         XCTAssertTrue(star.waitForExistence(timeout: Self.timeout))
         star.tap()
-        // Leaves the favorites as they were for the next run, even when a step below fails: the
-        // store persists on the simulator.
-        addTeardownBlock { @MainActor in
-            app.openTab("Standings")
-            for remove in [
-                Self.teamButton(in: app, titled: "Remove "), app.navigationBars.buttons["Remove from favorites"],
-            ] where remove.exists {
-                remove.tap()
-            }
-        }
         // The athlete's team shows with the profile, which can load after the toolbar's star.
         let team = Self.teamButton(in: app, titled: "Add ")
         XCTAssertTrue(team.waitForExistence(timeout: Self.timeout))

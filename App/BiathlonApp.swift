@@ -24,7 +24,7 @@ struct BiathlonApp: App {
                     await appDelegate.liveActivities.reconcileWhileActive()
                 }
         }
-        .modelContainer(for: Favorite.self)
+        .modelContainer(for: Favorite.self, inMemory: appDelegate.runsOnSampleData)
     }
 }
 
