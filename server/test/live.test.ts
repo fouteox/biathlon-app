@@ -1355,7 +1355,7 @@ describe("alerts", () => {
   });
 });
 
-describe("Live Activities started for favorites", () => {
+describe("Live Activities started for favorites and followed races", () => {
   const START = Date.parse("2026-11-26T15:15:00Z");
   const DUE = START - 30 * 60_000;
   const PERROT = "BTFRA00000000001";
@@ -1450,6 +1450,78 @@ describe("Live Activities started for favorites", () => {
     const later = stub();
     await sync(env, [race({ IsLive: true })], DUE + 20 * 60_000);
     expect(starts(later)).toEqual([]);
+  });
+
+  it("starts the activity of a race the device follows 30 minutes before, without waiting for its start list", async () => {
+    const env = await setUp();
+    await save(env, "dd".repeat(32), { races: [RACE_ID] });
+    // Rows the API returns before it marks them as the start list.
+    const sent = stub({ results: { ...START_LIST, IsStartList: false } });
+    await sync(env, [race()], DUE - 60_000);
+    expect(sent).toEqual([]);
+
+    await sync(env, [race()], DUE);
+    expect(startUrls(sent)).toEqual([`https://api.push.apple.com/3/device/${"dd".repeat(32)}`]);
+    const [production] = await channels(env);
+    expect(startOn(sent, "https://api.push.apple.com")!.body).toMatchObject({
+      aps: {
+        event: "start",
+        attributes: { raceID: RACE_ID, name: "Men's 20km Individual", channelID: production!.channelId },
+        "input-push-channel": production!.channelId,
+        alert: { title: { "loc-key": "race.SMIN" }, body: { "loc-key": "push.followedRace" }, sound: "default" },
+      },
+    });
+
+    // Started once, while the favorites wait for the start list.
+    const later = stub();
+    await sync(env, [race()], DUE + 60_000);
+    expect(startUrls(later)).toEqual([
+      `https://api.push.apple.com/3/device/${"aa".repeat(32)}`,
+      `https://api.sandbox.push.apple.com/3/device/${"cc".repeat(32)}`,
+    ]);
+  });
+
+  it("starts the race of a device none of whose favorites raced once it follows the race", async () => {
+    const env = await setUp();
+    stub();
+    await sync(env, [race()], DUE);
+
+    await save(env, "bb".repeat(32), { nations: ["ITA"], races: [RACE_ID] });
+    const sent = stub();
+    await sync(env, [race()], DUE + 60_000);
+    expect(startUrls(sent)).toEqual([`https://api.push.apple.com/3/device/${"bb".repeat(32)}`]);
+    expect((startOn(sent, "https://api.push.apple.com")!.body as { aps: { alert: object } }).aps.alert).toMatchObject({
+      body: { "loc-key": "push.followedRace" },
+    });
+  });
+
+  it("validates the followed races, which app versions without them leave out", () => {
+    const token = "aa".repeat(32);
+    expect(
+      parseStartRegistration(token, { environment: "production", athletes: [], nations: [], races: [RACE_ID] }),
+    ).toEqual({
+      token,
+      environment: "production",
+      athletes: [],
+      nations: [],
+      races: [RACE_ID],
+    });
+    expect(parseStartRegistration(token, { environment: "production", athletes: [], nations: ["FRA"] })).toMatchObject({
+      races: [],
+    });
+    for (const races of [
+      ["not a race"],
+      [42],
+      "BT2627SWRLCP01SMIN",
+      Array.from({ length: 501 }, (_, index) => `R${index}`),
+    ]) {
+      expect(
+        typeof parseStartRegistration(token, { environment: "production", athletes: [], nations: ["FRA"], races }),
+      ).toBe("string");
+    }
+    expect(parseStartRegistration(token, { environment: "production", athletes: [], nations: [], races: [] })).toBe(
+      "nothing to follow",
+    );
   });
 
   it("gives up the starts APNs leaves unanswered once the update's time is up, and sends them at the next run", async () => {

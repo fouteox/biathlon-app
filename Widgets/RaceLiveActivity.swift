@@ -150,7 +150,7 @@ private struct LeaderMark: View {
 #if DEBUG
     private let previewAttributes = RaceActivityAttributes(
         raceID: RaceActivityAttributes.demoRaceID, name: RaceActivityAttributes.demoName,
-        channelID: "preview", scheduledStart: nil)
+        channelID: "preview")
 
     #Preview("Lock Screen", as: .content, using: previewAttributes) {
         RaceLiveActivity()

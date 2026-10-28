@@ -8,7 +8,7 @@
     /// suggests testing ActivityKit pushes: the activity subscribes to a channel created in the
     /// Push Notifications Console, in the development environment, which can then broadcast the
     /// payloads copied here; each state can also be shown locally. The console can also start it
-    /// with the push-to-start token, from the start payload the server sends for a favorite's race
+    /// with the push-to-start token, from the start payload the server sends for a followed race
     /// (server/src/liveStarts.ts). Debug builds only, its text stays out of the String Catalog.
     struct LiveActivityDemoView: View {
         @Environment(LiveActivityStarts.self) private var liveActivityStarts
@@ -92,12 +92,6 @@
                             start(startTime: .now + 10 * 60)
                         } label: {
                             Text(verbatim: "Start now")
-                        }
-                        Button {
-                            // Shown a minute from now, the lead before the start.
-                            start(startTime: .now + 60 + RaceLiveState.activityLead)
-                        } label: {
-                            Text(verbatim: "Schedule in 1 minute")
                         }
                     }
                     .disabled(channelID.isEmpty)
@@ -186,7 +180,7 @@
                         dismissalDate: isEnd ? Int(Self.dismissal.timeIntervalSince1970) : nil)))
         }
 
-        /// Copies the start payload the server sends for a favorite's race 30 minutes before it,
+        /// Copies the start payload the server sends for a followed race 30 minutes before it,
         /// on the demo race: its attributes, its channel and Apple's required alert.
         private func copyStartPayload() {
             let state = RaceLiveState.demo(startTime: .now + RaceLiveState.activityLead)[0]
@@ -197,12 +191,11 @@
                         relevanceScore: state.relevanceScore, contentState: state,
                         attributesType: String(describing: RaceActivityAttributes.self),
                         attributes: RaceActivityAttributes(
-                            raceID: Self.raceID, name: RaceActivityAttributes.demoName, channelID: channelID,
-                            scheduledStart: nil),
+                            raceID: Self.raceID, name: RaceActivityAttributes.demoName, channelID: channelID),
                         inputPushChannel: channelID,
                         alert: .init(
                             title: .init(locKey: RaceKind.menSprint.localizationKey),
-                            body: .init(locKey: "push.liveActivity"),
+                            body: .init(locKey: "push.followedRace"),
                             sound: "default"))))
         }
 

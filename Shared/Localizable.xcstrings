@@ -1368,18 +1368,18 @@
         }
       }
     },
-    "This race can't be followed live yet. Try again closer to the start.": {
+    "This race can't be followed live yet. Try again in a few minutes.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dieses Rennen kann noch nicht live verfolgt werden. Versuche es kurz vor dem Start erneut."
+            "value": "Dieses Rennen kann noch nicht live verfolgt werden. Versuche es in ein paar Minuten erneut."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Cette course ne peut pas encore être suivie en direct. Réessayez plus près du départ."
+            "value": "Cette course ne peut pas encore être suivie en direct. Réessayez dans quelques minutes."
           }
         }
       }
@@ -1580,6 +1580,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Cette course n'aura pas lieu."
+          }
+        }
+      }
+    },
+    "push.followedRace": {
+      "comment": "Body of the alert of a Live Activity the server starts shortly before a race the user follows; the race name is the title.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Rennen beginnt gleich. Verfolge es live auf dem Sperrbildschirm."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The race is about to start. Follow it live on the Lock Screen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La course va bientôt commencer. Suivez-la en direct sur l'écran verrouillé."
           }
         }
       }

@@ -13,7 +13,7 @@ import {
   type IBUResults,
   type LiveState,
 } from "./live";
-import { startFavoriteActivities } from "./liveStarts";
+import { startActivities } from "./liveStarts";
 import { ProviderTokens, type ProviderTokenSet } from "./providerTokens";
 import { PushLots } from "./pushLots";
 import { SUBREQUESTS_PER_RUN, SubrequestBudget } from "./subrequests";
@@ -110,8 +110,8 @@ interface RetiredChannel {
  * Updates the race's activity at `now`: with the race as a cron run's calendar `listed` it, or
  * from an alarm without. A race followable opens a channel per APNs environment, and each new
  * state of the race is broadcast on them; a race over, or unlisted for longer than its activity
- * can last, has its activity ended. The activity then starts on the devices whose favorites
- * race (liveStarts.ts), the ends are sent, again for the devices that were offline, and the
+ * can last, has its activity ended. The activity then starts on the devices that follow the
+ * race or whose favorites race it (liveStarts.ts), the ends are sent, again for the devices that were offline, and the
  * channels are deleted at APNs an hour after; the alarm is set for the next of them. The requests
  * still unanswered at `deadline` are given up, for a later update.
  */
@@ -140,7 +140,7 @@ export async function syncRace(
   const current = await readChannels(env.DB, raceId);
   if (followed) {
     const open = current.filter((row) => row.endedAt === null && !isDropped(row));
-    await startFavoriteActivities(
+    await startActivities(
       env,
       race,
       open.map(({ environment, channelId, state }) => ({
