@@ -111,5 +111,13 @@
                 return true
             }
         }
+
+        /// Every fictional athlete links to an article, in the app's languages, without the network.
+        @Test(arguments: ["en-GB", "fr-FR", "de-DE"])
+        func athletesHaveAWikipediaArticle(language: String) async throws {
+            let articles = try await WikidataClient.sample.wikipediaArticles(ofAthlete: "BTNORSM01")
+            let article = try #require(articles.article(preferring: [language]))
+            #expect(article.host() == "\(language.prefix(2)).wikipedia.org")
+        }
     }
 #endif

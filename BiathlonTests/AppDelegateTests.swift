@@ -33,5 +33,8 @@ struct AppDelegateTests {
         #expect(server == nil)
         let standings = try await ibu.worldCupStandings(category: .men, discipline: .total, now: .now)
         #expect(!standings.standings.rows.isEmpty)
+        let athlete = try #require(standings.standings.rows.first?.athleteID)
+        let articles = try await AppDelegate.wikidata(sampleData: true).wikipediaArticles(ofAthlete: athlete)
+        #expect(!articles.urls.isEmpty)
     }
 }

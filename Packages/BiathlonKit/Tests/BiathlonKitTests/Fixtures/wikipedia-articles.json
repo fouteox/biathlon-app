@@ -1,0 +1,52 @@
+{
+  "head": {
+    "vars": [
+      "article",
+      "language"
+    ]
+  },
+  "results": {
+    "bindings": [
+      {
+        "article": {
+          "type": "uri",
+          "value": "https://de.wikipedia.org/wiki/Julia_Simon"
+        },
+        "language": {
+          "type": "literal",
+          "value": "de"
+        }
+      },
+      {
+        "article": {
+          "type": "uri",
+          "value": "https://en.wikipedia.org/wiki/Julia_Simon_(biathlete)"
+        },
+        "language": {
+          "type": "literal",
+          "value": "en"
+        }
+      },
+      {
+        "article": {
+          "type": "uri",
+          "value": "https://fr.wikipedia.org/wiki/Julia_Simon"
+        },
+        "language": {
+          "type": "literal",
+          "value": "fr"
+        }
+      },
+      {
+        "article": {
+          "type": "uri",
+          "value": "https://no.wikipedia.org/wiki/Julia_Simon"
+        },
+        "language": {
+          "type": "literal",
+          "value": "nb"
+        }
+      }
+    ]
+  }
+}

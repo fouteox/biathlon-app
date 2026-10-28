@@ -1496,6 +1496,22 @@
         }
       }
     },
+    "Wikipedia": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wikipedia"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wikipédia"
+          }
+        }
+      }
+    },
     "Women": {
       "localizations": {
         "de": {
