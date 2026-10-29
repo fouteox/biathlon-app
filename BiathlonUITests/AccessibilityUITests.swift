@@ -42,24 +42,24 @@ final class AccessibilityUITests: XCTestCase {
     @MainActor func testAthleteScreenReadsTheProfileAndEachResultAsOneElement() throws {
         let app = XCUIApplication.launchInEnglish()
         openFirstAthlete(in: app)
-        // The results load on their own, after the profile; once they show, the list on screen is
-        // the athlete's, not the standings left behind.
-        let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Results")).firstMatch
-        XCTAssertTrue(results.waitForExistence(timeout: Self.timeout))
-        // The first athlete of the standings has a rank in them, for the season the toolbar picks.
-        let standing = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "World Cup standings"))
-        XCTAssertTrue(standing.firstMatch.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(Self.seasonPicker(in: app).exists)
-        // The athlete's Wikipedia article, from the sample's Wikidata: a `Link` reads as a link, not a button.
+        // The athlete's Wikipedia article, from the sample's Wikidata: a `Link` reads as a link, not a
+        // button. Once it shows, the list on screen is the athlete's, not the standings left behind.
         XCTAssertTrue(app.links["Wikipedia"].waitForExistence(timeout: Self.timeout))
         // The sample's headline about the athlete, which opens the article.
         let headline = app.links.matching(NSPredicate(format: "label CONTAINS %@", "prepares for the World Cup"))
         XCTAssertTrue(headline.firstMatch.waitForExistence(timeout: Self.timeout))
+        // The first athlete of the standings has a rank in them, for the season the toolbar picks.
+        let standing = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "World Cup standings"))
+        XCTAssertTrue(standing.firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(Self.seasonPicker(in: app).exists)
         // The profile reads its texts and nothing else: the photo, or the symbol shown in its
         // place, adds no words of its own.
         let profile = try XCTUnwrap(Self.readElements(of: try firstRow(in: app).snapshot()).first)
         let texts = profile.children.filter { $0.elementType == .staticText }.map(\.label)
         XCTAssertEqual(profile.label, texts.joined(separator: ", "))
+        try assertRowsReadAsOneElement(in: app)
+        // The results, which load on their own, read each as one element too.
+        XCTAssertTrue(scrollToResults(in: app).exists)
         try assertRowsReadAsOneElement(in: app)
         try app.performAccessibilityAudit(for: Self.auditTypes)
     }
@@ -68,8 +68,10 @@ final class AccessibilityUITests: XCTestCase {
     @MainActor func testAthleteResultOpensItsRace() {
         let app = XCUIApplication.launchInEnglish()
         openFirstAthlete(in: app)
-        let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Results")).firstMatch
-        XCTAssertTrue(results.waitForExistence(timeout: Self.timeout))
+        // The results show with the standing, once the athlete's history has loaded.
+        let standing = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "World Cup standings"))
+        XCTAssertTrue(standing.firstMatch.waitForExistence(timeout: Self.timeout))
+        XCTAssertTrue(scrollToResults(in: app).exists)
         // The season's first race, at the end of the list.
         let list = app.collectionViews.firstMatch
         for _ in 0..<3 { list.swipeUp() }
@@ -134,6 +136,16 @@ final class AccessibilityUITests: XCTestCase {
         XCTAssertTrue(row.waitForExistence(timeout: Self.timeout))
         row.tap()
         XCTAssertTrue(app.navigationBars.buttons["Add to favorites"].waitForExistence(timeout: Self.timeout))
+    }
+
+    /// The header of the athlete's results, below the profile, the links and the news: the list only
+    /// builds the rows it shows.
+    @MainActor private func scrollToResults(in app: XCUIApplication) -> XCUIElement {
+        let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Results")).firstMatch
+        for _ in 0..<3 where !results.exists {
+            app.collectionViews.firstMatch.swipeUp()
+        }
+        return results
     }
 
     /// The athlete's team, from the button below the profile.
