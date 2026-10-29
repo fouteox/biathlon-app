@@ -44,23 +44,34 @@ public struct Headline: Identifiable, Hashable, Sendable {
     /// The item's RSS categories: the outlets tag articles with the athletes they are about.
     let categories: [String]
 
-    /// Whether the title or the tags name `familyName` in whole words, whatever the case and accents:
-    /// an IBU family name is in capitals (`THINGNES BØ`).
+    /// Whether the title or the tags name `familyName` in whole words, whatever the case and accents: an
+    /// IBU family name is in capitals, with Nordic and German letters written as two (`LAEGREID`, `OEBERG`)
+    /// or without their accents (`MAKARAINEN`).
     public func mentions(familyName: String) -> Bool {
         let name = Self.words(familyName)
         guard !name.isEmpty else { return false }
         return ([title] + categories).contains { text in
             let words = Self.words(text)
             return words.count >= name.count
-                && (0...(words.count - name.count)).contains { Array(words[$0..<$0 + name.count]) == name }
+                && (0...(words.count - name.count)).contains { start in
+                    zip(words[start..<start + name.count], name).allSatisfy { !$0.isDisjoint(with: $1) }
+                }
         }
     }
 
-    private static func words(_ text: String) -> [String] {
-        text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
-            .split { !$0.isLetter }
-            .map(String.init)
+    /// Each word's spellings: without accents (`Mäkäräinen` → `makarainen`), and with its Nordic and
+    /// German letters written as two (`Lægreid` → `laegreid`, `Öberg` → `oeberg`).
+    private static func words(_ text: String) -> [Set<String>] {
+        text.split { !$0.isLetter }.map { word in
+            let twoLetters = Self.twoLetters.reduce(word.lowercased()) { $0.replacing($1.key, with: $1.value) }
+            return Set(
+                [String(word), twoLetters].map {
+                    $0.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil)
+                })
+        }
     }
+
+    private static let twoLetters = ["æ": "ae", "ø": "oe", "ä": "ae", "ö": "oe", "ü": "ue"]
 }
 
 /// Reads the outlets' RSS feeds.

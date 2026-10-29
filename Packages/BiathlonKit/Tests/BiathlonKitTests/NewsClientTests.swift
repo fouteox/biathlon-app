@@ -93,11 +93,26 @@ struct NewsClientTests {
         #expect(headlines.filter { $0.mentions(familyName: familyName) }.map(\.url.lastPathComponent) == articles)
     }
 
+    /// The IBU writes Nordic and German letters as two (`LAEGREID`, `OEBERG`), or drops their accents
+    /// (`MAKARAINEN`); the outlets keep them.
+    @Test(arguments: [
+        ("Sturla Holm Lægreid wins in Kontiolahti", "LAEGREID"),
+        ("Hanna Öberg back on the podium", "OEBERG"),
+        ("Johannes Thingnes Bø retires", "THINGNES BOE"),
+        ("Kaisa Mäkäräinen, ten years later", "MAKARAINEN"),
+        ("Franziska Preuß in yellow", "PREUSS"),
+    ])
+    func matchesTheIBUSpellingOfNordicAndGermanLetters(title: String, familyName: String) {
+        let headline = Headline(
+            title: title, url: URL(string: "https://e.com")!, date: nil, source: "S", categories: [])
+        #expect(headline.mentions(familyName: familyName))
+    }
+
     @Test func aFamilyNameCanHaveSeveralWords() {
         let headline = Headline(
             title: "Dorothea Wierer and Lisa Vittozzi on the podium", url: URL(string: "https://e.com")!,
             date: nil, source: "S", categories: ["Johannes Thingnes Bø"])
-        #expect(headline.mentions(familyName: "THINGNES BØ"))
+        #expect(headline.mentions(familyName: "THINGNES BOE"))
         #expect(headline.mentions(familyName: "Wierer"))
         #expect(!headline.mentions(familyName: "WIERER LISA"))
         #expect(!headline.mentions(familyName: ""))
