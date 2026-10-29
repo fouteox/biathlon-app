@@ -45,6 +45,7 @@ struct DecodingTests {
         let cup: CupStandings = try fixture("cup-results")
         #expect(cup.rows.count == 2)
         #expect(cup.rows[0].bibColors == ["yellow"])
+        #expect(cup.rows[0].familyName == "PERROT")
         #expect(cup.rows[1].score == "968")
         #expect(cup.rows[1].rankChange == -1)
     }
@@ -54,6 +55,7 @@ struct DecodingTests {
         #expect(bio.birthdate != nil)
         #expect(bio.photoURL?.lastPathComponent == "BTFRA12906200101.png")
         #expect(!bio.isDeceased)
+        #expect(bio.familyName == "PERROT")
     }
 
     /// As `CISBios?IBUId=BTNOR11807199801` returns Sivert Guttorm Bakken, who died in December 2025.

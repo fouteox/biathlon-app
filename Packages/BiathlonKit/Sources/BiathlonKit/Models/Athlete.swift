@@ -4,6 +4,8 @@ import Foundation
 public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
     public let id: String
     public let fullName: String
+    /// In capitals (`SIMON`), as the IBU writes it.
+    public let familyName: String?
     public let nation: String?
     /// Date without a time, returned at midnight UTC: display it in UTC
     /// (`Date.FormatStyle` with `timeZone = .gmt`) so the day doesn't shift.
@@ -30,7 +32,7 @@ public struct AthleteBio: Decodable, Identifiable, Hashable, Sendable {
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(String.self, forKey: .id)
-        let familyName = try c.decodeIfPresent(String.self, forKey: .familyName)
+        familyName = try c.decodeIfPresent(String.self, forKey: .familyName)
         let givenName = try c.decodeIfPresent(String.self, forKey: .givenName)
         fullName =
             try c.decodeIfPresent(String.self, forKey: .fullName)

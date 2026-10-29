@@ -7,7 +7,10 @@ struct NationView: View {
     @State private var category: RaceCategory
 
     @Environment(\.ibu) private var ibu
+    @Environment(\.news) private var news
     @State private var loader = Loader<SeasonStandings>()
+    /// Loaded on its own: without them, the screen has no news section.
+    @State private var headlines = Loader<[Headline]>()
 
     init(nation: String, category: RaceCategory) {
         self.nation = nation
@@ -29,8 +32,19 @@ struct NationView: View {
                 } footer: {
                     Text("The athletes who scored World Cup points in \(loaded.season.displayName).")
                 }
+                if let headlines = headlines.state.value {
+                    let familyNames = athletes.compactMap(\.familyName)
+                    HeadlinesSection(
+                        headlines: headlines.filter { headline in
+                            familyNames.contains { headline.mentions(familyName: $0) }
+                        })
+                }
             }
-            .refreshable { await load() }
+            .refreshable {
+                async let standings: Void = load()
+                async let news: Void = loadHeadlines()
+                _ = await (standings, news)
+            }
         }
         .navigationTitle(Nation.namedTitle(nation))
         .navigationBarTitleDisplayMode(.inline)
@@ -43,9 +57,14 @@ struct NationView: View {
         // As on the standings, only a new category shows the loading state.
         .onChange(of: category) { loader.reset() }
         .task(id: category) { await load() }
+        .task { await loadHeadlines() }
     }
 
     private func load() async {
         await loader.load { try await ibu.worldCupStandings(category: category, discipline: .total, now: .now) }
+    }
+
+    private func loadHeadlines() async {
+        await headlines.load { try await news.headlines(preferring: Locale.preferredLanguages) }
     }
 }

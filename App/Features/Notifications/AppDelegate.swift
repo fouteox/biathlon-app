@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     private let notificationCenter = UNUserNotificationCenter.current()
     let client: IBUClient
     let wikidata: WikidataClient
+    let news: NewsClient
     /// A Debug build launched with `--sample-data`, as the UI tests launch it, runs on the fictional data of
     /// `IBUClient.sample`, without a server, and keeps its favorites in memory: nothing it shows depends
     /// on the network or on an earlier launch.
@@ -32,6 +33,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         self.client = client
         self.server = server
         wikidata = Self.wikidata(sampleData: runsOnSampleData)
+        news = Self.news(sampleData: runsOnSampleData)
         // One for every request to the server: it attests a single key for the install.
         let appAttest = server.map { AppAttest(server: $0) }
         push = PushRegistration(appAttest: appAttest)
@@ -62,6 +64,13 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             if sampleData { return .sample }
         #endif
         return WikidataClient(userAgent: Bundle.main.wikimediaUserAgent)
+    }
+
+    static func news(sampleData: Bool) -> NewsClient {
+        #if DEBUG
+            if sampleData { return .sample(now: .now) }
+        #endif
+        return NewsClient()
     }
 
     func application(

@@ -147,13 +147,14 @@
             var row: [String: Any] {
                 [
                     "IBUId": id, "Name": "\(familyName) \(givenName)",
-                    "ShortName": "\(familyName) \(givenName.prefix(1)).", "Nat": nation,
+                    "ShortName": "\(familyName) \(givenName.prefix(1)).", "FamilyName": familyName, "Nat": nation,
                 ]
             }
 
             var bio: [String: Any] {
                 [
-                    "IBUId": id, "FullName": "\(givenName) \(familyName)", "NAT": nation, "Functions": "Athlete",
+                    "IBUId": id, "FullName": "\(givenName) \(familyName)", "FamilyName": familyName, "NAT": nation,
+                    "Functions": "Athlete",
                     "Birthdate": "2000-01-15T00:00:00", "GenderId": category == .men ? "M" : "W",
                 ]
             }
@@ -163,6 +164,11 @@
         private static let nations = [
             ("NOR", "Norway"), ("FRA", "France"), ("GER", "Germany"), ("SWE", "Sweden"), ("ITA", "Italy"),
         ]
+
+        /// Every athlete's given and family names, men first.
+        static var athleteNames: [(given: String, family: String)] {
+            [RaceCategory.men, .women].flatMap { names[$0] ?? [] }.map { (given: $0.0, family: $0.1) }
+        }
 
         private static let names: [RaceCategory: [(String, String)]] = [
             .men: [

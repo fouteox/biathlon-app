@@ -59,8 +59,7 @@ public struct WikipediaArticles: Equatable, Sendable {
 
     /// The article in the first of `languages` (`Locale.preferredLanguages`) that has one, else in English.
     public func article(preferring languages: [String]) -> URL? {
-        let codes = languages.compactMap { Locale.Language(identifier: $0).languageCode?.identifier } + ["en"]
-        return codes.lazy.compactMap { urls[$0] }.first
+        readerLanguageCodes(languages).lazy.compactMap { urls[$0] }.first
     }
 }
 

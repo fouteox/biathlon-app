@@ -7,9 +7,12 @@ struct AthleteView: View {
 
     @Environment(\.ibu) private var ibu
     @Environment(\.wikidata) private var wikidata
+    @Environment(\.news) private var news
     @State private var bio = Loader<AthleteBio>()
     /// Loaded on its own, like the history: the profile goes without the link until it comes, or if it fails.
     @State private var wikipedia = Loader<WikipediaArticles>()
+    /// Loaded on its own too: without them, the screen has no news section.
+    @State private var headlines = Loader<[Headline]>()
     /// Loaded on its own: the profile shows without waiting for it, and without it.
     @State private var history = Loader<AthleteHistory>()
     /// The season picked in the toolbar; until then, the one the history opens on.
@@ -75,6 +78,9 @@ struct AthleteView: View {
                     Section {
                         Link("Wikipedia", destination: article)
                     }
+                }
+                if let familyName = bio.familyName, let headlines = headlines.state.value {
+                    HeadlinesSection(headlines: headlines.filter { $0.mentions(familyName: familyName) })
                 }
                 if let history = history.state.value, let season {
                     if case .loaded(let row) = standing.state {
@@ -164,7 +170,10 @@ struct AthleteView: View {
             AthleteHistory(results: try await ibu.athleteResults(id: athleteID), now: .now)
         }
         async let wikipediaLoad: Void = wikipedia.load { try await wikidata.wikipediaArticles(ofAthlete: athleteID) }
-        _ = await (bioLoad, historyLoad, wikipediaLoad)
+        async let headlinesLoad: Void = headlines.load {
+            try await news.headlines(preferring: Locale.preferredLanguages)
+        }
+        _ = await (bioLoad, historyLoad, wikipediaLoad, headlinesLoad)
     }
 
     private func loadStanding() async {
