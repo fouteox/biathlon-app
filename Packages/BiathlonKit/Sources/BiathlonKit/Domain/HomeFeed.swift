@@ -21,6 +21,24 @@ public struct HomeFeed: Sendable {
     public var next: Competition? { races.first { $0.state == .scheduled } }
     public var latestFinished: Competition? { races.last { $0.state == .finished } }
 
+    /// The race the widget shows: the live one, otherwise the next one.
+    public var widgetRace: Competition? { live ?? next }
+
+    /// When the widget reloads, within WidgetKit's budget of a reload every 15 to 60 minutes
+    /// or so: every 15 minutes while a race is live, at the next race's start, otherwise every
+    /// hour, which also catches a start moved. Never sooner than WidgetKit's 5 minutes, for a
+    /// start already past that the race hasn't gone live at.
+    public func widgetReloadDate(now: Date) -> Date {
+        if live != nil { return now + Self.widgetLiveInterval }
+        let latest = now + Self.widgetInterval
+        guard let next else { return latest }
+        return min(max(next.startTime, now + Self.widgetMinimumInterval), latest)
+    }
+
+    public static let widgetLiveInterval: TimeInterval = 15 * 60
+    public static let widgetInterval: TimeInterval = 60 * 60
+    public static let widgetMinimumInterval: TimeInterval = 5 * 60
+
     /// Event of the featured race.
     public var event: BiathlonEvent? {
         guard let race = live ?? next ?? latestFinished else { return events.last }
@@ -40,7 +58,9 @@ public struct HomeFeed: Sendable {
 }
 
 extension IBUClient {
-    public func homeFeed(now: Date) async throws -> HomeFeed {
+    /// The races of the most recent event already started and of the next one, without
+    /// their results: what the widget needs.
+    public func featuredRaces(now: Date) async throws -> HomeFeed {
         let season = SeasonID.containing(now)
         let events = try await self.events(season: season).sorted { $0.startDate < $1.startDate }
         let upcoming = events.first { $0.startDate > now }
@@ -50,8 +70,12 @@ extension IBUClient {
             started = try await self.events(season: season.previous).max { $0.startDate < $1.startDate }
         }
         let featured = [started, upcoming].compactMap(\.self)
+        return HomeFeed(events: featured, races: try await competitions(of: featured))
+    }
 
-        var feed = HomeFeed(events: featured, races: try await competitions(of: featured))
+    /// The featured races and the results of the live one and of the latest finished one.
+    public func homeFeed(now: Date) async throws -> HomeFeed {
+        var feed = try await featuredRaces(now: now)
         let (live, finished) = (feed.live, feed.latestFinished)
         async let liveResults = results(of: live)
         async let latestResults = results(of: finished)

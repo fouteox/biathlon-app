@@ -1,6 +1,8 @@
+import BiathlonKit
 import Foundation
 
-extension Bundle {
+/// Read by the app and by its widget, which WidgetKit runs off the main actor.
+nonisolated extension Bundle {
     /// Base URL of the Cloudflare Worker, from the `BiathlonServerURL` Info.plist key.
     var serverURL: URL? { url(forInfoDictionaryKey: "BiathlonServerURL") }
 
@@ -19,5 +21,12 @@ extension Bundle {
     func url(forInfoDictionaryKey key: String) -> URL? {
         guard let raw = object(forInfoDictionaryKey: key) as? String, !raw.isEmpty else { return nil }
         return URL(string: raw)
+    }
+}
+
+nonisolated extension IBUClient {
+    /// IBU data goes through the server's cache when there is a server, to spare the IBU API.
+    init(cachedBy server: ServerClient?) {
+        self.init(baseURL: server?.baseURL.appending(path: "ibu/") ?? IBUClient.ibuBaseURL)
     }
 }

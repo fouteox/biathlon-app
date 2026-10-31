@@ -1,4 +1,5 @@
-// Settings of the BiathlonWidgets extension target: the races' Live Activities.
+// Settings of the BiathlonWidgets extension target: the races' Live Activities and the
+// next race widget.
 
 PRODUCT_BUNDLE_IDENTIFIER = com.fouteox.biathlon.widgets
 TARGETED_DEVICE_FAMILY = 1

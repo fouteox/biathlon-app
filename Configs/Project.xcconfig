@@ -18,3 +18,8 @@ SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
 // String Catalogs: the compiler extracts localizable strings into Shared/Localizable.xcstrings.
 LOCALIZATION_PREFERS_STRING_CATALOGS = YES
 SWIFT_EMIT_LOC_STRINGS = YES
+
+// Cloudflare Worker base URL (see server/README.md), read by the app and its widget; push
+// alerts stay off while empty. The double slash is escaped: xcconfig files treat // as the
+// start of a comment.
+BIATHLON_SERVER_URL = https:/$()/biathlon-server.fouteox.workers.dev

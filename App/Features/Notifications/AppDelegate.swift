@@ -48,13 +48,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         #endif
     }
 
-    /// IBU data goes through the server's cache when there is a server, to spare the IBU API.
     static func clients(sampleData: Bool) -> (ibu: IBUClient, server: ServerClient?) {
         #if DEBUG
             if sampleData { return (.sample(now: .now), nil) }
         #endif
         let server = Bundle.main.serverURL.map { ServerClient(baseURL: $0) }
-        return (IBUClient(baseURL: server?.baseURL.appending(path: "ibu/") ?? IBUClient.ibuBaseURL), server)
+        return (IBUClient(cachedBy: server), server)
     }
 
     static func wikidata(sampleData: Bool) -> WikidataClient {
