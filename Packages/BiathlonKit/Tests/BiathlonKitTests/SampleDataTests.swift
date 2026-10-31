@@ -88,6 +88,17 @@
         }
 
         /// The calendar's season picker goes back to the 1950s.
+        /// The search finds a fictional athlete whose profile opens.
+        @Test func searchFindsAnAthleteByEitherName() async throws {
+            let client = IBUClient.sample(now: .now)
+            let byFamilyName = try await client.searchAthletes("mart")
+            #expect(byFamilyName.map(\.name) == ["Hugo MARTEL"])
+            #expect(try await client.searchAthletes("Hugo Martel").map(\.id) == byFamilyName.map(\.id))
+            let athlete = try #require(byFamilyName.first)
+            #expect(try await client.athlete(id: athlete.id).fullName == "Hugo MARTEL")
+            #expect(try await client.searchAthletes("zz").isEmpty)
+        }
+
         @Test func oldSeasonsAreInTheirYears() async throws {
             let events = try await IBUClient.sample(now: .now).events(season: SeasonID(rawValue: "9899"))
             #expect(events.first?.startDate == date("1998-12-01T12:00:00Z"))

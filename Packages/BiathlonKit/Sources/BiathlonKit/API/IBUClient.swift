@@ -86,7 +86,7 @@ public struct IBUClient: Sendable {
 
     // MARK: Transport
 
-    private func get<T: Decodable>(_ path: String, _ query: [String: String]) async throws -> T {
+    func get<T: Decodable>(_ path: String, _ query: [String: String]) async throws -> T {
         var url = baseURL.appending(path: path)
         url.append(queryItems: query.sorted { $0.key < $1.key }.map { URLQueryItem(name: $0.key, value: $0.value) })
         let (data, response) = try await transport(URLRequest(url: url))

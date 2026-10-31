@@ -42,6 +42,7 @@
             case "CupResults": query["CupId"].flatMap(standings(cupID:))
             case "CISBios": query["IBUId"].flatMap(athlete(id:)).map(\.bio)
             case "AllResults": query["IBUId"].flatMap(athlete(id:)).map { ["Results": history(of: $0)] }
+            case "Athletes": ["Athletes": Self.athletes(matching: query).map(\.match)]
             default: nil
             }
         }
@@ -151,6 +152,11 @@
                 ]
             }
 
+            /// As the IBU's search finds the athlete.
+            var match: [String: Any] {
+                ["IBUId": id, "FamilyName": familyName, "GivenName": givenName, "NAT": nation, "Functions": "Athlete"]
+            }
+
             var bio: [String: Any] {
                 [
                     "IBUId": id, "FullName": "\(givenName) \(familyName)", "NAT": nation, "Functions": "Athlete",
@@ -184,6 +190,16 @@
                 return Athlete(
                     id: "BT\(nation)\(category.rawValue)\(String(format: "%02d", index + 1))", givenName: name.0,
                     familyName: name.1, nation: nation, category: category)
+            }
+        }
+
+        /// The athletes whose names start like the search's, whatever their case, as the IBU finds them.
+        private static func athletes(matching query: [String: String]) -> [Athlete] {
+            func starts(_ name: String, with prefix: String?) -> Bool {
+                prefix.map { name.lowercased().hasPrefix($0.lowercased()) } ?? true
+            }
+            return [RaceCategory.men, .women].flatMap(athletes(of:)).filter {
+                starts($0.familyName, with: query["FamilyName"]) && starts($0.givenName, with: query["GivenName"])
             }
         }
 
