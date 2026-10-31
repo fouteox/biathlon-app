@@ -10,12 +10,17 @@ struct FavoritesView: View {
     @Environment(LiveActivities.self) private var liveActivities
     @Environment(LiveActivityStarts.self) private var liveActivityStarts
     @Environment(\.editMode) private var editMode
+    /// Where the favorites stand this season; the rows go without it until it loads, or if it fails.
+    @State private var standings = Loader<FavoriteStandings>()
 
     var body: some View {
         @Bindable var liveActivityStarts = liveActivityStarts
         List {
-            // Kept while on, even with Live Activities turned off in Settings: it is how the
-            // favorites leave the server.
+            // The favorites first, each with its standing: what the tab is for.
+            section(.athlete, title: "Biathletes", footer: "Rank and points in the World Cup overall standings.")
+            section(.nation, title: "Teams", footer: "Rank in the Nations Cup, men and women.")
+            // A setting changed once, below the list. Kept while on, even with Live Activities
+            // turned off in Settings: it is how the favorites leave the server.
             if liveActivities.isAvailable || liveActivityStarts.isEnabled, !favorites.isEmpty {
                 Section {
                     Toggle(
@@ -27,8 +32,6 @@ struct FavoritesView: View {
                     )
                 }
             }
-            section(.athlete, title: "Biathletes")
-            section(.nation, title: "Teams")
         }
         .overlay {
             if favorites.isEmpty {
@@ -52,6 +55,7 @@ struct FavoritesView: View {
             if isEmpty { editMode?.wrappedValue = .inactive }
         }
         .task { await refreshAthletes() }
+        .task { await standings.load { try await ibu.favoriteStandings(now: .now) } }
     }
 
     /// Updates the athletes from their IBU profiles; one that fails to load waits for the next visit.
@@ -82,15 +86,21 @@ struct FavoritesView: View {
     }
 
     @ViewBuilder
-    private func section(_ kind: Favorite.Kind, title: LocalizedStringKey) -> some View {
+    private func section(_ kind: Favorite.Kind, title: LocalizedStringKey, footer: LocalizedStringKey) -> some View {
         let items = favorites.filter { $0.kind == kind }
         if !items.isEmpty {
-            Section(title) {
+            Section {
                 ForEach(items) { favorite in
                     row(favorite)
                 }
                 .onDelete { offsets in
                     for offset in offsets { context.delete(items[offset]) }
+                }
+            } header: {
+                Text(title)
+            } footer: {
+                if standings.state.value != nil {
+                    Text(footer)
                 }
             }
         }
@@ -98,15 +108,21 @@ struct FavoritesView: View {
 
     @ViewBuilder
     private func row(_ favorite: Favorite) -> some View {
-        let label = Label {
-            VStack(alignment: .leading) {
-                Text(favorite.title)
-                if favorite.isDeceased {
-                    Text(.deceased(favorite.gender)).font(.subheadline).foregroundStyle(.secondary)
-                }
+        let label = LabeledContent {
+            if let standing = standing(of: favorite) {
+                standing.font(.subheadline.monospacedDigit())
             }
-        } icon: {
-            NationMark(code: favorite.nation ?? favorite.key)
+        } label: {
+            Label {
+                VStack(alignment: .leading) {
+                    Text(favorite.title)
+                    if favorite.isDeceased {
+                        Text(.deceased(favorite.gender)).font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+            } icon: {
+                NationMark(code: favorite.nation ?? favorite.key)
+            }
         }
         .accessibilityElement(children: .combine)
         switch favorite.kind {
@@ -116,6 +132,20 @@ struct FavoritesView: View {
             NavigationLink(value: Route.nation(code: favorite.key, category: .men)) { label }
         case nil:
             label
+        }
+    }
+
+    /// Where the favorite stands: an athlete's rank and points, a nation's rank in each Nations Cup.
+    private func standing(of favorite: Favorite) -> Text? {
+        guard let standings = standings.state.value else { return nil }
+        switch favorite.kind {
+        case .athlete:
+            return standings.standing(ofAthlete: favorite.key)?.rankAndPoints
+        case .nation:
+            let ranks = standings.standings(ofNation: favorite.key).map { "\($0.category.title) \($0.row.rank ?? "–")" }
+            return ranks.isEmpty ? nil : Text(verbatim: ranks.joined(separator: " · "))
+        case nil:
+            return nil
         }
     }
 }

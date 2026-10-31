@@ -178,11 +178,7 @@ private struct OverallStanding: View {
     }
 
     private var value: Text {
-        guard let row else { return Text("Not ranked") }
-        let rank = Text(row.rank ?? "–")
-        guard let score = row.score else { return rank }
-        let points = Int(score).map { Text("\($0) points") } ?? Text(score)
-        return Text("\(rank) · \(points)")
+        row?.rankAndPoints ?? Text("Not ranked")
     }
 }
 
