@@ -59,7 +59,8 @@ final class StandingsUITests: XCTestCase {
         let star = app.navigationBars.buttons["Add to favorites"]
         XCTAssertTrue(star.waitForExistence(timeout: XCUIApplication.dataTimeout))
         star.tap()
-        app.navigationBars.buttons.element(boundBy: 0).tap()
+        // Back to the standings: the tab's button pops its stack.
+        app.openTab("Standings")
 
         XCTAssertTrue(app.staticTexts["My favorites"].waitForExistence(timeout: XCUIApplication.dataTimeout))
         // The same row, starred, now first.

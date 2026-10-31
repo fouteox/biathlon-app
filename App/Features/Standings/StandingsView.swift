@@ -73,15 +73,15 @@ struct StandingsView: View {
                 }
                 .accessibilityIdentifier("category")
             }
-            // Fixed space keeps the three text items from running together (HIG Toolbars).
-            ToolbarSpacer(.fixed)
+            // One group for the three text pickers: separated with fixed spacers, as the HIG recommend
+            // for text items, they no longer fit an iPhone's top bar once a wider value is picked, and
+            // the system folds them into an overflow menu.
             ToolbarItem {
                 Picker("Discipline", selection: $discipline) {
                     ForEach(StandingsDiscipline.allCases) { Text($0.label).tag($0) }
                 }
                 .accessibilityIdentifier("discipline")
             }
-            ToolbarSpacer(.fixed)
             ToolbarItem {
                 SeasonPicker(seasons: seasons, selection: Binding(picked: $pickedSeason, opening: openingSeason))
                     .accessibilityIdentifier("season")
