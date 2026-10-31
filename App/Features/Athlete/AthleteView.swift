@@ -59,40 +59,21 @@ struct AthleteView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .accessibilityElement(children: .combine)
-                }
-                if let nation = bio.nation {
-                    // The nation opens on the athlete's standings, the men's when the IBU gives no gender.
-                    Section {
+                    if let nation = bio.nation {
+                        // The nation opens on the athlete's standings, the men's when the IBU gives no gender.
                         NavigationLink(
                             Nation.namedTitle(nation),
                             value: Route.nation(code: nation, category: bio.gender?.category ?? .men))
-                        FavoriteButton(
-                            kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation,
-                            subject: Nation.namedTitle(nation))
                     }
-                }
-                if let article = wikipedia.state.value?.article(preferring: Locale.preferredLanguages) {
-                    Section {
+                    if let article = wikipedia.state.value?.article(preferring: Locale.preferredLanguages) {
                         Link("Wikipedia", destination: article)
                     }
                 }
                 if let history = history.state.value, let season {
-                    if case .loaded(let row) = standing.state {
-                        Section("World Cup standings") {
-                            if let row {
-                                // A labeled row otherwise also exposes its label on its own.
-                                LabeledContent("Overall", value: row.rank ?? "–")
-                                    .accessibilityElement(children: .combine)
-                                if let score = row.score {
-                                    LabeledContent("Points", value: score)
-                                        .accessibilityElement(children: .combine)
-                                }
-                            } else {
-                                Text("Not ranked").foregroundStyle(.secondary)
-                            }
+                    Section {
+                        if case .loaded(let row) = standing.state {
+                            OverallStanding(row: row)
                         }
-                    }
-                    Section("Results") {
                         let results = history.results(in: season)
                         if results.isEmpty {
                             ContentUnavailableView("No World Cup results this season", systemImage: "list.number")
@@ -107,6 +88,10 @@ struct AthleteView: View {
                                 ResultSummary(result: result, title: title)
                             }
                         }
+                    } header: {
+                        Text("Season \(season.displayName)")
+                    } footer: {
+                        Text("World Cup, World Championships and Olympic races.")
                     }
                 }
             }
@@ -119,10 +104,17 @@ struct AthleteView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let history = history.state.value {
-                SeasonPicker(
-                    seasons: history.seasons, selection: Binding(picked: $pickedSeason, opening: history.initialSeason))
+                ToolbarItem {
+                    SeasonPicker(
+                        seasons: history.seasons,
+                        selection: Binding(picked: $pickedSeason, opening: history.initialSeason))
+                }
+                // A text item and a symbol item in groups of their own.
+                ToolbarSpacer(.fixed)
             }
-            FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.state.value?.nation)
+            ToolbarItem {
+                FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.state.value?.nation)
+            }
         }
         .task { await load() }
         // Only a new season shows the standing as loading.
@@ -172,6 +164,25 @@ struct AthleteView: View {
         await standing.load {
             try await ibu.worldCupStanding(of: athleteID, category: query.category, season: query.season)
         }
+    }
+}
+
+/// The athlete's place in the season's World Cup overall standings, with their points.
+private struct OverallStanding: View {
+    let row: CupRow?
+
+    var body: some View {
+        LabeledContent("Overall") { value }
+            // A labeled row otherwise also exposes its label on its own.
+            .accessibilityElement(children: .combine)
+    }
+
+    private var value: Text {
+        guard let row else { return Text("Not ranked") }
+        let rank = Text(row.rank ?? "–")
+        guard let score = row.score else { return rank }
+        let points = Int(score).map { Text("\($0) points") } ?? Text(score)
+        return Text("\(rank) · \(points)")
     }
 }
 

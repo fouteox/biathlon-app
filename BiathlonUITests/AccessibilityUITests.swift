@@ -43,13 +43,14 @@ final class AccessibilityUITests: XCTestCase {
         let app = XCUIApplication.launchInEnglish()
         openFirstAthlete(in: app)
         // The results load on their own, after the profile; once they show, the list on screen is
-        // the athlete's, not the standings left behind.
-        let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Results")).firstMatch
-        XCTAssertTrue(results.waitForExistence(timeout: Self.timeout))
-        // The first athlete of the standings has a rank in them, for the season the toolbar picks.
-        let standing = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "World Cup standings"))
-        XCTAssertTrue(standing.firstMatch.waitForExistence(timeout: Self.timeout))
-        XCTAssertTrue(Self.seasonPicker(in: app).exists)
+        // the athlete's, not the standings left behind. The first athlete of the standings has a
+        // rank in them: the first row of the season's section.
+        XCTAssertTrue(Self.overallStanding(in: app).waitForExistence(timeout: Self.timeout))
+        // The season the toolbar picks heads that section.
+        let season = Self.seasonPicker(in: app)
+        XCTAssertTrue(season.exists)
+        let heading = app.staticTexts.matching(NSPredicate(format: "label ENDSWITH %@", String(season.label.suffix(7))))
+        XCTAssertTrue(heading.firstMatch.exists)
         // The athlete's Wikipedia article, from the sample's Wikidata: a `Link` reads as a link, not a button.
         XCTAssertTrue(app.links["Wikipedia"].waitForExistence(timeout: Self.timeout))
         // The profile reads its texts and nothing else: the photo, or the symbol shown in its
@@ -65,12 +66,13 @@ final class AccessibilityUITests: XCTestCase {
     @MainActor func testAthleteResultOpensItsRace() {
         let app = XCUIApplication.launchInEnglish()
         openFirstAthlete(in: app)
-        let results = app.staticTexts.matching(NSPredicate(format: "label ==[c] %@", "Results")).firstMatch
-        XCTAssertTrue(results.waitForExistence(timeout: Self.timeout))
-        // The season's first race, at the end of the list.
+        XCTAssertTrue(Self.overallStanding(in: app).waitForExistence(timeout: Self.timeout))
+        // The season's first race, at the end of the list: its last link, before the footer, which
+        // the list exposes as a cell of its own.
         let list = app.collectionViews.firstMatch
         for _ in 0..<3 { list.swipeUp() }
-        list.cells.element(boundBy: list.cells.count - 1).tap()
+        let links = list.cells.containing(.button, identifier: nil)
+        links.element(boundBy: links.count - 1).tap()
         XCTAssertTrue(app.staticTexts["Finished"].waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(app.navigationBars.buttons["Add to favorites"].exists)
     }
@@ -98,10 +100,14 @@ final class AccessibilityUITests: XCTestCase {
         let star = app.navigationBars.buttons["Add to favorites"]
         XCTAssertTrue(star.waitForExistence(timeout: Self.timeout))
         star.tap()
-        // The athlete's team shows with the profile, which can load after the toolbar's star.
-        let team = Self.teamButton(in: app, titled: "Add ")
-        XCTAssertTrue(team.waitForExistence(timeout: Self.timeout))
-        team.tap()
+        // The athlete's nation is a row of the profile, which opens the nation's screen, titled
+        // like the row, where its own star adds it to the favorites.
+        let nation = Self.nationRow(in: app)
+        XCTAssertTrue(nation.waitForExistence(timeout: Self.timeout))
+        let title = nation.buttons.firstMatch.label
+        nation.tap()
+        XCTAssertTrue(app.navigationBars[title].waitForExistence(timeout: Self.timeout))
+        app.navigationBars.buttons["Add to favorites"].tap()
 
         app.openTab("Favorites")
         try assertRowsReadAsOneElement(in: app)
@@ -133,9 +139,14 @@ final class AccessibilityUITests: XCTestCase {
         XCTAssertTrue(app.navigationBars.buttons["Add to favorites"].waitForExistence(timeout: Self.timeout))
     }
 
-    /// The athlete's team, from the button below the profile.
-    @MainActor private static func teamButton(in app: XCUIApplication, titled prefix: String) -> XCUIElement {
-        app.cells.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", prefix)).firstMatch
+    /// The athlete's rank in the standings, a row that reads as one element whatever its kind.
+    @MainActor private static func overallStanding(in app: XCUIApplication) -> XCUIElement {
+        app.descendants(matching: .any).matching(NSPredicate(format: "label BEGINSWITH %@", "Overall")).firstMatch
+    }
+
+    /// The athlete's nation: the row under the profile, in the same section.
+    @MainActor private static func nationRow(in app: XCUIApplication) -> XCUIElement {
+        app.cells.element(boundBy: 1)
     }
 
     /// The score reads with its unit, not as a bare number.
