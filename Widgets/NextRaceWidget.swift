@@ -38,7 +38,7 @@ nonisolated struct NextRaceEntry: TimelineEntry {
     }
 
     init(date: Date, feed: HomeFeed) {
-        let race = feed.widgetRace
+        let race = feed.upcomingRace
         let event = race.flatMap(feed.event(of:))
         self.init(
             date: date,

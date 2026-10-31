@@ -34,6 +34,12 @@ struct DecodingTests {
     }
 
     /// `SportEvt` of `Results?RaceId=BT2526SWRLCP01SMRL`: the event the race belongs to.
+    /// A relay's podium is of teams, not of their legs.
+    @Test func relayPodiumIsOfTeams() throws {
+        let results: RaceResults = try fixture("relay-results")
+        #expect(results.podium.map(\.name) == ["NORWAY"])
+    }
+
     @Test func raceResultsNameTheirEvent() throws {
         let results: RaceResults = try fixture("relay-results")
         let event = try #require(results.event)

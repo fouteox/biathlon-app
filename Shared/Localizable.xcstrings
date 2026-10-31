@@ -17,6 +17,38 @@
         }
       }
     },
+    "%@: %@ wins, ahead of %@ and %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: Sieg für %2$@ vor %3$@ und %4$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ : victoire de %2$@, devant %3$@ et %4$@."
+          }
+        }
+      }
+    },
+    "%@: %@ wins.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@: Sieg für %2$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ : victoire de %2$@."
+          }
+        }
+      }
+    },
     "%lld points": {
       "localizations": {
         "de": {
@@ -655,6 +687,22 @@
         }
       }
     },
+    "Live now: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt live: %@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En direct : %@."
+          }
+        }
+      }
+    },
     "Live on TV or on the broadcaster's stream. Schedules can change.": {
       "localizations": {
         "de": {
@@ -767,6 +815,22 @@
         }
       }
     },
+    "Next race: %@, %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächstes Rennen: %1$@, %2$@."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prochaine course : %1$@, %2$@."
+          }
+        }
+      }
+    },
     "No athletes in the standings": {
       "localizations": {
         "de": {
@@ -799,6 +863,22 @@
         }
       }
     },
+    "No race scheduled.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Rennen geplant."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucune course prévue."
+          }
+        }
+      }
+    },
     "No races": {
       "localizations": {
         "de": {
@@ -811,6 +891,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucune course"
+          }
+        }
+      }
+    },
+    "No results yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Ergebnisse."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas encore de résultats."
           }
         }
       }
@@ -1575,6 +1671,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "La course en direct, sinon la prochaine."
+          }
+        }
+      }
+    },
+    "The podium of the latest finished race.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Podium des letzten beendeten Rennens."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Le podium de la dernière course terminée."
           }
         }
       }

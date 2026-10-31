@@ -107,7 +107,7 @@ struct HomeFeedTests {
                 try decode(race("NEXT", start: "2026-11-27T11:40:00Z")),
             ])
 
-        #expect(feed.widgetRace?.id == "LIVE")
+        #expect(feed.upcomingRace?.id == "LIVE")
         #expect(feed.widgetReloadDate(now: now) == now + 15 * 60)
     }
 
@@ -115,7 +115,7 @@ struct HomeFeedTests {
         let now = date("2026-11-27T11:30:00Z")
         let feed = HomeFeed(events: [], races: [try decode(race("NEXT", start: "2026-11-27T12:10:00Z"))])
 
-        #expect(feed.widgetRace?.id == "NEXT")
+        #expect(feed.upcomingRace?.id == "NEXT")
         #expect(feed.widgetReloadDate(now: now) == date("2026-11-27T12:10:00Z"))
     }
 
@@ -141,7 +141,7 @@ struct HomeFeedTests {
             events: [],
             races: [try decode(race("DONE", start: "2026-11-26T15:00:00Z", status: 11, scheduleStatus: "FINISHED"))])
 
-        #expect(feed.widgetRace == nil)
+        #expect(feed.upcomingRace == nil)
         #expect(feed.widgetReloadDate(now: now) == now + 60 * 60)
     }
 }

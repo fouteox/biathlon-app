@@ -1,0 +1,76 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Latest result in ${applicationName}": {
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "de": {
+          "stringSet": {
+            "state": "translated",
+            "values": [
+              "Letztes Ergebnis in ${applicationName}",
+              "Wer hat das letzte Rennen in ${applicationName} gewonnen",
+              "Ergebnis des letzten Rennens in ${applicationName}"
+            ]
+          }
+        },
+        "en": {
+          "stringSet": {
+            "state": "new",
+            "values": [
+              "Latest result in ${applicationName}",
+              "Who won the last race in ${applicationName}",
+              "Last ${applicationName} result"
+            ]
+          }
+        },
+        "fr": {
+          "stringSet": {
+            "state": "translated",
+            "values": [
+              "Dernier résultat dans ${applicationName}",
+              "Qui a gagné la dernière course dans ${applicationName}",
+              "Résultat de la dernière course dans ${applicationName}"
+            ]
+          }
+        }
+      }
+    },
+    "Next race in ${applicationName}": {
+      "extractionState": "extracted_with_value",
+      "localizations": {
+        "de": {
+          "stringSet": {
+            "state": "translated",
+            "values": [
+              "Nächstes Rennen in ${applicationName}",
+              "Wann ist das nächste Rennen in ${applicationName}",
+              "Was ist das nächste Rennen in ${applicationName}"
+            ]
+          }
+        },
+        "en": {
+          "stringSet": {
+            "state": "new",
+            "values": [
+              "Next race in ${applicationName}",
+              "When is the next race in ${applicationName}",
+              "What's the next ${applicationName} race"
+            ]
+          }
+        },
+        "fr": {
+          "stringSet": {
+            "state": "translated",
+            "values": [
+              "Prochaine course dans ${applicationName}",
+              "Quelle est la prochaine course dans ${applicationName}",
+              "Quand a lieu la prochaine course dans ${applicationName}"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "version": "1.1"
+}

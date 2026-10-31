@@ -32,6 +32,11 @@ public struct RaceResults: Decodable, Sendable {
         return teams.isEmpty ? rows : teams
     }
 
+    /// The first three, without the athletes or teams who didn't finish: none before the results.
+    public var podium: [ResultRow] {
+        isResult ? Array(standings.filter { $0.irm == nil }.prefix(3)) : []
+    }
+
     public func legs(of team: ResultRow) -> [ResultRow] {
         rows.filter { !$0.isTeam && $0.teamID != nil && $0.teamID == team.teamID }
     }
@@ -45,6 +50,8 @@ public struct ResultRow: Decodable, Identifiable, Hashable, Sendable {
     public let teamID: String?
     public let name: String
     public let shortName: String?
+    public let familyName: String?
+    public let givenName: String?
     public let nation: String?
     public let leg: Int?
     public let rank: String?
@@ -60,6 +67,8 @@ public struct ResultRow: Decodable, Identifiable, Hashable, Sendable {
         case teamID = "TeamId"
         case name = "Name"
         case shortName = "ShortName"
+        case familyName = "FamilyName"
+        case givenName = "GivenName"
         case nation = "Nat"
         case leg = "Leg"
         case rank = "Rank"
@@ -76,6 +85,8 @@ public struct ResultRow: Decodable, Identifiable, Hashable, Sendable {
         teamID = try c.decodeLooseString(forKey: .teamID)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         shortName = try c.decodeIfPresent(String.self, forKey: .shortName)
+        familyName = try c.decodeIfPresent(String.self, forKey: .familyName)
+        givenName = try c.decodeIfPresent(String.self, forKey: .givenName)
         nation = try c.decodeIfPresent(String.self, forKey: .nation)
         leg = try c.decodeLooseInt(forKey: .leg)
         rank = try c.decodeLooseString(forKey: .rank)
@@ -83,5 +94,17 @@ public struct ResultRow: Decodable, Identifiable, Hashable, Sendable {
         totalTime = try c.decodeIfPresent(String.self, forKey: .totalTime)
         behind = try c.decodeIfPresent(String.self, forKey: .behind)
         irm = try c.decodeIfPresent(String.self, forKey: .irm)
+    }
+}
+
+extension ResultRow {
+    /// The name as a voice reads it: a team by its nation, an athlete given name first and family
+    /// name out of capitals, which a voice would spell out ("Johan-Olav Smoerdal Botn").
+    public func spokenName(locale: Locale = .current) -> String {
+        if isTeam, let nation { return Nation.localizedName(nation, locale: locale) }
+        guard let familyName, !familyName.isEmpty else { return name }
+        let family = familyName.capitalized(with: locale)
+        guard let givenName, !givenName.isEmpty else { return family }
+        return "\(givenName) \(family)"
     }
 }
