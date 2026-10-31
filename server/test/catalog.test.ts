@@ -1,5 +1,6 @@
+import JSON5 from "json5";
 import { describe, expect, it } from "vite-plus/test";
-import project from "../../Biathlon.xcodeproj/project.pbxproj?raw";
+import projectText from "../../Biathlon.xcodeproj/project.xcproj?raw";
 import raceKinds from "../../Packages/BiathlonKit/Tests/BiathlonKitTests/Fixtures/race-kinds.json";
 import catalogText from "../../Shared/Localizable.xcstrings?raw";
 import { LOC_KEYS, RACE_KINDS, raceTitleKey } from "../src/payload";
@@ -10,12 +11,14 @@ type Entry = { extractionState?: string; shouldTranslate?: boolean; localization
 
 const catalog: { sourceLanguage: string; strings: Record<string, Entry> } = JSON.parse(catalogText);
 
-// The languages the app ships: the Xcode project's known regions, as Xcode lists
-// them once a language is added under Project > Info > Localizations.
-const languages = (project.match(/knownRegions = \(([^)]*)\)/)?.[1] ?? "")
-  .split(",")
-  .map((region) => region.trim())
-  .filter((region) => region !== "" && region !== "Base");
+// The Xcode project file is JSON5 (apple/xcode-project-format).
+const project: { localizations: { development: string; supported?: string[] } } = JSON5.parse(projectText);
+
+// The languages the app ships: the project's development and supported languages,
+// as Xcode lists them once a language is added under Project > Info > Localizations.
+const languages = [project.localizations.development, ...(project.localizations.supported ?? [])].filter(
+  (language) => language !== "Base",
+);
 
 const isTranslated = (localization: Localization | undefined) => {
   const units = localization?.variations?.plural
