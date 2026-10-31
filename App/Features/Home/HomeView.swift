@@ -11,28 +11,36 @@ struct HomeView: View {
     var body: some View {
         LoadableView(state: loader.state, retry: load) { feed in
             List {
-                // The event first: the races below are its own.
-                if let event = feed.event {
-                    Section("Event") {
-                        NavigationLink(value: Route.event(event)) { EventRow(event: event) }
-                    }
-                }
-
+                // The anchor: the live race, otherwise the next one. The event is its header,
+                // the context of the races below, rather than a section of its own.
                 if let live = feed.live {
                     Section {
                         NavigationLink(value: Route.race(live)) {
-                            LiveHeader(race: live)
+                            RaceHeading(race: live)
                         }
                         if let results = feed.liveResults {
                             featured(results, top: 5)
                         }
                     } header: {
-                        Label("Live", systemImage: "dot.radiowaves.left.and.right")
-                            .foregroundStyle(.red)
+                        eventHeader(feed.event)
+                    }
+                } else if let next = feed.next {
+                    Section {
+                        NavigationLink(value: Route.race(next)) {
+                            RaceHeading(race: next)
+                        }
+                    } header: {
+                        eventHeader(feed.event)
+                    }
+                } else if let event = feed.event {
+                    // No race ahead, as after a season's last race: the event on its own.
+                    Section("Event") {
+                        NavigationLink(value: Route.event(event)) { EventRow(event: event) }
                     }
                 }
 
-                if let next = feed.next {
+                // The next race keeps its section while another is live.
+                if feed.live != nil, let next = feed.next {
                     Section("Next race") {
                         NavigationLink(value: Route.race(next)) {
                             VStack(alignment: .leading, spacing: 4) {
@@ -46,12 +54,14 @@ struct HomeView: View {
                 }
 
                 if let results = feed.latestResults, let race = feed.latestFinished {
+                    // The race in the header and its start in the footer: the podium comes first.
                     Section {
-                        RaceRow(race: race)
                         featured(results, top: 3)
                         NavigationLink("All results", value: Route.race(race))
                     } header: {
-                        latestResultHeader(race, in: feed)
+                        Text("Latest result · \(race.title)")
+                    } footer: {
+                        latestResultFooter(race, in: feed)
                     }
                 }
             }
@@ -88,25 +98,50 @@ struct HomeView: View {
             rows: results.featuredStandings(top: count, favorites: favoriteSet), of: results, favorites: favoriteSet)
     }
 
-    /// Names the race's event when it is not the one at the top, between two events.
-    private func latestResultHeader(_ race: Competition, in feed: HomeFeed) -> Text {
-        guard let event = feed.event(of: race), event != feed.event else {
-            return Text("Latest result")
+    /// The event over the races below it, which opens its schedule. Read at the prominence of a
+    /// row, since it is content, not a caption.
+    @ViewBuilder
+    private func eventHeader(_ event: BiathlonEvent?) -> some View {
+        if let event {
+            NavigationLink(value: Route.event(event)) { EventRow(event: event) }
+                .headerProminence(.increased)
         }
-        return Text("Latest result · \(Nation.titled(event.shortDescription, nation: event.nation))")
+    }
+
+    /// When the race started and, between two events, where: its event is then not the one at the top.
+    private func latestResultFooter(_ race: Competition, in feed: HomeFeed) -> Text {
+        let start = Text(race.startTime, format: RaceStart.format)
+        guard let event = feed.event(of: race), event != feed.event else { return start }
+        return Text("\(start) · \(Text(Nation.titled(event.shortDescription, nation: event.nation)))")
     }
 }
 
-private struct LiveHeader: View {
+/// The race the home screen is anchored on, larger than the rows below it: its name, its start
+/// and, while it is still to come, how far away that is.
+private struct RaceHeading: View {
     let race: Competition
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(race.title).font(.title3.bold())
-            Text("Start \(race.startTime, format: .dateTime.hour().minute())")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            if race.state == .live {
+                Label("Live", systemImage: "dot.radiowaves.left.and.right")
+                    .font(.caption.bold())
+                    .foregroundStyle(Competition.State.live.tint)
+            }
+            Text(race.title).font(.title2.bold())
+            if race.state == .live {
+                Text("Start \(race.startTime, format: .dateTime.hour().minute())")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                RaceStart(race: race)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Text(race.startTime, style: .relative)
+                    .font(.headline)
+            }
         }
+        .accessibilityElement(children: .combine)
     }
 }
 

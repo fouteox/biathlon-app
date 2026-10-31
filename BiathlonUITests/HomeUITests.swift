@@ -17,12 +17,25 @@ final class HomeUITests: XCTestCase {
                 .waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 
-    /// The latest result says which race it was and when, above its podium.
-    @MainActor func testLatestResultSaysWhenItsRaceStarted() {
+    /// The anchor comes first under the event: the next race, larger, with how far away it is.
+    @MainActor func testNextRaceIsTheAnchorUnderTheEvent() {
         let app = XCUIApplication.launchInEnglish()
-        // The race reads as one element: its name, its start date with the year, and its state.
-        let race = app.cells.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@ AND label MATCHES %@", "Finished", ".*\\b(19|20)[0-9]{2}\\b.*"))
-        XCTAssertTrue(race.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        let event = app.cells.containing(.button, identifier: nil).firstMatch
+        XCTAssertTrue(event.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        // On the sample data no race is live, so the next race is the first dated row, and it isn't over.
+        let anchor = app.cells.containing(.button, identifier: nil)
+            .matching(NSPredicate(format: "label MATCHES %@", ".*\\b(19|20)[0-9]{2}\\b.*")).firstMatch
+        XCTAssertTrue(anchor.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        XCTAssertFalse(anchor.label.contains("Finished"), anchor.label)
+    }
+
+    /// The latest result names its race in its header and says when it started in its footer, under the podium.
+    @MainActor func testLatestResultSaysWhichRaceAndWhenItStarted() {
+        let app = XCUIApplication.launchInEnglish()
+        let header = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Latest result ·")).firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        // The footer: the start date with the year and, between two events, the place.
+        let footer = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", ".*\\b(19|20)[0-9]{2}\\b.*"))
+        XCTAssertTrue(footer.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 }
