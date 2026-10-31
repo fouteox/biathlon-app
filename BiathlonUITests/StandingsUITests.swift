@@ -30,17 +30,17 @@ final class StandingsUITests: XCTestCase {
         app.openTab("Standings")
         let list = app.collectionViews.firstMatch
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
-        XCTAssertTrue(Self.picker("category", in: app, shows: "Men").exists)
-        XCTAssertTrue(Self.picker("discipline", in: app, shows: "Overall").exists)
+        XCTAssertTrue(app.toolbarPicker("category", shows: "Men").exists)
+        XCTAssertTrue(app.toolbarPicker("discipline", shows: "Overall").exists)
 
         app.navigationBars.buttons["category"].tap()
         app.buttons["Women"].tap()
-        XCTAssertTrue(Self.picker("category", in: app, shows: "Women").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.toolbarPicker("category", shows: "Women").waitForExistence(timeout: 5))
 
         app.navigationBars.buttons["discipline"].tap()
         app.buttons["Sprint"].tap()
-        XCTAssertTrue(Self.picker("discipline", in: app, shows: "Sprint").waitForExistence(timeout: 5))
-        XCTAssertTrue(Self.picker("category", in: app, shows: "Women").exists)
+        XCTAssertTrue(app.toolbarPicker("discipline", shows: "Sprint").waitForExistence(timeout: 5))
+        XCTAssertTrue(app.toolbarPicker("category", shows: "Women").exists)
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 
@@ -60,16 +60,8 @@ final class StandingsUITests: XCTestCase {
             boundBy: 2)
         let name = past.label
         past.tap()
-        XCTAssertTrue(Self.picker("season", in: app, shows: name).waitForExistence(timeout: 5))
-        XCTAssertTrue(Self.picker("category", in: app, shows: "Women").exists)
+        XCTAssertTrue(app.toolbarPicker("season", shows: name).waitForExistence(timeout: 5))
+        XCTAssertTrue(app.toolbarPicker("category", shows: "Women").exists)
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
-    }
-
-    /// The toolbar's pop-up button `identifier` once it shows `value`.
-    @MainActor private static func picker(_ identifier: String, in app: XCUIApplication, shows value: String)
-        -> XCUIElement
-    {
-        app.navigationBars.buttons.matching(identifier: identifier)
-            .matching(NSPredicate(format: "label CONTAINS %@", value)).firstMatch
     }
 }

@@ -214,6 +214,22 @@
         }
       }
     },
+    "Analysis": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyse"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Analyse"
+          }
+        }
+      }
+    },
     "Biathletes": {
       "localizations": {
         "de": {
@@ -290,6 +306,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Catégorie"
+          }
+        }
+      }
+    },
+    "Course": {
+      "comment": "Analysis ranking of the skiing times.",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufstrecke"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ski"
+          }
+        }
+      }
+    },
+    "Course, range and shooting times": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lauf-, Schießstand- und Schießzeiten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temps de ski, au pas de tir et de tir"
           }
         }
       }
@@ -478,6 +527,38 @@
         }
       }
     },
+    "Lap %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runde %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tour %lld"
+          }
+        }
+      }
+    },
+    "Lap or shooting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Runde oder Schießen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tour ou tir"
+          }
+        }
+      }
+    },
     "Latest result": {
       "localizations": {
         "de": {
@@ -602,6 +683,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Mass start"
+          }
+        }
+      }
+    },
+    "Measure": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Messung"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mesure"
           }
         }
       }
@@ -1006,6 +1103,23 @@
         }
       }
     },
+    "Range": {
+      "comment": "Analysis ranking of the times on the shooting range.",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schießstand"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pas de tir"
+          }
+        }
+      }
+    },
     "Reminder before the start": {
       "localizations": {
         "de": {
@@ -1178,6 +1292,39 @@
           "stringUnit": {
             "state": "translated",
             "value": "Réglages"
+          }
+        }
+      }
+    },
+    "Shooting": {
+      "comment": "Analysis ranking of the times on the shooting mat.",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schießen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tir"
+          }
+        }
+      }
+    },
+    "Shooting %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schießen %lld"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tir %lld"
           }
         }
       }
@@ -1572,6 +1719,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Version"
+          }
+        }
+      }
+    },
+    "Whole race": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ganzes Rennen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Toute la course"
           }
         }
       }

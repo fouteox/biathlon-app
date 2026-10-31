@@ -7,6 +7,8 @@ enum Route: Hashable {
     case race(Competition)
     /// A race known by its ID alone, such as an athlete's result, with its title.
     case raceID(String, title: String)
+    /// The finished race's rankings of course, range and shooting times.
+    case analysis(Competition)
     case athlete(id: String, name: String)
     /// A nation's athletes in the standings of `category`.
     case nation(code: String, category: RaceCategory)
@@ -19,6 +21,7 @@ extension View {
             case .event(let event): EventView(event: event)
             case .race(let race): RaceView(race: race)
             case .raceID(let id, let title): RaceByIDView(raceID: id, title: title)
+            case .analysis(let race): RaceAnalysisView(race: race)
             case .athlete(let id, let name): AthleteView(athleteID: id, name: name)
             case .nation(let code, let category): NationView(nation: code, category: category)
             }

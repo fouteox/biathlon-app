@@ -11,6 +11,10 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
     public let isLive: Bool
     public let categoryID: String?
     public let legCount: Int?
+    /// Whether the IBU publishes the race's analysis: its rankings of course, range and shooting times.
+    public let hasAnalysis: Bool
+    /// Shootings of each athlete, or of each leg of a relay.
+    public let shootingCount: Int?
 
     enum CodingKeys: String, CodingKey {
         case id = "RaceId"
@@ -22,6 +26,8 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
         case isLive = "IsLive"
         case categoryID = "catId"
         case legCount = "NrLegs"
+        case hasAnalysis = "HasAnalysis"
+        case shootingCount = "NrShootings"
     }
 
     public init(from decoder: any Decoder) throws {
@@ -35,6 +41,8 @@ public struct Competition: Decodable, Identifiable, Hashable, Sendable {
         isLive = try c.decodeIfPresent(Bool.self, forKey: .isLive) ?? false
         categoryID = try c.decodeIfPresent(String.self, forKey: .categoryID)
         legCount = try c.decodeLooseInt(forKey: .legCount)
+        hasAnalysis = try c.decodeIfPresent(Bool.self, forKey: .hasAnalysis) ?? false
+        shootingCount = try c.decodeLooseInt(forKey: .shootingCount)
     }
 
     /// Same rules as the server (`server/src/ibu.ts`), checked against the

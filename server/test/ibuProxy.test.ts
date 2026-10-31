@@ -39,16 +39,19 @@ describe("GET /ibu/*", () => {
     expect(requested).toEqual(["https://biathlonresults.com/modules/sportapi/api/Results?RaceId=BT2627SWRLCP01SMIN"]);
   });
 
-  it("serves the athlete search for an hour", async () => {
+  it.each([
+    ["the athlete search", "Athletes?FamilyName=simon", 3600],
+    ["a race's analysis", "AnalyticResults?RaceId=BT2526SWRLCP01SMSP&TypeId=CRST", 60],
+  ])("serves %s from its cache", async (_, path, seconds) => {
     const requested = stubIBU();
 
     for (const _ of [1, 2]) {
-      const response = await get("/ibu/Athletes?FamilyName=simon");
-      expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
+      const response = await get(`/ibu/${path}`);
+      expect(response.headers.get("cache-control")).toBe(`public, max-age=${seconds}`);
       await response.json();
     }
 
-    expect(requested).toEqual(["https://biathlonresults.com/modules/sportapi/api/Athletes?FamilyName=simon"]);
+    expect(requested).toEqual([`https://biathlonresults.com/modules/sportapi/api/${path}`]);
   });
 
   it("passes the IBU API's errors on without caching them", async () => {

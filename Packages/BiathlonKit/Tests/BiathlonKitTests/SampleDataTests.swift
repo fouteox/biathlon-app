@@ -114,6 +114,21 @@
             #expect(results.rows.isEmpty)
         }
 
+        /// Every ranking of a finished race lists its athletes; races still to come have none.
+        @Test func finishedRacesHaveTheirAnalysis() async throws {
+            let now = date("2027-01-20T12:00:00Z")
+            let client = IBUClient.sample(now: now)
+            let feed = try await client.homeFeed(now: now)
+            let finished = try #require(feed.latestResults?.competition)
+            #expect(finished.hasAnalysisRankings)
+            for analysis in RaceAnalysis.all(shootings: try #require(finished.shootingCount)) {
+                let ranking = try await client.analysis(analysis, raceID: finished.id)
+                #expect(ranking.rows.count == 10, "\(analysis.typeID)")
+            }
+            let next = try #require(feed.next)
+            #expect(!next.hasAnalysisRankings)
+        }
+
         @Test func unknownRoutesAreNotFound() async throws {
             await #expect {
                 try await IBUClient.sample(now: .now).athlete(id: "BTXXX0")

@@ -152,6 +152,8 @@ const CACHE_SECONDS: Record<string, number> = {
   AllResults: 3600,
   // The athlete search, by the start of a name.
   Athletes: 3600,
+  // A race's rankings of course, range and shooting times, final once its results are.
+  AnalyticResults: 60,
 };
 
 async function proxyIBU(request: Request, url: URL, env: Env, ctx: ExecutionContext): Promise<Response> {

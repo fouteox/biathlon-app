@@ -39,6 +39,10 @@
             case "Events": query["SeasonId"].map { events(of: SeasonID(rawValue: $0)).map(\.json) }
             case "Competitions": query["EventId"].flatMap(event(id:)).map { races(of: $0).map(\.json) }
             case "Results": query["RaceId"].flatMap(race(id:)).map(results)
+            case "AnalyticResults":
+                query["RaceId"].flatMap(race(id:)).flatMap { race in
+                    query["TypeId"].map { analysis(of: race, typeID: $0) }
+                }
             case "CupResults": query["CupId"].flatMap(standings(cupID:))
             case "CISBios": query["IBUId"].flatMap(athlete(id:)).map(\.bio)
             case "AllResults": query["IBUId"].flatMap(athlete(id:)).map { ["Results": history(of: $0)] }
@@ -74,6 +78,8 @@
             let isOver: Bool
 
             var id: String { event.id + kind.rawValue }
+            /// Two in a sprint, four in a pursuit.
+            var shootings: Int { kind == .menSprint || kind == .womenSprint ? 2 : 4 }
             /// A kind starts with its category's `catId`.
             var category: RaceCategory { RaceCategory(rawValue: String(kind.rawValue.prefix(2)))! }
 
@@ -82,6 +88,7 @@
                     "RaceId": id, "catId": category.rawValue, "ShortDescription": "\(kind)",
                     "StartTime": start.formatted(.iso8601), "IsLive": false,
                     "StatusId": isOver ? 11 : 1, "ScheduleStatus": isOver ? "FINISHED" : "SCHEDULED",
+                    "NrShootings": shootings, "HasAnalysis": isOver,
                 ]
             }
         }
@@ -121,19 +128,48 @@
         }
 
         private func results(of race: Race) -> [String: Any] {
-            let rows =
-                race.isOver
-                ? Self.athletes(of: race.category).enumerated().map { rank, athlete in
-                    athlete.row.merging([
-                        "Rank": "\(rank + 1)", "Shootings": "0+1",
-                        "TotalTime": "24:\(String(format: "%02d", 10 + rank)).0",
-                        "Behind": rank == 0 ? "0.0" : "+\(rank).0",
-                    ]) { $1 }
-                } : []
-            return [
+            response(
+                of: race, rows: race.isOver ? Self.ranked(Self.athletes(of: race.category), in: race, minutes: 24) : [])
+        }
+
+        /// A ranking of the race's analysis, the athletes in another order for each measure; none
+        /// before the race is over or for a lap or shooting the race doesn't have.
+        private func analysis(of race: Race, typeID: String) -> [String: Any] {
+            guard race.isOver,
+                let analysis = RaceAnalysis.all(shootings: race.shootings).first(where: { $0.typeID == typeID })
+            else { return response(of: race, rows: []) }
+            let athletes = Self.athletes(of: race.category)
+            let shift = 3 * RaceAnalysis.Measure.allCases.firstIndex(of: analysis.measure)!
+            let minutes =
+                switch (analysis.measure, analysis.segment) {
+                case (.course, nil): 22
+                case (.course, _?): 7
+                case (.range, nil): 1
+                default: 0
+                }
+            return response(
+                of: race, rows: Self.ranked(Array(athletes[shift...] + athletes[..<shift]), in: race, minutes: minutes))
+        }
+
+        private func response(of race: Race, rows: [[String: Any]]) -> [String: Any] {
+            [
                 "IsResult": race.isOver, "IsStartList": false, "Competition": race.json, "SportEvt": race.event.json,
                 "Results": rows,
             ]
+        }
+
+        /// The athletes in their order, a second apart from `minutes` and ten seconds, each missing
+        /// once at the second shooting.
+        private static func ranked(_ athletes: [Athlete], in race: Race, minutes: Int) -> [[String: Any]] {
+            let shootings = (1...race.shootings).map { $0 == 2 ? "1" : "0" }.joined(separator: "+")
+            return athletes.enumerated().map { rank, athlete in
+                let seconds = 10 + rank
+                return athlete.row.merging([
+                    "Rank": "\(rank + 1)", "Shootings": shootings,
+                    "TotalTime": minutes == 0 ? "\(seconds).0" : "\(minutes):\(String(format: "%02d", seconds)).0",
+                    "Behind": rank == 0 ? "0.0" : "+\(rank).0",
+                ]) { $1 }
+            }
         }
 
         // MARK: Athletes
