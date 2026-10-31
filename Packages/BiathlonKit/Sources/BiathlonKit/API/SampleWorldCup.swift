@@ -183,8 +183,8 @@
 
             var row: [String: Any] {
                 [
-                    "IBUId": id, "Name": "\(familyName) \(givenName)",
-                    "ShortName": "\(familyName) \(givenName.prefix(1)).", "Nat": nation,
+                    "IBUId": id, "Name": "\(familyName) \(givenName)", "FamilyName": familyName,
+                    "GivenName": givenName, "ShortName": "\(familyName) \(givenName.prefix(1)).", "Nat": nation,
                 ]
             }
 

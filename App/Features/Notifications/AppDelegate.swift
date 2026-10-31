@@ -1,3 +1,4 @@
+import AppIntents
 import BiathlonKit
 import UIKit
 import UserNotifications
@@ -31,6 +32,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         let (client, server) = Self.clients(sampleData: runsOnSampleData)
         self.client = client
         self.server = server
+        // Siri's intents read the same data as the screens.
+        AppDependencyManager.shared.add(dependency: client)
         wikidata = Self.wikidata(sampleData: runsOnSampleData)
         // One for every request to the server: it attests a single key for the install.
         let appAttest = server.map { AppAttest(server: $0) }

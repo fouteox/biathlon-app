@@ -21,8 +21,8 @@ public struct HomeFeed: Sendable {
     public var next: Competition? { races.first { $0.state == .scheduled } }
     public var latestFinished: Competition? { races.last { $0.state == .finished } }
 
-    /// The race the widget shows: the live one, otherwise the next one.
-    public var widgetRace: Competition? { live ?? next }
+    /// The live race, otherwise the next one: what the widget shows and Siri tells.
+    public var upcomingRace: Competition? { live ?? next }
 
     /// When the widget reloads, within WidgetKit's budget of a reload every 15 to 60 minutes
     /// or so: every 15 minutes while a race is live, at the next race's start, otherwise every
