@@ -35,12 +35,16 @@ struct NationView: View {
         .navigationTitle(Nation.namedTitle(nation))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            Picker("Category", selection: $category) {
-                ForEach(RaceCategory.withStandings) { Text($0.title).tag($0) }
+            ToolbarItem {
+                Picker("Category", selection: $category) {
+                    ForEach(RaceCategory.withStandings) { Text($0.title).tag($0) }
+                }
             }
             // A text item and a symbol item in groups of their own.
             ToolbarSpacer(.fixed)
-            FavoriteButton(kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation)
+            ToolbarItem {
+                FavoriteButton(kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation)
+            }
         }
         // As on the standings, only a new category shows the loading state.
         .onChange(of: category) { loader.reset() }

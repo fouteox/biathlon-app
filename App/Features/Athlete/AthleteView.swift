@@ -104,12 +104,17 @@ struct AthleteView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let history = history.state.value {
-                SeasonPicker(
-                    seasons: history.seasons, selection: Binding(picked: $pickedSeason, opening: history.initialSeason))
+                ToolbarItem {
+                    SeasonPicker(
+                        seasons: history.seasons,
+                        selection: Binding(picked: $pickedSeason, opening: history.initialSeason))
+                }
                 // A text item and a symbol item in groups of their own.
                 ToolbarSpacer(.fixed)
             }
-            FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.state.value?.nation)
+            ToolbarItem {
+                FavoriteButton(kind: .athlete, key: athleteID, name: name, nation: bio.state.value?.nation)
+            }
         }
         .task { await load() }
         // Only a new season shows the standing as loading.
