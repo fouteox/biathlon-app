@@ -11,26 +11,24 @@ struct HomeView: View {
     var body: some View {
         LoadableView(state: loader.state, retry: load) { feed in
             List {
-                // The anchor: the live race, otherwise the next one. The event is its header,
-                // the context of the races below, rather than a section of its own.
+                // The anchor: the live race, otherwise the next one, under its event, the
+                // context of the races below, rather than a section of its own.
                 if let live = feed.live {
                     Section {
+                        eventRow(feed.event)
                         NavigationLink(value: Route.race(live)) {
                             RaceHeading(race: live)
                         }
                         if let results = feed.liveResults {
                             featured(results, top: 5)
                         }
-                    } header: {
-                        eventHeader(feed.event)
                     }
                 } else if let next = feed.next {
                     Section {
+                        eventRow(feed.event)
                         NavigationLink(value: Route.race(next)) {
                             RaceHeading(race: next)
                         }
-                    } header: {
-                        eventHeader(feed.event)
                     }
                 } else if let event = feed.event {
                     // No race ahead, as after a season's last race: the event on its own.
@@ -98,13 +96,11 @@ struct HomeView: View {
             rows: results.featuredStandings(top: count, favorites: favoriteSet), of: results, favorites: favoriteSet)
     }
 
-    /// The event over the races below it, which opens its schedule. Read at the prominence of a
-    /// row, since it is content, not a caption.
+    /// The event over the races below it, which opens its schedule.
     @ViewBuilder
-    private func eventHeader(_ event: BiathlonEvent?) -> some View {
+    private func eventRow(_ event: BiathlonEvent?) -> some View {
         if let event {
             NavigationLink(value: Route.event(event)) { EventRow(event: event) }
-                .headerProminence(.increased)
         }
     }
 

@@ -22,11 +22,13 @@ final class HomeUITests: XCTestCase {
         let app = XCUIApplication.launchInEnglish()
         let event = app.cells.containing(.button, identifier: nil).firstMatch
         XCTAssertTrue(event.waitForExistence(timeout: XCUIApplication.dataTimeout))
-        // On the sample data no race is live, so the next race is the first dated row, and it isn't over.
-        let anchor = app.cells.containing(.button, identifier: nil)
-            .matching(NSPredicate(format: "label MATCHES %@", ".*\\b(19|20)[0-9]{2}\\b.*")).firstMatch
+        // On the sample data no race is live, so the next race is the row right under the event:
+        // one element, dated with the year, and not over. A cell's label is on its link, not on it.
+        let anchor = app.cells.containing(.button, identifier: nil).element(boundBy: 1)
         XCTAssertTrue(anchor.waitForExistence(timeout: XCUIApplication.dataTimeout))
-        XCTAssertFalse(anchor.label.contains("Finished"), anchor.label)
+        let label = anchor.buttons.firstMatch.label
+        XCTAssertTrue(label.range(of: #"\b(19|20)[0-9]{2}\b"#, options: .regularExpression) != nil, label)
+        XCTAssertFalse(label.contains("Finished"), label)
     }
 
     /// The latest result names its race in its header and says when it started in its footer, under the podium.
