@@ -67,10 +67,12 @@ final class AccessibilityUITests: XCTestCase {
         let app = XCUIApplication.launchInEnglish()
         openFirstAthlete(in: app)
         XCTAssertTrue(Self.overallStanding(in: app).waitForExistence(timeout: Self.timeout))
-        // The season's first race, at the end of the list.
+        // The season's first race, at the end of the list: its last link, before the footer, which
+        // the list exposes as a cell of its own.
         let list = app.collectionViews.firstMatch
         for _ in 0..<3 { list.swipeUp() }
-        list.cells.element(boundBy: list.cells.count - 1).tap()
+        let links = list.cells.containing(.button, identifier: nil)
+        links.element(boundBy: links.count - 1).tap()
         XCTAssertTrue(app.staticTexts["Finished"].waitForExistence(timeout: Self.timeout))
         XCTAssertFalse(app.navigationBars.buttons["Add to favorites"].exists)
     }
