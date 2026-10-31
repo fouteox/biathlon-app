@@ -1,3 +1,4 @@
+import BiathlonKit
 import Foundation
 import Testing
 
@@ -16,5 +17,14 @@ struct BundleURLsTests {
 
     @Test func hasNoURLForAMissingKey() {
         #expect(Bundle.main.url(forInfoDictionaryKey: "BiathlonMissingURL") == nil)
+    }
+
+    @Test func readsTheIBUThroughTheServersCache() throws {
+        let server = ServerClient(baseURL: try #require(URL(string: "https://example.com")))
+        #expect(IBUClient(cachedBy: server).baseURL == URL(string: "https://example.com/ibu/"))
+    }
+
+    @Test func readsTheIBUDirectlyWithoutAServer() {
+        #expect(IBUClient(cachedBy: nil).baseURL == IBUClient.ibuBaseURL)
     }
 }

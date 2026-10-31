@@ -1384,6 +1384,22 @@
         }
       }
     },
+    "The live race, otherwise the next one.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das laufende Rennen, sonst das nächste."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "La course en direct, sinon la prochaine."
+          }
+        }
+      }
+    },
     "This race can't be followed live yet. Try again in a few minutes.": {
       "localizations": {
         "de": {

@@ -86,4 +86,62 @@ struct HomeFeedTests {
         #expect(HomeFeed(events: [], races: [cancelled]).isEmpty)
         #expect(!HomeFeed(events: [], races: [scheduled]).isEmpty)
     }
+
+    /// The widget needs the races, not their results: no `Results` route is stubbed.
+    @Test func featuredRacesLeaveTheResultsOut() async throws {
+        let routes = Self.duringAnEvent.filter { !$0.key.hasPrefix("Results") }
+        let feed = try await stubClient(routes).featuredRaces(now: date("2026-11-27T11:30:00Z"))
+
+        #expect(feed.live?.id == "E1-PU")
+        #expect(feed.next?.id == "E1-MS")
+        #expect(feed.liveResults == nil)
+        #expect(feed.latestResults == nil)
+    }
+
+    @Test func theWidgetShowsTheLiveRaceAndReloadsEveryQuarterOfAnHour() throws {
+        let now = date("2026-11-27T11:30:00Z")
+        let feed = HomeFeed(
+            events: [],
+            races: [
+                try decode(race("LIVE", start: "2026-11-27T11:00:00Z", isLive: true)),
+                try decode(race("NEXT", start: "2026-11-27T11:40:00Z")),
+            ])
+
+        #expect(feed.widgetRace?.id == "LIVE")
+        #expect(feed.widgetReloadDate(now: now) == now + 15 * 60)
+    }
+
+    @Test func theWidgetShowsTheNextRaceAndReloadsAtItsStartWithinTheHour() throws {
+        let now = date("2026-11-27T11:30:00Z")
+        let feed = HomeFeed(events: [], races: [try decode(race("NEXT", start: "2026-11-27T12:10:00Z"))])
+
+        #expect(feed.widgetRace?.id == "NEXT")
+        #expect(feed.widgetReloadDate(now: now) == date("2026-11-27T12:10:00Z"))
+    }
+
+    /// A start a day away can still move: the widget checks every hour.
+    @Test func theWidgetReloadsHourlyBeforeALaterRace() throws {
+        let now = date("2026-11-27T11:30:00Z")
+        let feed = HomeFeed(events: [], races: [try decode(race("NEXT", start: "2026-11-28T14:00:00Z"))])
+
+        #expect(feed.widgetReloadDate(now: now) == now + 60 * 60)
+    }
+
+    /// A start past that the race hasn't gone live at yet: no sooner than WidgetKit allows.
+    @Test func theWidgetWaitsFiveMinutesForARaceLateToStart() throws {
+        let now = date("2026-11-27T11:30:00Z")
+        let feed = HomeFeed(events: [], races: [try decode(race("NEXT", start: "2026-11-27T11:15:00Z"))])
+
+        #expect(feed.widgetReloadDate(now: now) == now + 5 * 60)
+    }
+
+    @Test func theWidgetReloadsHourlyWithNoRaceAhead() throws {
+        let now = date("2026-11-27T11:30:00Z")
+        let feed = HomeFeed(
+            events: [],
+            races: [try decode(race("DONE", start: "2026-11-26T15:00:00Z", status: 11, scheduleStatus: "FINISHED"))])
+
+        #expect(feed.widgetRace == nil)
+        #expect(feed.widgetReloadDate(now: now) == now + 60 * 60)
+    }
 }

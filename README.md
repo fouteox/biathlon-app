@@ -8,7 +8,7 @@ App iOS gratuite de suivi de la Coupe du monde de biathlon : course en direct, c
 open Biathlon.xcodeproj
 ```
 
-Le projet Xcode est versionné et utilise des dossiers synchronisés : tout fichier ajouté sous `App/` fait partie de l'app, sous `Widgets/` de l'extension des Live Activities, sous `Shared/` des deux, sous `BiathlonTests/` des tests de l'app et sous `BiathlonUITests/` de ses tests d'interface, sans modifier `Biathlon.xcodeproj/project.xcproj` (format JSON5 d'Xcode 27.2, lisible avec [xcode-project-format](https://github.com/apple/xcode-project-format)). Les réglages de compilation sont dans `Configs/Project.xcconfig` (communs), `Configs/Biathlon.xcconfig` (cible de l'app) et `Configs/BiathlonWidgets.xcconfig` (extension), `Configs/BiathlonTests.xcconfig` (tests de l'app), `Configs/BiathlonUITests.xcconfig` (tests d'interface), avec `Configs/Info.plist`, `Configs/BiathlonWidgets-Info.plist` et `Configs/Biathlon.entitlements`. Modifier ces fichiers plutôt que les réglages dans l'éditeur de projet d'Xcode.
+Le projet Xcode est versionné et utilise des dossiers synchronisés : tout fichier ajouté sous `App/` fait partie de l'app, sous `Widgets/` de l'extension des widgets et des Live Activities, sous `Shared/` des deux, sous `BiathlonTests/` des tests de l'app et sous `BiathlonUITests/` de ses tests d'interface, sans modifier `Biathlon.xcodeproj/project.xcproj` (format JSON5 d'Xcode 27.2, lisible avec [xcode-project-format](https://github.com/apple/xcode-project-format)). Les réglages de compilation sont dans `Configs/Project.xcconfig` (communs), `Configs/Biathlon.xcconfig` (cible de l'app) et `Configs/BiathlonWidgets.xcconfig` (extension), `Configs/BiathlonTests.xcconfig` (tests de l'app), `Configs/BiathlonUITests.xcconfig` (tests d'interface), avec `Configs/Info.plist`, `Configs/BiathlonWidgets-Info.plist` et `Configs/Biathlon.entitlements`. Modifier ces fichiers plutôt que les réglages dans l'éditeur de projet d'Xcode.
 
 Tests de `BiathlonKit` (sans Xcode) :
 
@@ -50,7 +50,7 @@ La branche `main` est protégée par le ruleset `.github/rulesets/main.json` (à
 - `BiathlonTests` : les tests de l'app (App Attest, Live Activities des favoris, préférences, rappels).
 - `BiathlonUITests` : les tests d'interface (lecture des listes par VoiceOver, audit d'accessibilité).
 - `App` : l'app SwiftUI (iOS 26, Swift 6, isolation `MainActor` par défaut, Observation, SwiftData pour les favoris).
-- `Widgets` : l'extension WidgetKit qui affiche la Live Activity d'une course sur l'écran verrouillé et dans la Dynamic Island.
+- `Widgets` : l'extension WidgetKit : le widget « Prochaine course » (écran d'accueil et écran verrouillé) et la Live Activity d'une course sur l'écran verrouillé et dans la Dynamic Island.
 - `Shared` : le code et le String Catalog communs à l'app et à l'extension.
 - `server` : Cloudflare Worker qui envoie les alertes d'annulation et de départ décalé, met à jour les Live Activities des courses par des canaux de diffusion APNs, et sert de cache à l'API IBU (voir `server/README.md`).
 
