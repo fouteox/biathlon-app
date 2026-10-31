@@ -21,12 +21,14 @@ struct AthleteSearchTests {
             ])
     }
 
-    @Test func severalWordsAreAFamilyNameOrBothNamesInEitherOrder() {
+    @Test func severalWordsAreAFamilyNameOrBothNamesSplitAnywhereInEitherOrder() {
         #expect(
-            AthleteSearch.queries(for: "Johannes Thingnes Boe") == [
-                .init(familyName: "johannes thingnes boe"),
-                .init(familyName: "boe", givenName: "johannes thingnes"),
-                .init(familyName: "johannes", givenName: "thingnes boe"),
+            AthleteSearch.queries(for: "Quentin Fillon Maillet") == [
+                .init(familyName: "quentin fillon maillet"),
+                .init(familyName: "fillon maillet", givenName: "quentin"),
+                .init(familyName: "quentin", givenName: "fillon maillet"),
+                .init(familyName: "maillet", givenName: "quentin fillon"),
+                .init(familyName: "quentin fillon", givenName: "maillet"),
             ])
     }
 

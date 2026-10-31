@@ -39,17 +39,18 @@ public enum AthleteSearch {
     }
 
     /// One word may start either name. Several may be a family name of several words
-    /// (`fillon maillet`), a given name then a family name (`johannes thingnes boe`), or the
-    /// reverse (`simon julia`). Lowercased, so the server's cache serves every spelling.
+    /// (`fillon maillet`), or given names and a family name, each of one word or more, in either
+    /// order (`quentin fillon maillet`, `simon julia`): every split is searched. Lowercased, so the
+    /// server's cache serves every spelling.
     static func queries(for text: String) -> [Query] {
         let words = text.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
-        guard let first = words.first, let last = words.last else { return [] }
+        guard let first = words.first else { return [] }
         guard words.count > 1 else { return [Query(familyName: first), Query(givenName: first)] }
-        return [
-            Query(familyName: words.joined(separator: " ")),
-            Query(familyName: last, givenName: words.dropLast().joined(separator: " ")),
-            Query(familyName: first, givenName: words.dropFirst().joined(separator: " ")),
-        ]
+        let splits = (1..<words.count).flatMap { index in
+            let (start, end) = (words[..<index].joined(separator: " "), words[index...].joined(separator: " "))
+            return [Query(familyName: end, givenName: start), Query(familyName: start, givenName: end)]
+        }
+        return [Query(familyName: words.joined(separator: " "))] + splits
     }
 
     /// The athletes of every answer, in the order of the queries and of the IBU's answers, once each.
