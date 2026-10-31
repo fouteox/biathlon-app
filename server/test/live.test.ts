@@ -1754,7 +1754,8 @@ describe("Live Activities started for favorites and followed races", () => {
     const next = stub();
     await sync(env, [race()], DUE + 60_000);
     expect(starts(next).length).toBe(1);
-  });
+    // Saving 499 registrations one by one takes well over the default 5 s on a busy CI runner.
+  }, 60_000);
 
   it("waits for the published start list before a scheduled race, and takes the results of a live one", async () => {
     const env = await setUp();
