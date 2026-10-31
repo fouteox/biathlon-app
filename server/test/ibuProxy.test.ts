@@ -39,6 +39,18 @@ describe("GET /ibu/*", () => {
     expect(requested).toEqual(["https://biathlonresults.com/modules/sportapi/api/Results?RaceId=BT2627SWRLCP01SMIN"]);
   });
 
+  it("serves the athlete search for an hour", async () => {
+    const requested = stubIBU();
+
+    for (const _ of [1, 2]) {
+      const response = await get("/ibu/Athletes?FamilyName=simon");
+      expect(response.headers.get("cache-control")).toBe("public, max-age=3600");
+      await response.json();
+    }
+
+    expect(requested).toEqual(["https://biathlonresults.com/modules/sportapi/api/Athletes?FamilyName=simon"]);
+  });
+
   it("passes the IBU API's errors on without caching them", async () => {
     const requested = stubIBU(503);
 
@@ -54,7 +66,7 @@ describe("GET /ibu/*", () => {
   it("answers 404 for an endpoint the app doesn't call, without asking the IBU API", async () => {
     const requested = stubIBU();
 
-    const response = await get("/ibu/Athletes?Name=x");
+    const response = await get("/ibu/MedalResults?SeasonId=2627");
 
     expect(response.status).toBe(404);
     await response.text();

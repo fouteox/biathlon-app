@@ -1102,6 +1102,38 @@
         }
       }
     },
+    "Search": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Suchen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher"
+          }
+        }
+      }
+    },
+    "Search for a biathlete": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Biathleten suchen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rechercher un biathlète"
+          }
+        }
+      }
+    },
     "Season": {
       "localizations": {
         "de": {
@@ -1476,6 +1508,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Impossible de lancer l'activité en direct"
+          }
+        }
+      }
+    },
+    "Type the start of a first or last name.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib den Anfang eines Vor- oder Nachnamens ein."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saisissez le début d'un prénom ou d'un nom."
           }
         }
       }

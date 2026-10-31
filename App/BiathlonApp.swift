@@ -59,6 +59,9 @@ struct RootView: View {
             Tab("Favorites", systemImage: "star") {
                 NavigationStack { FavoritesView().navigationDestinations() }
             }
+            Tab(role: .search) {
+                NavigationStack { SearchView().navigationDestinations() }
+            }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         // Here rather than in Home, so the system can open it whichever tab is selected.
