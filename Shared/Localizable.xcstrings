@@ -1135,22 +1135,6 @@
         }
       }
     },
-    "Points": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Punkte"
-          }
-        },
-        "fr": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Points"
-          }
-        }
-      }
-    },
     "Privacy Policy": {
       "localizations": {
         "de": {
@@ -1356,6 +1340,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Saison"
+          }
+        }
+      }
+    },
+    "Season %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saison %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saison %@"
           }
         }
       }
@@ -1916,18 +1916,18 @@
         }
       }
     },
-    "World Cup standings": {
+    "World Cup, World Championships and Olympic races.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Weltcupwertung"
+            "value": "Weltcup, Weltmeisterschaften und Olympische Spiele."
           }
         },
         "fr": {
           "stringUnit": {
             "state": "translated",
-            "value": "Classement de la Coupe du monde"
+            "value": "Coupe du monde, championnats du monde et Jeux olympiques."
           }
         }
       }

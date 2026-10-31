@@ -38,6 +38,8 @@ struct NationView: View {
             Picker("Category", selection: $category) {
                 ForEach(RaceCategory.withStandings) { Text($0.title).tag($0) }
             }
+            // A text item and a symbol item in groups of their own.
+            ToolbarSpacer(.fixed)
             FavoriteButton(kind: .nation, key: nation, name: Nation.localizedName(nation), nation: nation)
         }
         // As on the standings, only a new category shows the loading state.
