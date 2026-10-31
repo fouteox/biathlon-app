@@ -17,12 +17,27 @@ final class HomeUITests: XCTestCase {
                 .waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 
-    /// The latest result says which race it was and when, above its podium.
-    @MainActor func testLatestResultSaysWhenItsRaceStarted() {
+    /// The anchor comes first under the event: the next race, larger, with how far away it is.
+    @MainActor func testNextRaceIsTheAnchorUnderTheEvent() {
         let app = XCUIApplication.launchInEnglish()
-        // The race reads as one element: its name, its start date with the year, and its state.
-        let race = app.cells.descendants(matching: .any).matching(
-            NSPredicate(format: "label CONTAINS %@ AND label MATCHES %@", "Finished", ".*\\b(19|20)[0-9]{2}\\b.*"))
-        XCTAssertTrue(race.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        let event = app.cells.containing(.button, identifier: nil).firstMatch
+        XCTAssertTrue(event.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        // On the sample data no race is live, so the next race is the row right under the event:
+        // one element, dated with the year, and not over. A cell's label is on its link, not on it.
+        let anchor = app.cells.containing(.button, identifier: nil).element(boundBy: 1)
+        XCTAssertTrue(anchor.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        let label = anchor.buttons.firstMatch.label
+        XCTAssertTrue(label.range(of: #"\b(19|20)[0-9]{2}\b"#, options: .regularExpression) != nil, label)
+        XCTAssertFalse(label.contains("Finished"), label)
+    }
+
+    /// The latest result names its race in its header and says when it started in its footer, under the podium.
+    @MainActor func testLatestResultSaysWhichRaceAndWhenItStarted() {
+        let app = XCUIApplication.launchInEnglish()
+        let header = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Latest result ·")).firstMatch
+        XCTAssertTrue(header.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        // The footer: the start date with the year and, between two events, the place.
+        let footer = app.staticTexts.matching(NSPredicate(format: "label MATCHES %@", ".*\\b(19|20)[0-9]{2}\\b.*"))
+        XCTAssertTrue(footer.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 }
