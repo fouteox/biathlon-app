@@ -11,6 +11,8 @@ struct RaceView: View {
     @Environment(LiveActivities.self) private var liveActivities
     @State private var loader = Loader<RaceResults>()
     @State private var tvGuide = Loader<TVGuide>()
+    /// When the results last loaded, which the list says while the race is live.
+    @State private var updatedAt: Date?
     @State private var liveActivityFailed = false
     @State private var liveActivityFailure = ""
     @State private var calendarEntry: RaceCalendarEntry?
@@ -25,30 +27,28 @@ struct RaceView: View {
         LoadableView(state: loader.state, retry: load) { results in
             let competition = results.competition ?? race
             List {
-                // The title already names the race.
+                // The title already names the race: where and when it is held, in one row, with
+                // its state once it is no longer upcoming.
                 Section {
-                    if let event = results.event {
-                        EventPlace(event: event)
-                    }
                     LabeledContent {
                         competition.state.badge
                     } label: {
-                        RaceStart(race: competition)
+                        VStack(alignment: .leading, spacing: 2) {
+                            if let event = results.event {
+                                EventPlace(event: event)
+                            }
+                            RaceStart(race: competition)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .accessibilityElement(children: .combine)
                 }
                 // Only while it can still be watched live.
                 if competition.state.canBeFollowedLive, let listings = tvListings(of: competition) {
                     TVCoverageSection(listings: listings)
                 }
                 if !results.rows.isEmpty {
-                    // Above the results, which can run to a hundred rows.
-                    if results.isResult, competition.hasAnalysisRankings {
-                        Section {
-                            NavigationLink(value: Route.analysis(competition)) {
-                                Label("Course, range and shooting times", systemImage: "stopwatch")
-                            }
-                        }
-                    }
                     Section {
                         ForEach(results.standings) { row in
                             if competition.isRelay {
@@ -63,8 +63,19 @@ struct RaceView: View {
                                 ResultLink(row: row, highlighted: isFavorite(row, in: results))
                             }
                         }
+                        // After the results, which it goes into once they are read.
+                        if results.isResult, competition.hasAnalysisRankings {
+                            NavigationLink(value: Route.analysis(competition)) {
+                                Label("Course, range and shooting times", systemImage: "stopwatch")
+                            }
+                        }
                     } header: {
-                        Self.listTitle(of: results)
+                        Self.listTitle(of: results, live: isLive)
+                    } footer: {
+                        // The list changes under the reader while the race is live: when it last did.
+                        if isLive, let updatedAt {
+                            Text("Updated at \(updatedAt, format: .dateTime.hour().minute())")
+                        }
                     }
                 } else {
                     // In the list, below the sections above it, rather than over them.
@@ -97,6 +108,10 @@ struct RaceView: View {
             }
             // A followed race keeps its toggle to stop following.
             if liveActivities.isAvailable, canBeFollowed || liveActivities.followedRaceIDs.contains(race.id) {
+                // A state, apart from the actions before it.
+                if podium != nil || latest.state == .scheduled {
+                    ToolbarSpacer(.fixed, placement: .topBarTrailing)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Toggle("Live Activity", systemImage: "dot.radiowaves.left.and.right", isOn: following)
                 }
@@ -124,15 +139,19 @@ struct RaceView: View {
     }
 
     /// Only what the response says the rows are: before the start list is out, the API can
-    /// return provisional rows that are neither.
-    private static func listTitle(of results: RaceResults) -> Text? {
-        if results.isResult {
-            Text("Results")
-        } else if results.isStartList {
-            Text("Start list")
-        } else {
-            nil
-        }
+    /// return provisional rows that are neither. Live, the title says so.
+    private static func listTitle(of results: RaceResults, live: Bool) -> Text? {
+        let title: Text? =
+            if results.isResult {
+                Text("Results")
+            } else if results.isStartList {
+                Text("Start list")
+            } else {
+                nil
+            }
+        guard live else { return title }
+        guard let title else { return Text("Live") }
+        return Text("\(title) · \(Text("Live"))")
     }
 
     /// Nothing until the guide loads, or without a server, the guide then never loading.
@@ -185,7 +204,9 @@ struct RaceView: View {
     }
 
     private func load() async {
-        await loader.load { try await ibu.results(raceID: race.id) }
+        if await loader.load({ try await ibu.results(raceID: race.id) }) {
+            updatedAt = .now
+        }
     }
 }
 

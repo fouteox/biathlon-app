@@ -14,8 +14,17 @@ struct RaceAnalysisView: View {
     var body: some View {
         LoadableView(state: loader.state, retry: load) { ranking in
             let favoriteSet = FavoriteSet(favorites)
-            List(ranking.rows) { row in
-                ResultLink(row: row, highlighted: favoriteSet.contains(row))
+            List {
+                // The ranking shown, named in the list itself and not only in the toolbar's pickers.
+                Section {
+                    ForEach(ranking.rows) { row in
+                        ResultLink(row: row, highlighted: favoriteSet.contains(row))
+                    }
+                } header: {
+                    Text("\(Text(analysis.measure.title)) · \(Text(segmentTitle))")
+                } footer: {
+                    Text(analysis.measure.explanation)
+                }
             }
             .refreshable { await load() }
         }
@@ -56,6 +65,10 @@ struct RaceAnalysisView: View {
         }
     }
 
+    private var segmentTitle: LocalizedStringResource {
+        analysis.segment.map { Self.title(of: $0, in: analysis.measure) } ?? "Whole race"
+    }
+
     private static func title(of segment: Int, in measure: RaceAnalysis.Measure) -> LocalizedStringResource {
         switch measure {
         case .course: "Lap \(segment)"
@@ -75,6 +88,15 @@ extension RaceAnalysis.Measure {
         case .range: LocalizedStringResource("Range", comment: "Analysis ranking of the times on the shooting range.")
         case .shooting:
             LocalizedStringResource("Shooting", comment: "Analysis ranking of the times on the shooting mat.")
+        }
+    }
+
+    /// What the measure counts, under its ranking.
+    var explanation: LocalizedStringResource {
+        switch self {
+        case .course: "Skiing time, without the time on the range."
+        case .range: "Time on the range, from entering it to leaving it, shooting included."
+        case .shooting: "Time on the shooting mat, part of the time on the range."
         }
     }
 }
