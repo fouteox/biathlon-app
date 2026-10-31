@@ -1441,6 +1441,22 @@
         }
       }
     },
+    "Skiing time, without the time on the range.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufzeit, ohne die Zeit am Schießstand."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temps de ski, hors temps au pas de tir."
+          }
+        }
+      }
+    },
     "Sprint": {
       "localizations": {
         "de": {
@@ -1723,6 +1739,38 @@
         }
       }
     },
+    "Time on the range, from entering it to leaving it, shooting included.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeit am Schießstand, vom Betreten bis zum Verlassen, Schießen eingeschlossen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temps au pas de tir, de l'entrée à la sortie, tir compris."
+          }
+        }
+      }
+    },
+    "Time on the shooting mat, part of the time on the range.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeit auf der Schießmatte, Teil der Zeit am Schießstand."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temps sur le tapis de tir, compris dans le temps au pas de tir."
+          }
+        }
+      }
+    },
     "Try again": {
       "localizations": {
         "de": {
@@ -1832,6 +1880,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "À venir"
+          }
+        }
+      }
+    },
+    "Updated at %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisiert um %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mis à jour à %@"
           }
         }
       }

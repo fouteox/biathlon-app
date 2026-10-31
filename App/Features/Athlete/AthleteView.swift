@@ -151,11 +151,11 @@ struct AthleteView: View {
     }()
 
     private func load() async {
-        async let bioLoad: Void = bio.load { try await ibu.athlete(id: athleteID) }
-        async let historyLoad: Void = history.load {
+        async let bioLoad = bio.load { try await ibu.athlete(id: athleteID) }
+        async let historyLoad = history.load {
             AthleteHistory(results: try await ibu.athleteResults(id: athleteID), now: .now)
         }
-        async let wikipediaLoad: Void = wikipedia.load { try await wikidata.wikipediaArticles(ofAthlete: athleteID) }
+        async let wikipediaLoad = wikipedia.load { try await wikidata.wikipediaArticles(ofAthlete: athleteID) }
         _ = await (bioLoad, historyLoad, wikipediaLoad)
     }
 

@@ -26,17 +26,21 @@ final class Loader<Value> {
         state = .loading
     }
 
-    func load(_ fetch: () async throws -> Value) async {
+    /// Whether the value shown is the one just fetched.
+    @discardableResult
+    func load(_ fetch: () async throws -> Value) async -> Bool {
         do {
             let value = try await fetch()
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return false }
             state = .loaded(value)
+            return true
         } catch {
             // Cancellation surfaces as `CancellationError` or `URLError(.cancelled)`;
             // `Task.isCancelled` covers both.
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled else { return false }
             Logger.data.error("Load failed: \(String(describing: error), privacy: .public)")
             if state.value == nil { state = .failed(error) }
+            return false
         }
     }
 }
