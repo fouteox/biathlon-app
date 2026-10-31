@@ -41,16 +41,26 @@ struct RaceView: View {
                     TVCoverageSection(listings: listings)
                 }
                 if !results.rows.isEmpty {
+                    // Above the results, which can run to a hundred rows.
+                    if results.isResult, competition.hasAnalysisRankings {
+                        Section {
+                            NavigationLink(value: Route.analysis(competition)) {
+                                Label("Course, range and shooting times", systemImage: "stopwatch")
+                            }
+                        }
+                    }
                     Section {
                         ForEach(results.standings) { row in
                             if competition.isRelay {
                                 DisclosureGroup {
-                                    ForEach(results.legs(of: row)) { leg in athleteLink(leg, in: results) }
+                                    ForEach(results.legs(of: row)) { leg in
+                                        ResultLink(row: leg, highlighted: isFavorite(leg, in: results))
+                                    }
                                 } label: {
                                     ResultLine(row: row, highlighted: isFavorite(row, in: results))
                                 }
                             } else {
-                                athleteLink(row, in: results)
+                                ResultLink(row: row, highlighted: isFavorite(row, in: results))
                             }
                         }
                     } header: {
@@ -99,17 +109,6 @@ struct RaceView: View {
             await tvGuide.load { try await server.tvGuide() }
         }
         .refreshingWhileLive(isLive, action: load)
-    }
-
-    @ViewBuilder
-    private func athleteLink(_ row: ResultRow, in results: RaceResults) -> some View {
-        if let id = row.athleteID {
-            NavigationLink(value: Route.athlete(id: id, name: row.name)) {
-                ResultLine(row: row, highlighted: isFavorite(row, in: results))
-            }
-        } else {
-            ResultLine(row: row, highlighted: isFavorite(row, in: results))
-        }
     }
 
     /// Only what the response says the rows are: before the start list is out, the API can
@@ -175,6 +174,22 @@ struct RaceView: View {
 
     private func load() async {
         await loader.load { try await ibu.results(raceID: race.id) }
+    }
+}
+
+/// A result row leading to its athlete, when it has one.
+struct ResultLink: View {
+    let row: ResultRow
+    let highlighted: Bool
+
+    var body: some View {
+        if let id = row.athleteID {
+            NavigationLink(value: Route.athlete(id: id, name: row.name)) {
+                ResultLine(row: row, highlighted: highlighted)
+            }
+        } else {
+            ResultLine(row: row, highlighted: highlighted)
+        }
     }
 }
 

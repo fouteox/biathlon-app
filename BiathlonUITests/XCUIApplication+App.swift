@@ -20,4 +20,10 @@ extension XCUIApplication {
         XCTAssertTrue(tab.waitForExistence(timeout: Self.dataTimeout))
         tab.tap()
     }
+
+    /// A pop-up button of the toolbar, found by its identifier once it shows `value`.
+    @MainActor func toolbarPicker(_ identifier: String, shows value: String) -> XCUIElement {
+        navigationBars.buttons.matching(identifier: identifier)
+            .matching(NSPredicate(format: "label CONTAINS %@", value)).firstMatch
+    }
 }
