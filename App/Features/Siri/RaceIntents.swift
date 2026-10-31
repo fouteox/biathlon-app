@@ -9,7 +9,7 @@ struct NextRaceIntent: AppIntent {
 
     @Dependency private var ibu: IBUClient
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
+    @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
         let feed = try await ibu.featuredRaces(now: .now)
         return .result(dialog: IntentDialog(SiriAnswer.nextRace(in: feed)))
     }
@@ -22,7 +22,7 @@ struct LatestResultIntent: AppIntent {
 
     @Dependency private var ibu: IBUClient
 
-    func perform() async throws -> some IntentResult & ProvidesDialog {
+    @MainActor func perform() async throws -> some IntentResult & ProvidesDialog {
         let feed = try await ibu.homeFeed(now: .now)
         return .result(dialog: IntentDialog(SiriAnswer.latestResult(in: feed)))
     }
