@@ -85,6 +85,7 @@ struct RaceView: View {
             if let podium {
                 ToolbarItem(placement: .topBarTrailing) {
                     ShareLink(item: String(localized: podium))
+                        .accessibilityIdentifier("share")
                 }
             }
             if latest.state == .scheduled {

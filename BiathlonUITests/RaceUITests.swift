@@ -9,6 +9,6 @@ final class RaceUITests: XCTestCase {
         allResults.tap()
 
         // Its sentence is BiathlonTests' (RaceSummary); the sheet is the system's.
-        XCTAssertTrue(app.navigationBars.buttons["Share"].waitForExistence(timeout: XCUIApplication.dataTimeout))
+        XCTAssertTrue(app.buttons["share"].waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 }
