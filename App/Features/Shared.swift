@@ -200,12 +200,14 @@ private struct LoadingPlaceholder: View {
 
 struct RaceRow: View {
     let race: Competition
+    /// How much of the start to say: all of it, or the time alone under a header that gives the day.
+    var start: RaceStart.Detail = .full
 
     var body: some View {
         RowStack { _ in
             VStack(alignment: .leading, spacing: 2) {
                 Text(race.title).font(.headline)
-                RaceStart(race: race)
+                RaceStart(race: race, detail: start)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
@@ -220,11 +222,22 @@ struct RaceRow: View {
 /// When a race starts, as every race screen writes it.
 struct RaceStart: View {
     let race: Competition
+    var detail: Detail = .full
 
-    /// With the year, since the calendar goes back to 1957-58.
+    enum Detail {
+        /// Day, date and time, with the year, since the calendar goes back to 1957-58.
+        case full
+        /// The time alone, where a header already gives the day.
+        case timeOnly
+    }
+
     static let format = Date.FormatStyle.dateTime.weekday(.wide).day().month().year().hour().minute()
+    static let timeFormat = Date.FormatStyle.dateTime.hour().minute()
 
     var body: some View {
-        Text(race.startTime, format: Self.format)
+        switch detail {
+        case .full: Text(race.startTime, format: Self.format)
+        case .timeOnly: Text(race.startTime, format: Self.timeFormat)
+        }
     }
 }

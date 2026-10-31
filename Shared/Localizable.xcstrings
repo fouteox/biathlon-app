@@ -1787,6 +1787,23 @@
         }
       }
     },
+    "Underway": {
+      "comment": "Badge on an event of the calendar whose days include today.",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En cours"
+          }
+        }
+      }
+    },
     "Up": {
       "localizations": {
         "de": {
