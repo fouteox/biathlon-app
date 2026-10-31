@@ -21,10 +21,11 @@ struct AthleteSearchTests {
             ])
     }
 
-    @Test func severalWordsAreAFamilyNameOrBothNamesSplitAnywhereInEitherOrder() {
+    @Test func severalWordsAreEitherNameOrBothNamesSplitAnywhereInEitherOrder() {
         #expect(
             AthleteSearch.queries(for: "Quentin Fillon Maillet") == [
                 .init(familyName: "quentin fillon maillet"),
+                .init(givenName: "quentin fillon maillet"),
                 .init(familyName: "fillon maillet", givenName: "quentin"),
                 .init(familyName: "quentin", givenName: "fillon maillet"),
                 .init(familyName: "maillet", givenName: "quentin fillon"),
@@ -56,15 +57,21 @@ struct AthleteSearchTests {
         #expect(found.first?.nation == "FRA")
     }
 
-    @Test func keepsAnAthleteWhoIsAlsoAnOfficial() throws {
-        let match: AthleteMatch = try decode(Self.person("BTLAT22004199701", "SABULE", "Annija", "Athlete, Official"))
-        #expect(match.isAthlete)
+    /// Active, former and deceased athletes, even when also officials; officials alone left out.
+    @Test(arguments: [
+        ("Athlete", true), ("Not active", true), ("Deceased", true), ("Athlete, Official", true),
+        ("Official", false),
+    ])
+    func keepsAthletesOnly(functions: String, isAthlete: Bool) throws {
+        let match: AthleteMatch = try decode(Self.person("BTNOR11807199801", "BAKKEN", "Sivert Guttorm", functions))
+        #expect(match.isAthlete == isAthlete)
     }
 
     @Test func findsAnAthleteByBothNames() async throws {
         let julia = Self.person("BTFRA20910199601", "SIMON", "Julia")
         let client = stubClient([
             "Athletes?FamilyName=julia%20simon": Self.answer(),
+            "Athletes?GivenName=julia%20simon": Self.answer(),
             "Athletes?FamilyName=simon&GivenName=julia": Self.answer(julia),
             "Athletes?FamilyName=julia&GivenName=simon": Self.answer(),
         ])

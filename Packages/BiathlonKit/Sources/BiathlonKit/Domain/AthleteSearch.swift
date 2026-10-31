@@ -7,7 +7,8 @@ public struct AthleteMatch: Decodable, Identifiable, Hashable, Sendable {
     public let familyName: String
     public let givenName: String
     public let nation: String?
-    /// "Athlete", "Not active" for a former athlete, "Official", or several ("Athlete, Official").
+    /// "Athlete", "Not active" for a former athlete, "Deceased", "Official", or several
+    /// ("Athlete, Official").
     let functions: String?
 
     enum CodingKeys: String, CodingKey {
@@ -22,7 +23,12 @@ public struct AthleteMatch: Decodable, Identifiable, Hashable, Sendable {
     public var name: String { "\(givenName) \(familyName)" }
 
     /// The search also finds the IBU's officials, who have no results.
-    var isAthlete: Bool { functions?.contains("Athlete") == true || functions == "Not active" }
+    var isAthlete: Bool {
+        let roles = (functions ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        return roles.contains { Self.athleteRoles.contains($0) }
+    }
+
+    private static let athleteRoles: Set = ["Athlete", "Not active", "Deceased"]
 }
 
 /// What the app sends to the IBU's search for the text someone types.
@@ -38,19 +44,20 @@ public enum AthleteSearch {
         }
     }
 
-    /// One word may start either name. Several may be a family name of several words
-    /// (`fillon maillet`), or given names and a family name, each of one word or more, in either
+    /// One word may start either name. Several may be either name alone (`fillon maillet`,
+    /// `johannes thingnes`), or given names and a family name, each of one word or more, in either
     /// order (`quentin fillon maillet`, `simon julia`): every split is searched. Lowercased, so the
     /// server's cache serves every spelling.
     static func queries(for text: String) -> [Query] {
         let words = text.lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
-        guard let first = words.first else { return [] }
-        guard words.count > 1 else { return [Query(familyName: first), Query(givenName: first)] }
+        guard !words.isEmpty else { return [] }
+        let whole = words.joined(separator: " ")
+        let either = [Query(familyName: whole), Query(givenName: whole)]
         let splits = (1..<words.count).flatMap { index in
             let (start, end) = (words[..<index].joined(separator: " "), words[index...].joined(separator: " "))
             return [Query(familyName: end, givenName: start), Query(familyName: start, givenName: end)]
         }
-        return [Query(familyName: words.joined(separator: " "))] + splits
+        return either + splits
     }
 
     /// The athletes of every answer, in the order of the queries and of the IBU's answers, once each.
