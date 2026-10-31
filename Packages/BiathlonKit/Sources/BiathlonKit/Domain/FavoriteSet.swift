@@ -15,6 +15,21 @@ public struct FavoriteSet: Equatable, Sendable {
         if let nation = row.nation, nations.contains(nation) { return true }
         return false
     }
+
+    /// A standings row is a favorite as a result row is: the athlete, or anyone of a favorite
+    /// nation; a nation's own row through its code.
+    public func contains(_ row: CupRow) -> Bool {
+        if let id = row.athleteID, athleteIDs.contains(id) { return true }
+        if let nation = row.nation ?? (row.isNation ? row.name : nil), nations.contains(nation) { return true }
+        return false
+    }
+}
+
+extension CupStandings {
+    /// The favorites' rows, in the standings' order, to show at the top with their rank.
+    public func favorites(in favorites: FavoriteSet) -> [CupRow] {
+        rows.filter(favorites.contains)
+    }
 }
 
 extension RaceResults {

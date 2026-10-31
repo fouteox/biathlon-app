@@ -171,16 +171,7 @@ struct ResultLine: View {
                 NationMark(code: row.nation)
             }
             VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text(row.shortName ?? row.name)
-                        .fontWeight(highlighted ? .bold : .regular)
-                    if highlighted {
-                        Image(systemName: "star.fill")
-                            .font(.caption)
-                            .foregroundStyle(.tint)
-                            .accessibilityLabel("Favorite")
-                    }
-                }
+                RowName(name: row.shortName ?? row.name, highlighted: highlighted)
                 if let shootings = row.shootings {
                     Text(shootings)
                         .font(.caption.monospacedDigit())

@@ -1,4 +1,5 @@
 import BiathlonKit
+import SwiftData
 import SwiftUI
 
 struct StandingsView: View {
@@ -8,6 +9,7 @@ struct StandingsView: View {
     /// The season picked in the toolbar; until then, the one the standings open on.
     @State private var pickedSeason: SeasonID?
     @State private var loader = Loader<SeasonStandings>()
+    @Query private var favorites: [Favorite]
 
     /// Every season with standings, back to the first World Cup.
     private let seasons = SeasonID.since(.firstWorldCup, now: .now)
@@ -15,11 +17,24 @@ struct StandingsView: View {
     var body: some View {
         LoadableView(state: loader.state, retry: load) { loaded in
             let standings = loaded.standings
+            let favoriteSet = FavoriteSet(favorites)
+            let mine = standings.favorites(in: favoriteSet)
             List {
+                // The reader's own first, with their rank; they keep their place below.
+                if !mine.isEmpty {
+                    Section("My favorites") {
+                        ForEach(mine) { row in
+                            StandingRow(row: row, category: category, highlighted: true)
+                        }
+                    }
+                }
                 Section {
                     ForEach(standings.rows) { row in
-                        StandingRow(row: row, category: category)
+                        StandingRow(row: row, category: category, highlighted: favoriteSet.contains(row))
                     }
+                } header: {
+                    // Names the standings shown, so the list reads on its own.
+                    Text("\(category.title) · \(Text(discipline.label))")
                 } footer: {
                     if loaded.isFallback {
                         Text(
@@ -52,16 +67,25 @@ struct StandingsView: View {
         // rather than a bar pinned under the title: a large title under that bar's scroll edge effect
         // showed blurred and flickered (FB21613303).
         .toolbar {
-            Picker("Category", selection: $category) {
-                ForEach(RaceCategory.withStandings) { Text($0.title).tag($0) }
+            ToolbarItem {
+                Picker("Category", selection: $category) {
+                    ForEach(RaceCategory.withStandings) { Text($0.title).tag($0) }
+                }
+                .accessibilityIdentifier("category")
             }
-            .accessibilityIdentifier("category")
-            Picker("Discipline", selection: $discipline) {
-                ForEach(StandingsDiscipline.allCases) { Text($0.label).tag($0) }
+            // Fixed space keeps the three text items from running together (HIG Toolbars).
+            ToolbarSpacer(.fixed)
+            ToolbarItem {
+                Picker("Discipline", selection: $discipline) {
+                    ForEach(StandingsDiscipline.allCases) { Text($0.label).tag($0) }
+                }
+                .accessibilityIdentifier("discipline")
             }
-            .accessibilityIdentifier("discipline")
-            SeasonPicker(seasons: seasons, selection: Binding(picked: $pickedSeason, opening: openingSeason))
-                .accessibilityIdentifier("season")
+            ToolbarSpacer(.fixed)
+            ToolbarItem {
+                SeasonPicker(seasons: seasons, selection: Binding(picked: $pickedSeason, opening: openingSeason))
+                    .accessibilityIdentifier("season")
+            }
         }
         // The task also runs again each time the screen reappears (back from an
         // athlete): it refreshes the list in place, so the scroll position stays.
@@ -112,6 +136,7 @@ struct StandingRow: View {
     let row: CupRow
     /// The standings' category, which a nation's screen opens on.
     let category: RaceCategory
+    var highlighted = false
     @ScaledMetric(relativeTo: .headline) private var rankWidth = 36.0
 
     var body: some View {
@@ -123,7 +148,9 @@ struct StandingRow: View {
                     NationMark(code: row.isNation ? row.nation ?? row.name : row.nation)
                 }
                 HStack(spacing: 12) {
-                    Text(row.isNation ? Nation.localizedName(row.nation ?? row.name) : row.shortName ?? row.name)
+                    RowName(
+                        name: row.isNation ? Nation.localizedName(row.nation ?? row.name) : row.shortName ?? row.name,
+                        highlighted: highlighted)
                     if row.bibColors.contains("yellow") {
                         // The leader's bib is yellow: here the color is the information.
                         Image(systemName: "tshirt.fill")
