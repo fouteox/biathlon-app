@@ -11,12 +11,10 @@ public struct DatedGroup<Item: Identifiable & Sendable>: Identifiable, Sendable 
 
 extension Sequence where Element: Identifiable & Sendable {
     /// The items by the period their date falls in, periods and items in date order.
-    func grouped(by components: Set<Calendar.Component>, date: (Element) -> Date, calendar: Calendar)
-        -> [DatedGroup<Element>]
-    {
-        let periods = Dictionary(grouping: self) {
-            calendar.date(from: calendar.dateComponents(components, from: date($0)))!
-        }
+    func grouped(by period: Calendar.Component, date: (Element) -> Date, calendar: Calendar) -> [DatedGroup<Element>] {
+        // The period's own interval, rather than a date rebuilt from its components, which would
+        // lose the era of a calendar that counts years from one (Japanese, Buddhist).
+        let periods = Dictionary(grouping: self) { calendar.dateInterval(of: period, for: date($0))!.start }
         return periods.keys.sorted().map { start in
             DatedGroup(start: start, items: periods[start]!.sorted { date($0) < date($1) })
         }
@@ -26,14 +24,14 @@ extension Sequence where Element: Identifiable & Sendable {
 extension Sequence<BiathlonEvent> {
     /// The events by month of their first day, as the calendar lists a season.
     public func groupedByMonth(calendar: Calendar) -> [DatedGroup<BiathlonEvent>] {
-        grouped(by: [.year, .month], date: \.startDate, calendar: calendar)
+        grouped(by: .month, date: \.startDate, calendar: calendar)
     }
 }
 
 extension Sequence<Competition> {
     /// The races by day, as an event's schedule lists them: the day in the header, the time on the row.
     public func groupedByDay(calendar: Calendar) -> [DatedGroup<Competition>] {
-        grouped(by: [.year, .month, .day], date: \.startTime, calendar: calendar)
+        grouped(by: .day, date: \.startTime, calendar: calendar)
     }
 }
 

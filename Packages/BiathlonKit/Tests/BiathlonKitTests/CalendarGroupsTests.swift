@@ -45,6 +45,18 @@ struct CalendarGroupsTests {
         #expect(groups.map { $0.items.map(\.id) } == [["A"], ["B", "C"]])
     }
 
+    /// A calendar that counts years from one: the day keeps its era, so a race of Heisei 30
+    /// (2018) stays in 2018 rather than landing in Reiwa 30 (2048).
+    @Test func aDayKeepsItsEraInTheJapaneseCalendar() throws {
+        var japanese = Calendar(identifier: .japanese)
+        japanese.timeZone = .gmt
+        let race: Competition = try decode(race("A", start: "2018-02-07T13:15:00Z"))
+
+        let groups = [race].groupedByDay(calendar: japanese)
+
+        #expect(groups.map(\.start) == [try #require(ISO8601DateFormatter().date(from: "2018-02-07T00:00:00Z"))])
+    }
+
     @Test func anEventIsUnderwayFromItsFirstDayToTheEndOfItsLast() throws {
         let event = Self.events[1]  // E1: November 28 to December 6
         #expect(event.phase(at: date("2026-11-27T23:59:00Z"), calendar: .gmt) == .upcoming)

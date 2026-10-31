@@ -6,6 +6,9 @@ struct CalendarView: View {
     @Environment(\.calendar) private var calendar
     @State private var season = SeasonID.containing(.now)
     @State private var loader = Loader<[BiathlonEvent]>()
+    /// The season whose list was scrolled to the event to show, so that coming back from an
+    /// event leaves the list where it was.
+    @State private var scrolledSeason: SeasonID?
 
     /// Every season with races, back to the oldest.
     private let seasons = SeasonID.since(.firstWithRaces, now: .now)
@@ -34,8 +37,11 @@ struct CalendarView: View {
                         ContentUnavailableView("Calendar not published", systemImage: "calendar.badge.exclamationmark")
                     }
                 }
-                // The season opens on the event underway, or the next one, not on November.
+                // The season opens on the event underway, or the next one, not on November: once
+                // per season, as the list appears again on the way back from an event.
                 .onAppear {
+                    guard scrolledSeason != season else { return }
+                    scrolledSeason = season
                     if let event = events.eventToShow(at: .now, calendar: calendar) {
                         proxy.scrollTo(event.id, anchor: .top)
                     }
