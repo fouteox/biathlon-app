@@ -37,4 +37,14 @@ struct AppDelegateTests {
         let articles = try await AppDelegate.wikidata(sampleData: true).wikipediaArticles(ofAthlete: athlete)
         #expect(!articles.urls.isEmpty)
     }
+
+    /// With `--sample-live`, the fictional data has a race being run, for the live screens to be seen any day.
+    @Test func sampleDataCanHaveALiveRace() async throws {
+        #expect(AppDelegate.asksForLiveRace(arguments: ["Biathlon", "--sample-data", "--sample-live"]))
+        #expect(!AppDelegate.asksForLiveRace(arguments: ["Biathlon", "--sample-data"]))
+        let (live, _) = AppDelegate.clients(sampleData: true, liveRace: true)
+        #expect(try await live.homeFeed(now: .now).live != nil)
+        let (calm, _) = AppDelegate.clients(sampleData: true)
+        #expect(try await calm.homeFeed(now: .now).live == nil)
+    }
 }

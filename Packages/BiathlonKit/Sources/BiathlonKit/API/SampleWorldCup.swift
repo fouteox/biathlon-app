@@ -9,16 +9,35 @@
         /// A client answering from `SampleWorldCup` instead of the network, so that the UI tests depend
         /// on neither the network nor the IBU's calendar. The data is fictional: the IBU's terms forbid
         /// redistributing theirs.
-        public static func sample(now: Date) -> IBUClient {
-            let worldCup = SampleWorldCup(now: now)
+        public static func sample(now: Date, liveRace: Bool = false) -> IBUClient {
+            let worldCup = SampleWorldCup(now: now, liveRace: liveRace)
             return IBUClient(baseURL: ibuBaseURL) { request in try worldCup.respond(to: request) }
         }
     }
 
     /// A fictional World Cup, the same every season: three events of four races, and ten athletes per
     /// category, ranked in the same order everywhere. The races before `now` are over, with results.
+    /// With `liveRace`, the season's first race still to come (its last, once they are all over) is live
+    /// instead, started 20 minutes ago, with provisional results: what the screens show during a race,
+    /// on any day.
     struct SampleWorldCup: Sendable {
         let now: Date
+        /// The race that is live, if one is.
+        private let liveRaceID: String?
+
+        init(now: Date, liveRace: Bool = false) {
+            self.now = now
+            liveRaceID = liveRace ? Self.firstRaceToCome(after: now) : nil
+        }
+
+        /// The season's first race after `now`, or its last once they are all over: a race of an
+        /// event the home features either way.
+        private static func firstRaceToCome(after now: Date) -> String? {
+            let races = events(of: SeasonID.containing(now)).flatMap { event in
+                program.map { (id: event.id + $0.kind.rawValue, start: start(of: $0, in: event)) }
+            }
+            return (races.first { $0.start > now } ?? races.last)?.id
+        }
 
         func respond(to request: URLRequest) throws -> (Data, URLResponse) {
             guard let url = request.url else { throw URLError(.badURL) }
@@ -36,7 +55,7 @@
         /// The JSON object of an IBU API response, `nil` for what the API wouldn't find.
         private func response(path: String, query: [String: String]) -> Any? {
             switch path {
-            case "Events": query["SeasonId"].map { events(of: SeasonID(rawValue: $0)).map(\.json) }
+            case "Events": query["SeasonId"].map { Self.events(of: SeasonID(rawValue: $0)).map(\.json) }
             case "Competitions": query["EventId"].flatMap(event(id:)).map { races(of: $0).map(\.json) }
             case "Results": query["RaceId"].flatMap(race(id:)).map(results)
             case "AnalyticResults":
@@ -76,8 +95,11 @@
             let kind: RaceKind
             let start: Date
             let isOver: Bool
+            var isLive = false
 
             var id: String { event.id + kind.rawValue }
+            /// Results, final or provisional.
+            var hasResults: Bool { isOver || isLive }
             /// Two in a sprint, four in a pursuit.
             var shootings: Int { kind == .menSprint || kind == .womenSprint ? 2 : 4 }
             /// A kind starts with its category's `catId`.
@@ -86,7 +108,7 @@
             var json: [String: Any] {
                 [
                     "RaceId": id, "catId": category.rawValue, "ShortDescription": "\(kind)",
-                    "StartTime": start.formatted(.iso8601), "IsLive": false,
+                    "StartTime": start.formatted(.iso8601), "IsLive": isLive,
                     "StatusId": isOver ? 11 : 1, "ScheduleStatus": isOver ? "FINISHED" : "SCHEDULED",
                     "NrShootings": shootings, "HasAnalysis": isOver,
                 ]
@@ -103,7 +125,7 @@
             (.menSprint, 2, 3), (.womenSprint, 3, 3), (.menPursuit, 4, 0), (.womenPursuit, 4, 2),
         ]
 
-        private func events(of season: SeasonID) -> [Event] {
+        private static func events(of season: SeasonID) -> [Event] {
             Self.calendar.enumerated().map { index, stage in
                 Event(
                     season: season, number: index + 1, place: stage.place, nation: stage.nation,
@@ -111,16 +133,23 @@
             }
         }
 
+        private static func start(of race: (kind: RaceKind, days: Int, hours: Int), in event: Event) -> Date {
+            event.start.addingTimeInterval(TimeInterval(race.days * 86_400 + race.hours * 3_600))
+        }
+
         private func races(of event: Event) -> [Race] {
             Self.program.map { race in
-                let start = event.start.addingTimeInterval(TimeInterval(race.days * 86_400 + race.hours * 3_600))
-                return Race(event: event, kind: race.kind, start: start, isOver: start < now)
+                let start = Self.start(of: race, in: event)
+                guard event.id + race.kind.rawValue == liveRaceID else {
+                    return Race(event: event, kind: race.kind, start: start, isOver: start < now)
+                }
+                return Race(event: event, kind: race.kind, start: now - 20 * 60, isOver: false, isLive: true)
             }
         }
 
         private func event(id: String) -> Event? {
             guard id.count == 14 else { return nil }
-            return events(of: SeasonID(rawValue: String(id.dropFirst(2).prefix(4)))).first { $0.id == id }
+            return Self.events(of: SeasonID(rawValue: String(id.dropFirst(2).prefix(4)))).first { $0.id == id }
         }
 
         private func race(id: String) -> Race? {
@@ -129,7 +158,8 @@
 
         private func results(of race: Race) -> [String: Any] {
             response(
-                of: race, rows: race.isOver ? Self.ranked(Self.athletes(of: race.category), in: race, minutes: 24) : [])
+                of: race,
+                rows: race.hasResults ? Self.ranked(Self.athletes(of: race.category), in: race, minutes: 24) : [])
         }
 
         /// A ranking of the race's analysis, the athletes in another order for each measure; none
@@ -153,7 +183,8 @@
 
         private func response(of race: Race, rows: [[String: Any]]) -> [String: Any] {
             [
-                "IsResult": race.isOver, "IsStartList": false, "Competition": race.json, "SportEvt": race.event.json,
+                "IsResult": race.hasResults, "IsStartList": false, "Competition": race.json,
+                "SportEvt": race.event.json,
                 "Results": rows,
             ]
         }
@@ -248,7 +279,7 @@
             let rank = Self.athletes(of: athlete.category).firstIndex { $0.id == athlete.id }.map { $0 + 1 } ?? 0
             let current = SeasonID.containing(now)
             return [current, current.previous].flatMap { season in
-                events(of: season).flatMap(races(of:)).filter { $0.isOver && $0.category == athlete.category }
+                Self.events(of: season).flatMap(races(of:)).filter { $0.isOver && $0.category == athlete.category }
             }
             .sorted { $0.start > $1.start }
             .map { race in

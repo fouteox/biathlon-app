@@ -14,6 +14,7 @@ struct BiathlonApp: App {
                 .environment(appDelegate.settingsPresentation)
                 .environment(appDelegate.liveActivities)
                 .environment(appDelegate.liveActivityStarts)
+                .environment(appDelegate.homeFeed)
                 .environment(\.ibu, appDelegate.client)
                 .environment(\.server, appDelegate.server)
                 .environment(\.wikidata, appDelegate.wikidata)
@@ -41,9 +42,12 @@ extension EnvironmentValues {
 struct RootView: View {
     @Environment(LiveActivityStarts.self) private var liveActivityStarts
     @Environment(SettingsPresentation.self) private var settingsPresentation
+    @Environment(HomeFeedStore.self) private var homeFeed
     @Environment(\.scenePhase) private var scenePhase
     @Query private var favorites: [Favorite]
     @State private var selectedTab = Screen.home
+    /// The live race opened from the accessory, over whichever tab is selected.
+    @State private var presentedRace: Competition?
     /// The Home tab's stack, which a link from the widget or the Live Activity opens a race on.
     @State private var homePath: [Route] = []
 
@@ -71,11 +75,33 @@ struct RootView: View {
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        // The race being run, reachable from every tab.
+        .tabViewBottomAccessory(isEnabled: homeFeed.live != nil) {
+            if let live = homeFeed.live {
+                LiveRaceAccessory(race: live.race, results: live.results) { presentedRace = live.race }
+            }
+        }
+        .sheet(item: $presentedRace) { race in
+            NavigationStack {
+                RaceView(race: race)
+                    .navigationDestinations()
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button(role: .close) { presentedRace = nil }
+                        }
+                    }
+            }
+        }
+        // The feed loads once for the app, and keeps refreshing while a race is live, whichever
+        // tab is open: the accessory and Home read the same one.
+        .task { await homeFeed.load() }
+        .refreshingWhileLive(homeFeed.live != nil, action: homeFeed.load)
         // From the widget or the Live Activity: the race, on the Home tab the app starts on.
         .onOpenURL { url in
             guard let link = DeepLink(url: url) else { return }
-            // Over the settings sheet, if it was left open, the race would not show.
+            // Over a sheet left open, the settings or a live race, the race would not show.
             settingsPresentation.isPresented = false
+            presentedRace = nil
             selectedTab = .home
             homePath = [link.route]
         }

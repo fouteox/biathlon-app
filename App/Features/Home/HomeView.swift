@@ -3,13 +3,12 @@ import SwiftData
 import SwiftUI
 
 struct HomeView: View {
-    @Environment(\.ibu) private var ibu
-    @State private var loader = Loader<HomeFeed>()
+    @Environment(HomeFeedStore.self) private var homeFeed
     @Query private var favorites: [Favorite]
     @Environment(SettingsPresentation.self) private var settingsPresentation
 
     var body: some View {
-        LoadableView(state: loader.state, retry: load) { feed in
+        LoadableView(state: homeFeed.state, retry: homeFeed.load) { feed in
             List {
                 // The anchor: the live race, otherwise the next one, under its event, the
                 // context of the races below, rather than a section of its own.
@@ -63,7 +62,7 @@ struct HomeView: View {
                     }
                 }
             }
-            .refreshable { await load() }
+            .refreshable { await homeFeed.load() }
             .overlay {
                 if feed.isEmpty {
                     ContentUnavailableView("No races", systemImage: "calendar")
@@ -80,12 +79,6 @@ struct HomeView: View {
                 }
             }
         }
-        .task { await load() }
-        .refreshingWhileLive(loader.state.value?.live != nil, action: load)
-    }
-
-    private func load() async {
-        await loader.load { try await ibu.homeFeed(now: .now) }
     }
 
     private var favoriteSet: FavoriteSet { FavoriteSet(favorites) }

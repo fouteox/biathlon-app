@@ -623,6 +623,23 @@
         }
       }
     },
+    "Leader %@": {
+      "comment": "Under the live race's name at the bottom of the screen: who leads it.",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Führend: %@"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "En tête : %@"
+          }
+        }
+      }
+    },
     "Live": {
       "localizations": {
         "de": {
