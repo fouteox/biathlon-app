@@ -18,4 +18,5 @@ extension Competition {
 
 extension RaceActivityAttributes {
     var title: String { RaceKind.title(ofRace: raceID, ibuName: name) }
+    var deepLink: DeepLink { .race(id: raceID, name: name) }
 }

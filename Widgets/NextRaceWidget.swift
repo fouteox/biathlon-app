@@ -98,6 +98,11 @@ struct NextRaceView: View {
     private static let startFormat = Date.FormatStyle.dateTime.weekday(.abbreviated).day().month().hour().minute()
 
     var body: some View {
+        // A tap opens the race itself (HIG Widgets: deep link to what the widget shows).
+        content.widgetURL(entry.race.map { DeepLink.race(id: $0.id, name: $0.ibuName).url })
+    }
+
+    @ViewBuilder private var content: some View {
         if let race = entry.race {
             let title = RaceKind.title(ofRace: race.id, ibuName: race.ibuName)
             switch family {

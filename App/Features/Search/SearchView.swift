@@ -1,9 +1,11 @@
 import BiathlonKit
+import SwiftData
 import SwiftUI
 
 /// Athletes, active or former, by the start of their names, from the IBU's own search.
 struct SearchView: View {
     @Environment(\.ibu) private var ibu
+    @Query(sort: \Favorite.addedAt) private var favorites: [Favorite]
     @State private var text = ""
     @State private var loader = Loader<[AthleteMatch]>()
     /// Bumped by "Try again": a retry is a search of its own, which a new query cancels.
@@ -37,6 +39,21 @@ struct SearchView: View {
         }
         .navigationTitle("Search")
         .searchable(text: $text, prompt: "Biathletes")
+        // Before anything is typed, the favorite athletes (HIG Searching: suggestions), who open
+        // their profile; while typing, the results take the whole screen.
+        .searchSuggestions {
+            if query.isEmpty {
+                ForEach(favorites.filter { $0.kind == .athlete }) { favorite in
+                    NavigationLink(value: Route.athlete(id: favorite.key, name: favorite.name)) {
+                        Label {
+                            Text(favorite.title)
+                        } icon: {
+                            NationMark(code: favorite.nation)
+                        }
+                    }
+                }
+            }
+        }
         .onChange(of: query) { loader.reset() }
         .task(id: Search(query: query, attempt: attempt)) {
             guard !query.isEmpty else { return }

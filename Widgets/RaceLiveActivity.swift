@@ -31,6 +31,7 @@ struct RaceLiveActivity: Widget {
                     LiveSymbol(phase: context.state.phase)
                 }
             }
+            .widgetURL(context.attributes.deepLink.url)
         }
         .supplementalActivityFamilies([.small])
     }
@@ -58,6 +59,8 @@ private struct RaceActivityView: View {
             }
         }
         .padding()
+        // A tap opens the race (HIG Live Activities).
+        .widgetURL(context.attributes.deepLink.url)
     }
 }
 

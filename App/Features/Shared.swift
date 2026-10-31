@@ -14,6 +14,15 @@ enum Route: Hashable {
     case nation(code: String, category: RaceCategory)
 }
 
+extension DeepLink {
+    /// Where the link lands: the race, named as the app names it.
+    var route: Route {
+        switch self {
+        case .race(let id, let name): .raceID(id, title: RaceKind.title(ofRace: id, ibuName: name))
+        }
+    }
+}
+
 extension View {
     func navigationDestinations() -> some View {
         navigationDestination(for: Route.self) { route in
