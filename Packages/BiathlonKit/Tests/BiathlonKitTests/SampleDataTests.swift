@@ -119,5 +119,18 @@
             let article = try #require(articles.article(preferring: [language]))
             #expect(article.host() == "\(language.prefix(2)).wikipedia.org")
         }
+
+        /// Every fictional athlete is in a headline, in the app's languages, without the network.
+        @Test(arguments: ["en-GB", "fr-FR", "de-DE"])
+        func athletesAreInTheNews(language: String) async throws {
+            let now = date("2026-12-03T12:00:00Z")
+            let headlines = try await NewsClient.sample(now: now).headlines(preferring: [language])
+            let standings = try await IBUClient.sample(now: now).worldCupStandings(
+                category: .women, discipline: .total, now: now)
+            for row in standings.standings.rows {
+                let familyName = try #require(row.familyName)
+                #expect(headlines.contains { $0.mentions(familyName: familyName) && $0.date != nil })
+            }
+        }
     }
 #endif

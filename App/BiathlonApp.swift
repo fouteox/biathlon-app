@@ -17,6 +17,7 @@ struct BiathlonApp: App {
                 .environment(\.ibu, appDelegate.client)
                 .environment(\.server, appDelegate.server)
                 .environment(\.wikidata, appDelegate.wikidata)
+                .environment(\.news, appDelegate.news)
                 // Cancelled and run again at each change of phase.
                 .task(id: scenePhase) {
                     guard scenePhase == .active else { return }
@@ -36,6 +37,8 @@ extension EnvironmentValues {
     @Entry var server: ServerClient? = nil
     /// Finds the athletes' Wikipedia articles.
     @Entry var wikidata = WikidataClient(userAgent: Bundle.main.wikimediaUserAgent)
+    /// Reads the outlets' headlines.
+    @Entry var news = NewsClient()
 }
 
 struct RootView: View {

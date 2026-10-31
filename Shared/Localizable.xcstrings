@@ -654,6 +654,22 @@
         }
       }
     },
+    "News": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachrichten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Actualités"
+          }
+        }
+      }
+    },
     "No athletes in the standings": {
       "localizations": {
         "de": {

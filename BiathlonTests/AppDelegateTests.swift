@@ -36,5 +36,6 @@ struct AppDelegateTests {
         let athlete = try #require(standings.standings.rows.first?.athleteID)
         let articles = try await AppDelegate.wikidata(sampleData: true).wikipediaArticles(ofAthlete: athlete)
         #expect(!articles.urls.isEmpty)
+        #expect(try await !AppDelegate.news(sampleData: true).headlines(preferring: ["en"]).isEmpty)
     }
 }

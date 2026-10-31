@@ -52,6 +52,8 @@ public struct CupRow: Decodable, Identifiable, Hashable, Sendable {
     public let athleteID: String?
     public let name: String
     public let shortName: String?
+    /// In capitals (`SIMON`), as the IBU writes it; `nil` for a nation.
+    public let familyName: String?
     public let nation: String?
     public let score: String?
     /// Change since the last race: negative = places gained.
@@ -63,6 +65,7 @@ public struct CupRow: Decodable, Identifiable, Hashable, Sendable {
         case athleteID = "IBUId"
         case name = "Name"
         case shortName = "ShortName"
+        case familyName = "FamilyName"
         case nation = "Nat"
         case score = "Score"
         case rankChange = "RnkDiff"
@@ -79,6 +82,7 @@ public struct CupRow: Decodable, Identifiable, Hashable, Sendable {
         rank = try c.decodeLooseString(forKey: .rank)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         shortName = try c.decodeIfPresent(String.self, forKey: .shortName)
+        familyName = try c.decodeIfPresent(String.self, forKey: .familyName)
         let nation = try c.decodeIfPresent(String.self, forKey: .nation)
         self.nation = nation
         // A nation's row carries its code as `IBUId`.

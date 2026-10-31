@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Fictional Nordic News</title>
+    <link>https://news.example.com</link>
+    <item>
+      <title>Biathlon : Ingrid Solberg s&#8217;impose à domicile</title>
+      <link>https://news.example.com/solberg-home-win/</link>
+      <pubDate>Wed, 28 Oct 2026 16:11:02 +0000</pubDate>
+      <category><![CDATA[Biathlon]]></category>
+      <category><![CDATA[Ingrid Solberg]]></category>
+      <description>Not shown by the app.</description>
+    </item>
+    <item>
+      <title><![CDATA[Hugo Martel & the relay: a summer in Prémanon]]></title>
+      <link>https://news.example.com/martel-relay/</link>
+      <pubDate>Tue, 27 Oct 2026 17:59:18 GMT</pubDate>
+      <category>Biathlon</category>
+    </item>
+    <item>
+      <title>Cross-country: the new season's calendar</title>
+      <link>https://news.example.com/xc-calendar/</link>
+      <pubDate>Mon, 05 Oct 2026 10:41:08 +0200</pubDate>
+      <category>Cross-Country</category>
+    </item>
+  </channel>
+</rss>
