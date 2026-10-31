@@ -82,6 +82,12 @@ struct RaceView: View {
         .navigationTitle(race.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if let podium {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareLink(item: String(localized: podium))
+                        .accessibilityIdentifier("share")
+                }
+            }
             if latest.state == .scheduled {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button("Add to Calendar", systemImage: "calendar.badge.plus") {
@@ -109,6 +115,12 @@ struct RaceView: View {
             await tvGuide.load { try await server.tvGuide() }
         }
         .refreshingWhileLive(isLive, action: load)
+    }
+
+    /// The podium in a sentence, to share once the results are in.
+    private var podium: LocalizedStringResource? {
+        guard let results = loader.state.value else { return nil }
+        return RaceSummary.podium(of: latest, at: results.event, results: results)
     }
 
     /// Only what the response says the rows are: before the start list is out, the API can
