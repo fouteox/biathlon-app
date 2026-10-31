@@ -166,6 +166,22 @@
         }
       }
     },
+    "Add to Calendar": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Kalender hinzufügen"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ajouter au calendrier"
+          }
+        }
+      }
+    },
     "Add to favorites": {
       "localizations": {
         "de": {

@@ -13,6 +13,7 @@ struct RaceView: View {
     @State private var tvGuide = Loader<TVGuide>()
     @State private var liveActivityFailed = false
     @State private var liveActivityFailure = ""
+    @State private var calendarEntry: RaceCalendarEntry?
     @Query private var favorites: [Favorite]
 
     /// The race as its results last gave it, or as the calendar did.
@@ -71,12 +72,22 @@ struct RaceView: View {
         .navigationTitle(race.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            if latest.state == .scheduled {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Add to Calendar", systemImage: "calendar.badge.plus") {
+                        calendarEntry = RaceCalendarEntry(race: latest, event: loader.state.value?.event)
+                    }
+                }
+            }
             // A followed race keeps its toggle to stop following.
             if liveActivities.isAvailable, canBeFollowed || liveActivities.followedRaceIDs.contains(race.id) {
                 ToolbarItem(placement: .topBarTrailing) {
                     Toggle("Live Activity", systemImage: "dot.radiowaves.left.and.right", isOn: following)
                 }
             }
+        }
+        .sheet(item: $calendarEntry) { entry in
+            RaceCalendarEditor(entry: entry).ignoresSafeArea()
         }
         .alert("Unable to start the Live Activity", isPresented: $liveActivityFailed) {
         } message: {
