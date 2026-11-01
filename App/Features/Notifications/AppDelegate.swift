@@ -17,9 +17,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     private let notificationCenter = UNUserNotificationCenter.current()
     let client: IBUClient
     let wikidata: WikidataClient
+    /// The home feed, shared by the Home screen and the live race accessory.
+    let homeFeed: HomeFeedStore
     /// A Debug build launched with `--sample-data`, as the UI tests launch it, runs on the fictional data of
     /// `IBUClient.sample`, without a server, and keeps its favorites in memory: nothing it shows depends
-    /// on the network or on an earlier launch.
+    /// on the network or on an earlier launch. With `--sample-live` as well, one of its races is being run,
+    /// to see the live screens on any day.
     let runsOnSampleData: Bool
 
     private var preferenceChanges: Task<Void, Never>?
@@ -29,9 +32,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     override init() {
         let runsOnSampleData = Self.asksForSampleData(arguments: ProcessInfo.processInfo.arguments)
         self.runsOnSampleData = runsOnSampleData
-        let (client, server) = Self.clients(sampleData: runsOnSampleData)
+        let (client, server) = Self.clients(
+            sampleData: runsOnSampleData,
+            liveRace: Self.asksForLiveRace(arguments: ProcessInfo.processInfo.arguments))
         self.client = client
         self.server = server
+        homeFeed = HomeFeedStore(client: client)
         // Siri's intents read the same data as the screens.
         AppDependencyManager.shared.add(dependency: client)
         wikidata = Self.wikidata(sampleData: runsOnSampleData)
@@ -51,9 +57,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         #endif
     }
 
-    static func clients(sampleData: Bool) -> (ibu: IBUClient, server: ServerClient?) {
+    static func asksForLiveRace(arguments: [String]) -> Bool {
         #if DEBUG
-            if sampleData { return (.sample(now: .now), nil) }
+            arguments.contains("--sample-live")
+        #else
+            false
+        #endif
+    }
+
+    /// The sample client, with a race being run when `liveRace` asks for one.
+    static func clients(sampleData: Bool, liveRace: Bool = false) -> (ibu: IBUClient, server: ServerClient?) {
+        #if DEBUG
+            if sampleData { return (.sample(now: .now, liveRace: liveRace), nil) }
         #endif
         let server = Bundle.main.serverURL.map { ServerClient(baseURL: $0) }
         return (IBUClient(cachedBy: server), server)

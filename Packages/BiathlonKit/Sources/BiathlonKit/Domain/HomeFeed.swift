@@ -35,6 +35,16 @@ public struct HomeFeed: Sendable {
         return min(max(next.startTime, now + Self.widgetMinimumInterval), latest)
     }
 
+    /// When the app, open before a race with none live, fetches the feed again so the live race
+    /// shows by itself: at the next race's start, then every minute, as the IBU marks a race
+    /// live a little after its start. `nil` while a race is live, which the app polls, and with
+    /// no race ahead.
+    public func nextStartRefreshDate(now: Date) -> Date? {
+        guard live == nil, let next else { return nil }
+        return max(next.startTime, now + Self.lateStartInterval)
+    }
+
+    public static let lateStartInterval: TimeInterval = 60
     public static let widgetLiveInterval: TimeInterval = 15 * 60
     public static let widgetInterval: TimeInterval = 60 * 60
     public static let widgetMinimumInterval: TimeInterval = 5 * 60

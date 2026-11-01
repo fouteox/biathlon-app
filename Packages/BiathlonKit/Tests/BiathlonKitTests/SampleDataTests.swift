@@ -99,6 +99,16 @@
             #expect(try await client.searchAthletes("zz").isEmpty)
         }
 
+        /// Asked for, a race is live on any day, with provisional results, and the home shows it.
+        @Test(arguments: dates) func aRaceIsLiveWhenAskedFor(now: Date) async throws {
+            let feed = try await IBUClient.sample(now: now, liveRace: true).homeFeed(now: now)
+            let live = try #require(feed.live)
+            #expect(live.startTime < now)
+            #expect(feed.liveResults?.isResult == true)
+            #expect(feed.liveResults?.rows.count == 10)
+            #expect(try await IBUClient.sample(now: now).homeFeed(now: now).live == nil)
+        }
+
         @Test func oldSeasonsAreInTheirYears() async throws {
             let events = try await IBUClient.sample(now: .now).events(season: SeasonID(rawValue: "9899"))
             #expect(events.first?.startDate == date("1998-12-01T12:00:00Z"))

@@ -32,6 +32,12 @@ public struct RaceResults: Decodable, Sendable {
         return teams.isEmpty ? rows : teams
     }
 
+    /// The athlete or team ranked first, once anyone is: a start list ranks nobody, and someone
+    /// out of the race (DNS, DNF…) leads nobody.
+    public var leader: ResultRow? {
+        standings.first { $0.rank != nil && $0.irm == nil }
+    }
+
     /// The first three, without the athletes or teams who didn't finish: none before the results.
     public var podium: [ResultRow] {
         isResult ? Array(standings.filter { $0.irm == nil }.prefix(3)) : []

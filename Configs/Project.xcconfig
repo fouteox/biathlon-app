@@ -3,7 +3,8 @@
 // Apple Developer team ID (Membership details), used for automatic signing.
 DEVELOPMENT_TEAM = G9BR433264
 
-IPHONEOS_DEPLOYMENT_TARGET = 26.0
+// 26.1 for `tabViewBottomAccessory(isEnabled:)`, which shows the live race only while there is one.
+IPHONEOS_DEPLOYMENT_TARGET = 26.1
 MARKETING_VERSION = 1.0.0
 // Xcode Cloud replaces it with its own build number.
 CURRENT_PROJECT_VERSION = 1
