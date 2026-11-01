@@ -783,6 +783,22 @@
         }
       }
     },
+    "My favorites": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Meine Favoriten"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mes favoris"
+          }
+        }
+      }
+    },
     "Nations": {
       "localizations": {
         "de": {

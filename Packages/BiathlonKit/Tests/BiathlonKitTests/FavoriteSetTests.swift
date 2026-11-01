@@ -19,6 +19,26 @@ struct FavoriteSetTests {
         #expect(!favorites.contains(row))
     }
 
+    /// The World Cup standings: an athlete by ID or through a favorite nation, a nation by its code,
+    /// which the nations standings carry as `Nat` or, failing that, as the row's name.
+    @Test func picksTheFavoritesOutOfTheStandings() throws {
+        let standings: CupStandings = try decode(
+            #"""
+            {"Rows":[
+            {"Rank":"1","IBUId":"BTSWE1","Name":"A","Nat":"SWE"},
+            {"Rank":"2","IBUId":"BTFRA1","Name":"B","Nat":"FRA"},
+            {"Rank":"3","IBUId":"BTNOR2","Name":"C","Nat":"NOR"},
+            {"Rank":"4","IBUId":"BTGER1","Name":"D","Nat":"GER"}]}
+            """#)
+        #expect(standings.favorites(in: favorites).map(\.name) == ["B", "C"])
+
+        let nations: CupStandings = try decode(
+            #"""
+            {"Rows":[{"Rank":"1","Name":"Norway","Nat":"NOR"},{"Rank":"2","Name":"NOR"},{"Rank":"3","Name":"France","Nat":"FRA"}]}
+            """#)
+        #expect(nations.favorites(in: favorites).map(\.rank) == ["1", "2"])
+    }
+
     @Test func isEmptyWithoutAthletesOrNations() {
         #expect(FavoriteSet(athleteIDs: [], nations: []).isEmpty)
         #expect(!FavoriteSet(athleteIDs: [], nations: ["NOR"]).isEmpty)

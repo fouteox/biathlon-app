@@ -44,6 +44,31 @@ final class StandingsUITests: XCTestCase {
         XCTAssertTrue(list.cells.firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
     }
 
+    /// The reader's favorites head the standings with their rank, and keep their place below,
+    /// starred; without any, the list opens on the standings themselves, named in their header.
+    @MainActor func testFavoritesHeadTheStandingsOnceThereAreSome() {
+        let app = XCUIApplication.launchInEnglish()
+        app.openTab("Standings")
+        let first = app.cells.containing(.button, identifier: nil).firstMatch
+        XCTAssertTrue(first.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        XCTAssertTrue(app.staticTexts["Men · Overall"].exists)
+        XCTAssertFalse(app.staticTexts["My favorites"].exists)
+        let leader = first.buttons.firstMatch.label
+
+        first.tap()
+        let star = app.navigationBars.buttons["Add to favorites"]
+        XCTAssertTrue(star.waitForExistence(timeout: XCUIApplication.dataTimeout))
+        star.tap()
+        // Back to the standings: the tab's button pops its stack.
+        app.openTab("Standings")
+
+        XCTAssertTrue(app.staticTexts["My favorites"].waitForExistence(timeout: XCUIApplication.dataTimeout))
+        // The same row, starred, now first.
+        let mine = app.cells.containing(.button, identifier: nil).firstMatch.buttons.firstMatch.label
+        XCTAssertTrue(mine.contains("Favorite"), mine)
+        XCTAssertEqual(mine.replacingOccurrences(of: ", Favorite", with: ""), leader)
+    }
+
     /// A past season keeps the category. How far back the seasons go is `SeasonID.since`'s, which
     /// BiathlonKit tests: a menu shows only the seasons it has room for, and a swipe closes it.
     @MainActor func testSeasonPickerShowsAPastSeason() {

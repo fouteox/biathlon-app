@@ -77,6 +77,24 @@ struct EventPlace: View {
     }
 }
 
+/// A name in a list row, bold with a star when it is a favorite's: the same mark on every list.
+struct RowName: View {
+    let name: String
+    let highlighted: Bool
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Text(name).fontWeight(highlighted ? .bold : .regular)
+            if highlighted {
+                Image(systemName: "star.fill")
+                    .font(.caption)
+                    .foregroundStyle(.tint)
+                    .accessibilityLabel("Favorite")
+            }
+        }
+    }
+}
+
 /// A nation's flag, or its IOC code when no flag is known.
 struct NationMark: View {
     let code: String?
