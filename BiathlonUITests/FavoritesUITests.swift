@@ -3,7 +3,9 @@ import XCTest
 /// The favorites tab says where each favorite stands, before the setting below the list.
 final class FavoritesUITests: XCTestCase {
     @MainActor func testFavoritesShowTheirStandingAboveTheLiveActivitySetting() {
-        let app = XCUIApplication.launchInEnglish()
+        // The setting on, as a reader who turned it on: on sample data there is no server, so Live
+        // Activities are unavailable and the setting shows only while on (`LiveActivityStarts.Keys`).
+        let app = XCUIApplication.launchInEnglish(arguments: ["-liveActivities.favoriteStarts", "YES"])
         app.openTab("Standings")
         let leader = app.cells.containing(.button, identifier: nil).firstMatch
         XCTAssertTrue(leader.waitForExistence(timeout: XCUIApplication.dataTimeout))
