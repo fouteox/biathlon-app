@@ -137,12 +137,16 @@ struct FavoritesView: View {
 
     /// What the numbers are and, before the season's first race, that they are the previous season's,
     /// as the standings tab says it.
-    private func sectionFooter(_ footer: LocalizedStringKey, standings: FavoriteStandings) -> Text {
-        guard standings.isFallback else { return Text(footer) }
-        return Text(footer) + Text(verbatim: " ")
-            + Text(
-                "Season \(standings.season.displayName): the \(standings.requestedSeason.displayName) standings will appear after the first race."
-            )
+    @ViewBuilder
+    private func sectionFooter(_ footer: LocalizedStringKey, standings: FavoriteStandings) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(footer)
+            if standings.isFallback {
+                Text(
+                    "Season \(standings.season.displayName): the \(standings.requestedSeason.displayName) standings will appear after the first race."
+                )
+            }
+        }
     }
 
     /// Where the favorite stands: an athlete's rank and points, a nation's rank in each Nations Cup, or
