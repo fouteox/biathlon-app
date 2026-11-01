@@ -12,10 +12,9 @@ struct LiveRaceAccessory: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
-                Label("Live", systemImage: "dot.radiowaves.left.and.right")
+                liveBadge
                     .font(.caption.bold())
                     .foregroundStyle(Competition.State.live.tint)
-                    .labelStyle(placement == .inline ? .iconOnly : .titleAndIcon)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(race.title)
                         .font(.headline)
@@ -38,5 +37,15 @@ struct LiveRaceAccessory: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("live-accessory")
+    }
+
+    /// The word and its symbol, the symbol alone in line with a collapsed tab bar.
+    @ViewBuilder private var liveBadge: some View {
+        let label = Label("Live", systemImage: "dot.radiowaves.left.and.right")
+        if placement == .inline {
+            label.labelStyle(.iconOnly)
+        } else {
+            label
+        }
     }
 }
