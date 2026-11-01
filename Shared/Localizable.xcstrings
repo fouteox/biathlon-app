@@ -1199,6 +1199,38 @@
         }
       }
     },
+    "Rank and points in the World Cup overall standings.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Platz und Punkte in der Gesamtwertung des Weltcups."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rang et points au classement général de la Coupe du monde."
+          }
+        }
+      }
+    },
+    "Rank in the Nations Cup, men and women.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Platz im Nationencup, Männer und Frauen."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rang à la Coupe des nations, hommes et femmes."
+          }
+        }
+      }
+    },
     "Range": {
       "comment": "Analysis ranking of the times on the shooting range.",
       "localizations": {

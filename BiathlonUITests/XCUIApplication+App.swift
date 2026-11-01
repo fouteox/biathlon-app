@@ -6,10 +6,11 @@ extension XCUIApplication {
 
     /// The app in English, whatever the simulator's language, so tests find elements by label. With
     /// `--sample-data` (`AppDelegate.asksForSampleData`), it runs on fictional data rather than the network,
-    /// and starts with no favorites, whatever an earlier test added.
-    @MainActor static func launchInEnglish() -> XCUIApplication {
+    /// and starts with no favorites, whatever an earlier test added. `arguments` are passed on: a
+    /// `-key value` pair seeds the app's `UserDefaults`, as the system reads such arguments.
+    @MainActor static func launchInEnglish(arguments: [String] = []) -> XCUIApplication {
         let app = XCUIApplication()
-        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "--sample-data"]
+        app.launchArguments += ["-AppleLanguages", "(en)", "-AppleLocale", "en_US", "--sample-data"] + arguments
         app.launch()
         return app
     }

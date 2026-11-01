@@ -113,11 +113,6 @@ struct StandingsView: View {
     }
 }
 
-extension RaceCategory {
-    /// Standings exist for men and women only.
-    static let withStandings: [RaceCategory] = [.men, .women]
-}
-
 extension StandingsDiscipline {
     var label: LocalizedStringResource {
         switch self {

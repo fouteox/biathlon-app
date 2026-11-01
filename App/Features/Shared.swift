@@ -95,6 +95,16 @@ struct RowName: View {
     }
 }
 
+extension CupRow {
+    /// The standing in a phrase, "7 · 612 points", as the athlete's and the favorites' rows say it.
+    var rankAndPoints: Text {
+        let rank = Text(self.rank ?? "–")
+        guard let score else { return rank }
+        let points = Int(score).map { Text("\($0) points") } ?? Text(score)
+        return Text("\(rank) · \(points)")
+    }
+}
+
 /// A nation's flag, or its IOC code when no flag is known.
 struct NationMark: View {
     let code: String?
