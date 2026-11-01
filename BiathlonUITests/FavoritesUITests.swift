@@ -15,11 +15,12 @@ final class FavoritesUITests: XCTestCase {
         star.tap()
 
         app.openTab("Favorites")
-        // The leader of the sample's standings, with their rank and points, read as one element.
-        let row = app.cells.firstMatch
+        // The leader of the sample's standings, with their rank and points, read as one element. Section
+        // headers show as cells too: the row is the first cell with a link. Numbers group their digits.
+        let row = app.cells.containing(.button, identifier: nil).firstMatch
         XCTAssertTrue(row.waitForExistence(timeout: XCUIApplication.dataTimeout))
-        let standing = row.buttons.matching(NSPredicate(format: "label CONTAINS %@", "1 · 1000 points")).firstMatch
-        XCTAssertTrue(standing.waitForExistence(timeout: XCUIApplication.dataTimeout), row.buttons.firstMatch.label)
+        let standing = row.buttons.matching(NSPredicate(format: "label CONTAINS %@", "1 · 1,000 points")).firstMatch
+        XCTAssertTrue(standing.waitForExistence(timeout: XCUIApplication.dataTimeout))
         XCTAssertTrue(app.staticTexts["Rank and points in the World Cup overall standings."].exists)
 
         // The Live Activity setting comes after the favorites.
