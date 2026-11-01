@@ -22,7 +22,7 @@
     "reflect-metadata": "^0.2.2"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.4.7",
+    "@cloudflare/vitest-plugin": "^1.4.10",
     "@msw/cloudflare": "^0.2.0",
     "@types/node": "^26.6.5",
     "json5": "^2.2.3",
