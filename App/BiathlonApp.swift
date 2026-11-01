@@ -92,10 +92,24 @@ struct RootView: View {
                     }
             }
         }
-        // The feed loads once for the app, and keeps refreshing while a race is live, whichever
-        // tab is open: the accessory and Home read the same one.
-        .task { await homeFeed.load() }
+        // The feed is the app's, whichever tab is open: the accessory and Home read the same one.
+        // It loads at launch and whenever the app comes back, keeps refreshing while a race is
+        // live, and fetches itself again at the next start, so the race shows live by itself.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            await homeFeed.load()
+        }
         .refreshingWhileLive(homeFeed.live != nil, action: homeFeed.load)
+        .task(id: homeFeed.awaitedStart) {
+            while let date = homeFeed.nextStartRefreshDate(now: .now) {
+                do {
+                    try await Task.sleep(for: .seconds(date.timeIntervalSinceNow))
+                } catch {
+                    return
+                }
+                await homeFeed.load()
+            }
+        }
         // From the widget or the Live Activity: the race, on the Home tab the app starts on.
         .onOpenURL { url in
             guard let link = DeepLink(url: url) else { return }

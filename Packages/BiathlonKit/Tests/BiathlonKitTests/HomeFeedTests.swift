@@ -144,4 +144,38 @@ struct HomeFeedTests {
         #expect(feed.upcomingRace == nil)
         #expect(feed.widgetReloadDate(now: now) == now + 60 * 60)
     }
+
+    /// Opened before a race, the app fetches the feed again at the start, so the live race shows
+    /// without a pull to refresh.
+    @Test func theAppRefreshesAtTheNextStart() throws {
+        let now = date("2026-11-27T11:30:00Z")
+        let feed = HomeFeed(events: [], races: [try decode(race("NEXT", start: "2026-11-27T12:10:00Z"))])
+
+        #expect(feed.nextStartRefreshDate(now: now) == date("2026-11-27T12:10:00Z"))
+    }
+
+    /// The IBU marks a race live a little after its start: the app asks again every minute.
+    @Test func theAppRetriesEveryMinuteForARaceLateToStart() throws {
+        let now = date("2026-11-27T12:11:00Z")
+        let feed = HomeFeed(events: [], races: [try decode(race("NEXT", start: "2026-11-27T12:10:00Z"))])
+
+        #expect(feed.nextStartRefreshDate(now: now) == now + 60)
+    }
+
+    /// While a race is live the app polls it; with no race ahead there is nothing to wait for.
+    @Test func theAppHasNoStartToWaitForWhileLiveOrWithNoRaceAhead() throws {
+        let now = date("2026-11-27T11:30:00Z")
+        let live = HomeFeed(
+            events: [],
+            races: [
+                try decode(race("LIVE", start: "2026-11-27T11:00:00Z", isLive: true)),
+                try decode(race("NEXT", start: "2026-11-28T14:00:00Z")),
+            ])
+        let over = HomeFeed(
+            events: [],
+            races: [try decode(race("DONE", start: "2026-11-26T15:00:00Z", status: 11, scheduleStatus: "FINISHED"))])
+
+        #expect(live.nextStartRefreshDate(now: now) == nil)
+        #expect(over.nextStartRefreshDate(now: now) == nil)
+    }
 }

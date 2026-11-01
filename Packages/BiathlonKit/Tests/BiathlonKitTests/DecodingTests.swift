@@ -33,6 +33,22 @@ struct DecodingTests {
         #expect(results.legs(of: norway).map(\.name) == ["ULDAL Martin"])
     }
 
+    /// A start list ranks nobody, and the first athlete to start isn't the leader: a leader
+    /// needs a rank, and someone out of the race (DNS, DNF…) has none that counts.
+    @Test func theLeaderIsTheFirstRankedRowStillInTheRace() throws {
+        let startList = """
+            {"IsStartList":true,"IsResult":false,"Results":[{"Name":"BOE J.T.","Rank":null,"IRM":null}]}
+            """
+        let running = """
+            {"IsStartList":false,"IsResult":false,"Results":[
+            {"Name":"BOE J.T.","Rank":null,"IRM":"DNS"},{"Name":"PERROT E.","Rank":"1","IRM":null}]}
+            """
+        let decoder = JSONDecoder.ibu
+
+        #expect(try decoder.decode(RaceResults.self, from: Data(startList.utf8)).leader == nil)
+        #expect(try decoder.decode(RaceResults.self, from: Data(running.utf8)).leader?.name == "PERROT E.")
+    }
+
     /// `SportEvt` of `Results?RaceId=BT2526SWRLCP01SMRL`: the event the race belongs to.
     /// A relay's podium is of teams, not of their legs.
     @Test func relayPodiumIsOfTeams() throws {

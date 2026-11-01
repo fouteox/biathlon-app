@@ -20,7 +20,7 @@ struct LiveRaceAccessory: View {
                     Text(race.title)
                         .font(.headline)
                         .lineLimit(1)
-                    if placement != .inline, let leader = results?.standings.first {
+                    if placement != .inline, let leader = results?.leader {
                         Text("Leader \(leader.shortName ?? leader.name)")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)

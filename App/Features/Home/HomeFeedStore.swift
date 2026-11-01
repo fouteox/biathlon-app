@@ -20,6 +20,16 @@ final class HomeFeedStore {
         return (race, feed.liveResults)
     }
 
+    /// The start the app waits for to fetch the feed again: the next race's, while none is live.
+    var awaitedStart: Date? {
+        live == nil ? state.value?.next?.startTime : nil
+    }
+
+    /// When to fetch the feed again for the awaited start, `nil` without one.
+    func nextStartRefreshDate(now: Date) -> Date? {
+        state.value?.nextStartRefreshDate(now: now)
+    }
+
     func load() async {
         await loader.load { try await client.homeFeed(now: .now) }
     }
