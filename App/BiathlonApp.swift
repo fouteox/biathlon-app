@@ -43,27 +43,42 @@ struct RootView: View {
     @Environment(SettingsPresentation.self) private var settingsPresentation
     @Environment(\.scenePhase) private var scenePhase
     @Query private var favorites: [Favorite]
+    @State private var selectedTab = Screen.home
+    /// The Home tab's stack, which a link from the widget or the Live Activity opens a race on.
+    @State private var homePath: [Route] = []
+
+    private enum Screen: Hashable {
+        case home, calendar, standings, favorites, search
+    }
 
     var body: some View {
         @Bindable var settingsPresentation = settingsPresentation
-        TabView {
-            Tab("Home", systemImage: "house") {
-                NavigationStack { HomeView().navigationDestinations() }
+        TabView(selection: $selectedTab) {
+            Tab("Home", systemImage: "house", value: Screen.home) {
+                NavigationStack(path: $homePath) { HomeView().navigationDestinations() }
             }
-            Tab("Calendar", systemImage: "calendar") {
+            Tab("Calendar", systemImage: "calendar", value: Screen.calendar) {
                 NavigationStack { CalendarView().navigationDestinations() }
             }
-            Tab("Standings", systemImage: "list.number") {
+            Tab("Standings", systemImage: "list.number", value: Screen.standings) {
                 NavigationStack { StandingsView().navigationDestinations() }
             }
-            Tab("Favorites", systemImage: "star") {
+            Tab("Favorites", systemImage: "star", value: Screen.favorites) {
                 NavigationStack { FavoritesView().navigationDestinations() }
             }
-            Tab(role: .search) {
+            Tab(value: Screen.search, role: .search) {
                 NavigationStack { SearchView().navigationDestinations() }
             }
         }
         .tabBarMinimizeBehavior(.onScrollDown)
+        // From the widget or the Live Activity: the race, on the Home tab the app starts on.
+        .onOpenURL { url in
+            guard let link = DeepLink(url: url) else { return }
+            // Over the settings sheet, if it was left open, the race would not show.
+            settingsPresentation.isPresented = false
+            selectedTab = .home
+            homePath = [link.route]
+        }
         // Here rather than in Home, so the system can open it whichever tab is selected.
         .sheet(isPresented: $settingsPresentation.isPresented) {
             NavigationStack { SettingsView() }
