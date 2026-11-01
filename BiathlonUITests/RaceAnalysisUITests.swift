@@ -8,12 +8,9 @@ final class RaceAnalysisUITests: XCTestCase {
         XCTAssertTrue(allResults.waitForExistence(timeout: XCUIApplication.dataTimeout))
         allResults.tap()
 
-        // The last row of the results, which the analysis goes into once they are read.
-        let analysis = app.buttons["Course, range and shooting times"]
-        let list = app.collectionViews.firstMatch
-        XCTAssertTrue(list.waitForExistence(timeout: XCUIApplication.dataTimeout))
-        for _ in 0..<10 where !analysis.exists { list.swipeUp() }
-        XCTAssertTrue(analysis.exists)
+        // In the bar, within reach above the dozens of rows.
+        let analysis = app.buttons["Course, range and shooting times"].firstMatch
+        XCTAssertTrue(analysis.waitForExistence(timeout: XCUIApplication.dataTimeout))
         analysis.tap()
 
         XCTAssertTrue(app.navigationBars.staticTexts["Analysis"].waitForExistence(timeout: XCUIApplication.dataTimeout))

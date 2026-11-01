@@ -63,12 +63,6 @@ struct RaceView: View {
                                 ResultLink(row: row, highlighted: isFavorite(row, in: results))
                             }
                         }
-                        // After the results, which it goes into once they are read.
-                        if results.isResult, competition.hasAnalysisRankings {
-                            NavigationLink(value: Route.analysis(competition)) {
-                                Label("Course, range and shooting times", systemImage: "stopwatch")
-                            }
-                        }
                     } header: {
                         Self.listTitle(of: results, live: isLive)
                     } footer: {
@@ -93,6 +87,14 @@ struct RaceView: View {
         .navigationTitle(race.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            // A race has dozens of rows: the analysis sits in the bar rather than below them all.
+            if let analysis {
+                ToolbarItem(placement: .topBarTrailing) {
+                    NavigationLink(value: analysis) {
+                        Label("Course, range and shooting times", systemImage: "stopwatch")
+                    }
+                }
+            }
             if let podium {
                 ToolbarItem(placement: .topBarTrailing) {
                     ShareLink(item: String(localized: podium))
@@ -109,7 +111,7 @@ struct RaceView: View {
             // A followed race keeps its toggle to stop following.
             if liveActivities.isAvailable, canBeFollowed || liveActivities.followedRaceIDs.contains(race.id) {
                 // A state, apart from the actions before it.
-                if podium != nil || latest.state == .scheduled {
+                if analysis != nil || podium != nil || latest.state == .scheduled {
                     ToolbarSpacer(.fixed, placement: .topBarTrailing)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
@@ -130,6 +132,12 @@ struct RaceView: View {
             await tvGuide.load { try await server.tvGuide() }
         }
         .refreshingWhileLive(isLive, action: load)
+    }
+
+    /// The analysis of the results, once they are in and the IBU has timed the race.
+    private var analysis: Route? {
+        guard let results = loader.state.value, results.isResult, latest.hasAnalysisRankings else { return nil }
+        return .analysis(latest)
     }
 
     /// The podium in a sentence, to share once the results are in.
