@@ -13,7 +13,8 @@ final class LiveAccessoryUITests: XCTestCase {
         accessory.tap()
         // The race sheet: the race's state as a badge, and a button to close it.
         XCTAssertTrue(app.staticTexts["Live"].firstMatch.waitForExistence(timeout: XCUIApplication.dataTimeout))
-        let close = app.navigationBars.buttons["Close"]
+        // Like the Home bar's gear, the sheet's close button sits outside the bar's element.
+        let close = app.buttons["Close"].firstMatch
         XCTAssertTrue(close.waitForExistence(timeout: XCUIApplication.dataTimeout))
         close.tap()
         XCTAssertFalse(close.waitForExistence(timeout: 2))
