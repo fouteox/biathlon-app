@@ -5,8 +5,18 @@ import Foundation
 public struct FavoriteStandings: Sendable {
     /// The season the standings are from: the previous one until the current has its first race.
     public let season: SeasonID
+    /// The season containing the request date.
+    public let requestedSeason: SeasonID
     let athletes: [RaceCategory: CupStandings]
     let nations: [RaceCategory: CupStandings]
+
+    /// The previous season's standings, shown until the current season has its first race.
+    public var isFallback: Bool { season != requestedSeason }
+
+    /// Before the season's first race, any of the four can still be empty.
+    var isEmpty: Bool {
+        athletes.values.contains { $0.rows.isEmpty } || nations.values.contains { $0.rows.isEmpty }
+    }
 
     /// The athlete's row, in whichever category they race.
     public func standing(ofAthlete id: String) -> CupRow? {
@@ -27,15 +37,24 @@ extension RaceCategory {
 }
 
 extension IBUClient {
-    /// The four standings at once; the season is the athletes' standings', men's first.
+    /// The four standings at once, all of one season: the current one, or the previous one while any
+    /// of the four is still empty, so the favorites never mix two seasons around the opening races.
     public func favoriteStandings(now: Date) async throws -> FavoriteStandings {
-        async let men = worldCupStandings(category: .men, discipline: .total, now: now)
-        async let women = worldCupStandings(category: .women, discipline: .total, now: now)
-        async let menNations = worldCupStandings(category: .men, discipline: .nations, now: now)
-        async let womenNations = worldCupStandings(category: .women, discipline: .nations, now: now)
+        let requested = SeasonID.containing(now)
+        let current = try await favoriteStandings(season: requested, requested: requested)
+        guard current.isEmpty else { return current }
+        return try await favoriteStandings(season: requested.previous, requested: requested)
+    }
+
+    private func favoriteStandings(season: SeasonID, requested: SeasonID) async throws -> FavoriteStandings {
+        async let men = cupStandings(cupID: Cup.worldCupID(season, category: .men, discipline: .total))
+        async let women = cupStandings(cupID: Cup.worldCupID(season, category: .women, discipline: .total))
+        async let menNations = cupStandings(cupID: Cup.worldCupID(season, category: .men, discipline: .nations))
+        async let womenNations = cupStandings(cupID: Cup.worldCupID(season, category: .women, discipline: .nations))
         return FavoriteStandings(
-            season: try await men.season,
-            athletes: [.men: try await men.standings, .women: try await women.standings],
-            nations: [.men: try await menNations.standings, .women: try await womenNations.standings])
+            season: season,
+            requestedSeason: requested,
+            athletes: [.men: try await men, .women: try await women],
+            nations: [.men: try await menNations, .women: try await womenNations])
     }
 }

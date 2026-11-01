@@ -99,8 +99,8 @@ struct FavoritesView: View {
             } header: {
                 Text(title)
             } footer: {
-                if standings.state.value != nil {
-                    Text(footer)
+                if let standings = standings.state.value {
+                    sectionFooter(footer, standings: standings)
                 }
             }
         }
@@ -135,15 +135,26 @@ struct FavoritesView: View {
         }
     }
 
-    /// Where the favorite stands: an athlete's rank and points, a nation's rank in each Nations Cup.
+    /// What the numbers are and, before the season's first race, that they are the previous season's,
+    /// as the standings tab says it.
+    private func sectionFooter(_ footer: LocalizedStringKey, standings: FavoriteStandings) -> Text {
+        guard standings.isFallback else { return Text(footer) }
+        return Text(footer) + Text(verbatim: " ")
+            + Text(
+                "Season \(standings.season.displayName): the \(standings.requestedSeason.displayName) standings will appear after the first race."
+            )
+    }
+
+    /// Where the favorite stands: an athlete's rank and points, a nation's rank in each Nations Cup, or
+    /// "Not ranked" once the standings are in without them. Nothing until they are in.
     private func standing(of favorite: Favorite) -> Text? {
         guard let standings = standings.state.value else { return nil }
         switch favorite.kind {
         case .athlete:
-            return standings.standing(ofAthlete: favorite.key)?.rankAndPoints
+            return standings.standing(ofAthlete: favorite.key)?.rankAndPoints ?? Text("Not ranked")
         case .nation:
             let ranks = standings.standings(ofNation: favorite.key).map { "\($0.category.title) \($0.row.rank ?? "–")" }
-            return ranks.isEmpty ? nil : Text(verbatim: ranks.joined(separator: " · "))
+            return ranks.isEmpty ? Text("Not ranked") : Text(verbatim: ranks.joined(separator: " · "))
         case nil:
             return nil
         }
