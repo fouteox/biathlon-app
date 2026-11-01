@@ -1,4 +1,5 @@
 import BiathlonKit
+import Foundation
 import Observation
 
 /// The home feed, kept by the app rather than by the Home screen: the live race it holds shows
