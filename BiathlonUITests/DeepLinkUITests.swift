@@ -15,7 +15,8 @@ final class DeepLinkUITests: XCTestCase {
     /// The settings sheet, left open, would hide the race: the link closes it.
     @MainActor func testARaceLinkClosesTheSettings() throws {
         let app = XCUIApplication.launchInEnglish()
-        let settings = app.navigationBars.buttons["Settings"]
+        // The gear sits outside the Home bar's accessibility element.
+        let settings = app.buttons["Settings"].firstMatch
         XCTAssertTrue(settings.waitForExistence(timeout: XCUIApplication.dataTimeout))
         settings.tap()
         XCTAssertTrue(app.navigationBars["Settings"].waitForExistence(timeout: XCUIApplication.dataTimeout))
