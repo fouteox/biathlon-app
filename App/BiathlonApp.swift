@@ -74,6 +74,8 @@ struct RootView: View {
         // From the widget or the Live Activity: the race, on the Home tab the app starts on.
         .onOpenURL { url in
             guard let link = DeepLink(url: url) else { return }
+            // Over the settings sheet, if it was left open, the race would not show.
+            settingsPresentation.isPresented = false
             selectedTab = .home
             homePath = [link.route]
         }
