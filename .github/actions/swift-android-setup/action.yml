@@ -19,6 +19,10 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
+        # The toolchain's own system dependency, which swiftly checks for.
+        sudo apt-get -q install -y libcurl4-openssl-dev
+        # Outside the checkout: swiftly records the version in the current directory.
+        cd "$RUNNER_TEMP"
         curl -fsSL --retry 3 -O "https://download.swift.org/swiftly/linux/swiftly-$(uname -m).tar.gz"
         tar -xzf "swiftly-$(uname -m).tar.gz"
         ./swiftly init --assume-yes --skip-install --no-modify-profile --quiet-shell-followup
