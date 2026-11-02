@@ -3,7 +3,7 @@ agp = "9.5.0"
 kotlin = "2.4.21"
 # The NDK that the Swift SDK for Android links against (r30, as swift.org documents).
 ndk = "30.0.16248370"
-compileSdk = "36"
+compileSdk = "37"
 minSdk = "28"
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"

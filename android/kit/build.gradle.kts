@@ -159,6 +159,8 @@ androidComponents {
                     generate.flatMap { it.thunks },
                     swiftPackage.dir("Sources/BiathlonKit/Shared"),
                     swiftPackage.dir("Sources/BiathlonKit/Android"),
+                    swiftPackage.file("Package.swift"),
+                    swiftPackage.file("Package.resolved"),
                 )
                 packageDirectory = swiftPackage
                 swiftSdk = "${abi.swiftTriple}${libs.versions.minSdk.get()}"
