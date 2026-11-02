@@ -6,6 +6,8 @@ plugins {
 android {
     namespace = "com.fouteox.biathlon"
     compileSdk = libs.versions.compileSdk.get().toInt()
+    // The NDK whose llvm-strip strips the native libraries when they are packaged.
+    ndkVersion = libs.versions.ndk.get()
     compileOptions {
         sourceCompatibility = JavaVersion.toVersion(libs.versions.java.get())
         targetCompatibility = JavaVersion.toVersion(libs.versions.java.get())
