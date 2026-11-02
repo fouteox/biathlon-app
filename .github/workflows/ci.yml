@@ -26,17 +26,20 @@ jobs:
           distribution: temurin
           java-version: 25
       - uses: ./.github/actions/swift-android-setup
-      - name: Build for Android with Java bindings
+      - name: Generate the Java bindings
+        run: android/swift/scripts/generate-bindings.sh "$RUNNER_TEMP/bindings"
+      - name: List the generated bindings
+        run: |
+          find android/swift/Sources/BiathlonKit/Generated "$RUNNER_TEMP/bindings" -type f | sort
+      - name: Build for Android
         working-directory: android/swift
-        # jextract runs gradle to compile its Java callbacks, outside SwiftPM's sandbox.
-        run: swift build --swift-sdk aarch64-unknown-linux-android28 --disable-sandbox
-      - name: List the generated Java bindings
-        working-directory: android/swift
-        run: find .build/plugins/outputs -path '*JExtractSwiftPlugin*' -name '*.java' | sort
+        run: swift build --swift-sdk aarch64-unknown-linux-android28
       - uses: actions/upload-artifact@v7
         with:
           name: biathlonkit-java-bindings
-          path: android/swift/.build/plugins/outputs/**/JExtractSwiftPlugin/**
+          path: |
+            ${{ runner.temp }}/bindings
+            android/swift/Sources/BiathlonKit/Generated
 
   format:
     name: Swift format

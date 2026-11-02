@@ -19,8 +19,6 @@ let package = Package(
     targets: [
         .target(
             name: "BiathlonKit",
-            // Configures the Java bindings that android/swift generates from these sources.
-            exclude: ["swift-java.config"],
             swiftSettings: swiftSettings
         ),
         .testTarget(
