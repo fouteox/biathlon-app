@@ -4,6 +4,10 @@ updates:
     directory: /server
     schedule:
       interval: weekly
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
   - package-ecosystem: github-actions
     # The workflows, and the composite actions they share.
     directories:

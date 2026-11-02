@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Biathlon</string>
+    <string name="calendar_title">Season calendar</string>
+    <string name="calendar_unavailable">The calendar is unavailable.</string>
+</resources>
