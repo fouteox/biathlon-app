@@ -36,6 +36,14 @@ let package = Package(
                 .swiftLanguageMode(.v5),
                 // Swift 6 mode's /regex/ literals, which BiathlonKit uses.
                 .enableUpcomingFeature("BareSlashRegexLiterals"),
+            ],
+            // Trial finding (Swift SDK for Android 6.4.1): a static FoundationNetworking links
+            // curl but not the OpenSSL and zlib that curl calls, so the library fails to load
+            // ("cannot locate symbol X509_free"). OpenSSL ships in the SDK, zlib in Android.
+            linkerSettings: [
+                .linkedLibrary("ssl", .when(platforms: [.android])),
+                .linkedLibrary("crypto", .when(platforms: [.android])),
+                .linkedLibrary("z", .when(platforms: [.android])),
             ]
         )
     ]
