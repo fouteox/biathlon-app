@@ -6,6 +6,10 @@ plugins {
 android {
     namespace = "com.fouteox.biathlon"
     compileSdk = libs.versions.compileSdk.get().toInt()
+    compileOptions {
+        sourceCompatibility = JavaVersion.toVersion(libs.versions.java.get())
+        targetCompatibility = JavaVersion.toVersion(libs.versions.java.get())
+    }
     defaultConfig {
         applicationId = "com.fouteox.biathlon"
         minSdk = libs.versions.minSdk.get().toInt()

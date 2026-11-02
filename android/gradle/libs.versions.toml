@@ -5,6 +5,8 @@ kotlin = "2.4.21"
 ndk = "30.0.16248370"
 compileSdk = "37"
 minSdk = "28"
+# jextract generates Java 17: records, sealed interfaces, switch expressions.
+java = "17"
 composeBom = "2026.09.00"
 activityCompose = "1.13.0"
 lifecycle = "2.11.0"
