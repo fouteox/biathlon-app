@@ -44,6 +44,8 @@ runs:
         "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "${{ inputs.ndk-package }}" > /dev/null
         package="${{ inputs.ndk-package }}"
         export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/${package#ndk;}"
+        # Swift Build finds the NDK through this variable: the later build steps need it too.
+        echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME" >> "$GITHUB_ENV"
         bundle="$(find "$HOME" -maxdepth 4 -type d -path "*/swift-sdks/swift-${{ inputs.swift-version }}-RELEASE_android.artifactbundle" | head -1)"
         test -n "$bundle"
         "$bundle/swift-android/scripts/setup-android-sdk.sh"
