@@ -32,7 +32,11 @@ let package = Package(
             // Trial finding (swift-java 0.7.0): the thunks of async functions start a Task that
             // captures JNI pointers, which Swift 6 rejects as a data race. Its own samples build
             // in Swift 5 mode; the iOS package still checks BiathlonKit in Swift 6.
-            swiftSettings: swiftSettings + [.swiftLanguageMode(.v5)]
+            swiftSettings: swiftSettings + [
+                .swiftLanguageMode(.v5),
+                // Swift 6 mode's /regex/ literals, which BiathlonKit uses.
+                .enableUpcomingFeature("BareSlashRegexLiterals"),
+            ]
         )
     ]
 )
