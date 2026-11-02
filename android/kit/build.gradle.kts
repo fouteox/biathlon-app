@@ -58,7 +58,8 @@ abstract class GenerateSwiftBindings : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val swiftSources: ConfigurableFileCollection
 
-    @get:Internal
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val script: RegularFileProperty
 
     @get:Input
