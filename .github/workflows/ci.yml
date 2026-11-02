@@ -27,7 +27,7 @@ jobs:
           java-version: 25
       - uses: ./.github/actions/swift-android-setup
       - name: Generate the Java bindings
-        run: android/swift/scripts/generate-bindings.sh "$RUNNER_TEMP/bindings"
+        run: android/swift/scripts/generate-bindings.sh "$RUNNER_TEMP/bindings" debug
       - name: List the generated bindings
         run: |
           find android/swift/Sources/BiathlonKit/Generated "$RUNNER_TEMP/bindings" -type f | sort
@@ -35,6 +35,7 @@ jobs:
         working-directory: android/swift
         run: swift build --swift-sdk aarch64-unknown-linux-android28
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: biathlonkit-java-bindings
           path: |
