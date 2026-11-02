@@ -15,6 +15,29 @@ jobs:
       - run: swift test
         working-directory: Packages/BiathlonKit
 
+  kit-android:
+    name: BiathlonKit (Android)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      # jextract, swift-java's Java binding generator, needs a JDK.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      - uses: ./.github/actions/swift-android-setup
+      - name: Build for Android with Java bindings
+        working-directory: android/swift
+        # jextract runs gradle to compile its Java callbacks, outside SwiftPM's sandbox.
+        run: swift build --swift-sdk aarch64-unknown-linux-android28 --disable-sandbox
+      - name: List the generated Java bindings
+        working-directory: android/swift
+        run: find .build/plugins/outputs -path '*JExtractSwiftPlugin*' -name '*.java' | sort
+      - uses: actions/upload-artifact@v7
+        with:
+          name: biathlonkit-java-bindings
+          path: android/swift/.build/plugins/outputs/**/JExtractSwiftPlugin/**
+
   format:
     name: Swift format
     runs-on: ubuntu-24.04
