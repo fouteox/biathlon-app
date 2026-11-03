@@ -20,6 +20,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -47,8 +49,16 @@ fun AthleteScreen(athleteId: String, name: String, open: (Route) -> Unit, onBack
     val bio = viewModel(key = "bio") { LoadViewModel { client.athlete(athleteId) } }
     // Loaded on its own: the profile shows without waiting for it, and without it.
     val history = viewModel(key = "history") { LoadViewModel { AthleteHistory(client.athleteResults(athleteId), Instant.now()) } }
+    val wikidata = LocalWikidataClient.current
+    // Loaded on its own too: the profile goes without the link until it comes, or if it fails.
+    val wikipedia = viewModel(key = "wikipedia") { LoadViewModel { wikidata.wikipediaArticles(athleteId) } }
     WhileStarted(bio) { bio.load() }
     WhileStarted(history) { history.load() }
+    WhileStarted(wikipedia) { wikipedia.load() }
+    val articles by wikipedia.state.collectAsStateWithLifecycle()
+    val locales = LocalConfiguration.current.locales
+    val article = articles.value?.article((0 until locales.size()).map(locales::get))
+    val uriHandler = LocalUriHandler.current
     val loadedBio by bio.state.collectAsStateWithLifecycle()
     val loadedHistory by history.state.collectAsStateWithLifecycle()
     // The season picked; until then, the one the history opens on.
@@ -67,7 +77,7 @@ fun AthleteScreen(athleteId: String, name: String, open: (Route) -> Unit, onBack
     ) { padding ->
         val standing = if (season != null && category != null) rememberStanding(athleteId, category, season) else null
         val loadedStanding = standing?.state?.collectAsStateWithLifecycle()?.value
-        LoadableList(bio, padding, alsoLoading = listOfNotNull(history, standing)) { profile ->
+        LoadableList(bio, padding, alsoLoading = listOfNotNull(history, standing, wikipedia)) { profile ->
             item { Profile(profile) }
             profile.nation?.let { nation ->
                 // The nation opens on the athlete's standings, the men's when the IBU gives no gender.
@@ -75,6 +85,14 @@ fun AthleteScreen(athleteId: String, name: String, open: (Route) -> Unit, onBack
                     ListItem(
                         headlineContent = { Text(Nation.namedTitle(nation)) },
                         modifier = Modifier.clickable { open(Route.Nation(nation, profile.gender?.category ?: RaceCategory.MEN)) },
+                    )
+                }
+            }
+            article?.let { url ->
+                item {
+                    ListItem(
+                        headlineContent = { Text(stringResource(R.string.wikipedia)) },
+                        modifier = Modifier.clickable { uriHandler.openUri(url.toString()) },
                     )
                 }
             }

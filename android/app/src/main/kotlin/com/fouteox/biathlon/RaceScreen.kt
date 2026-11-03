@@ -23,6 +23,7 @@ import com.fouteox.biathlon.kit.Competition
 import com.fouteox.biathlon.kit.Nation
 import com.fouteox.biathlon.kit.RaceResults
 import com.fouteox.biathlon.kit.ResultRow
+import com.fouteox.biathlon.kit.hasAnalysisRankings
 import java.time.Instant
 
 /** A race's place and start, then its start list or results, refreshed every 20 seconds while it is live. */
@@ -36,7 +37,13 @@ fun RaceScreen(race: Competition, open: (Route) -> Unit, onBack: () -> Unit) {
     val latest = state.value?.competition ?: race
     val isLive = latest.state == Competition.State.LIVE
     RefreshWhileLive(isLive, results::load)
-    Screen(race.title(), onBack) { padding ->
+    // A race has dozens of rows: the analysis sits in the bar rather than below them all.
+    val analysis = state.value?.takeIf { it.isResult && latest.hasAnalysisRankings }
+    Screen(
+        race.title(),
+        onBack,
+        actions = { if (analysis != null) BarAction(R.drawable.ic_timer, stringResource(R.string.course_range_and_shooting_times)) { open(Route.Analysis(latest)) } },
+    ) { padding ->
         // A relay's teams opened on their legs.
         var expanded by rememberSaveable { mutableStateOf(setOf<String>()) }
         LoadableList(results, padding) { loaded ->
@@ -46,12 +53,7 @@ fun RaceScreen(race: Competition, open: (Route) -> Unit, onBack: () -> Unit) {
                 // In the list, below the race's place and start, rather than over them.
                 item {
                     val message = if (competition.state == Competition.State.CANCELLED) R.string.race_cancelled else R.string.no_start_list_yet
-                    Text(
-                        stringResource(message),
-                        Modifier.padding(32.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    EmptyMessage(stringResource(message))
                 }
             } else {
                 item { listTitle(loaded, isLive)?.let { SectionHeader(it) } }
@@ -87,13 +89,6 @@ private fun LazyListScope.rows(race: Competition, results: RaceResults, expanded
         }
         if (isExpanded) items(results.legs(team), key = { it.id }) { ResultLink(it, open, Modifier.padding(start = 24.dp)) }
     }
-}
-
-/** A result row leading to its athlete, when it has one. */
-@Composable
-private fun ResultLink(row: ResultRow, open: (Route) -> Unit, modifier: Modifier = Modifier) {
-    val id = row.athleteId
-    ResultLine(row, if (id != null) modifier.clickable { open(Route.Athlete(id, row.name)) } else modifier)
 }
 
 /** A race known by its ID alone, such as an athlete's result: found among its event's races first. */

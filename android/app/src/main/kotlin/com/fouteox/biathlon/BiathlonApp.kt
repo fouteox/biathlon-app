@@ -21,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.ui.NavDisplay
 import com.fouteox.biathlon.kit.HomeFeed
 import com.fouteox.biathlon.kit.IbuClient
+import com.fouteox.biathlon.kit.WikidataClient
 import com.fouteox.biathlon.kit.homeFeed
 import java.time.Duration
 import java.time.Instant
@@ -28,7 +29,7 @@ import kotlinx.coroutines.delay
 
 /** The app, on Material 3's own colors: the wallpaper's where Android has them (12 and later). */
 @Composable
-fun BiathlonApp(client: IbuClient) {
+fun BiathlonApp(client: IbuClient, wikidata: WikidataClient) {
     val dark = isSystemInDarkTheme()
     val colorScheme = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -39,7 +40,7 @@ fun BiathlonApp(client: IbuClient) {
         else -> lightColorScheme()
     }
     MaterialTheme(colorScheme = colorScheme) {
-        CompositionLocalProvider(LocalIbuClient provides client) { Tabs() }
+        CompositionLocalProvider(LocalIbuClient provides client, LocalWikidataClient provides wikidata) { Tabs() }
     }
 }
 
@@ -66,10 +67,13 @@ private fun Tabs() {
                     Route.Calendar -> CalendarScreen(navigation::open)
                     is Route.Event -> EventScreen(route.event, navigation::open, navigation::goBack)
                     is Route.Race -> RaceScreen(route.race, navigation::open, navigation::goBack)
+                    is Route.Analysis -> AnalysisScreen(route.race, navigation::open, navigation::goBack)
                     is Route.RaceById -> RaceByIdScreen(route.id, route.title, navigation::open, navigation::goBack)
                     Route.Standings -> StandingsScreen(navigation::open)
                     is Route.Athlete -> AthleteScreen(route.id, route.name, navigation::open, navigation::goBack)
                     is Route.Nation -> NationScreen(route.code, route.category, navigation::open, navigation::goBack)
+                    Route.Search -> SearchScreen(navigation::open)
+                    Route.Settings -> SettingsScreen(navigation::goBack)
                 }
             },
             onBack = navigation::goBack,
