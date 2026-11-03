@@ -19,6 +19,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.runtime.serialization.NavBackStackSerializer
 import com.fouteox.biathlon.kit.BiathlonEvent
 import com.fouteox.biathlon.kit.Competition
+import com.fouteox.biathlon.kit.RaceCategory
 import kotlinx.serialization.Serializable
 
 /** The app's screens, saved with their back stacks across process death. */
@@ -35,12 +36,27 @@ sealed interface Route : NavKey {
 
     @Serializable
     data class Race(val race: Competition) : Route
+
+    /** A race known by its ID alone, such as an athlete's result, with its title. */
+    @Serializable
+    data class RaceById(val id: String, val title: String) : Route
+
+    @Serializable
+    data object Standings : Route
+
+    @Serializable
+    data class Athlete(val id: String, val name: String) : Route
+
+    /** A nation's athletes in the standings of [category]. */
+    @Serializable
+    data class Nation(val code: String, val category: RaceCategory) : Route
 }
 
 /** The navigation bar's destinations, each with its own back stack, as the iOS app's tabs. */
 enum class Tab(@param:StringRes val label: Int, @param:DrawableRes val icon: Int, val root: Route) {
     HOME(R.string.home, R.drawable.ic_home, Route.Home),
     CALENDAR(R.string.calendar, R.drawable.ic_calendar_month, Route.Calendar),
+    STANDINGS(R.string.standings, R.drawable.ic_format_list_numbered, Route.Standings),
 }
 
 /**

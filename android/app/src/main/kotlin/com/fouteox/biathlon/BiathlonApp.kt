@@ -65,7 +65,11 @@ private fun Tabs() {
                     Route.Home -> HomeScreen(homeFeed, navigation::open)
                     Route.Calendar -> CalendarScreen(navigation::open)
                     is Route.Event -> EventScreen(route.event, navigation::open, navigation::goBack)
-                    is Route.Race -> RaceScreen(route.race, navigation::goBack)
+                    is Route.Race -> RaceScreen(route.race, navigation::open, navigation::goBack)
+                    is Route.RaceById -> RaceByIdScreen(route.id, route.title, navigation::open, navigation::goBack)
+                    Route.Standings -> StandingsScreen(navigation::open)
+                    is Route.Athlete -> AthleteScreen(route.id, route.name, navigation::open, navigation::goBack)
+                    is Route.Nation -> NationScreen(route.code, route.category, navigation::open, navigation::goBack)
                 }
             },
             onBack = navigation::goBack,
@@ -81,7 +85,7 @@ private fun Tabs() {
 @Composable
 private fun rememberHomeFeed(): LoadViewModel<HomeFeed> {
     val client = LocalIbuClient.current
-    val feed = viewModel { LoadViewModel { client.homeFeed(Instant.now()) } }
+    val feed = viewModel(key = "homeFeed") { LoadViewModel { client.homeFeed(Instant.now()) } }
     val state by feed.state.collectAsStateWithLifecycle()
     val loaded = state.value
     WhileStarted(feed) { feed.load() }

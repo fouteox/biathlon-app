@@ -30,6 +30,9 @@ enum class DateSkeleton(private val pattern: String) {
     /** A day's header in an event's schedule. */
     DAY("EEEEdMMMMy"),
 
+    /** An athlete's birthdate. */
+    BIRTHDATE("dMMMMy"),
+
     /** A month's header in the calendar. */
     MONTH("MMMMy"),
     ;

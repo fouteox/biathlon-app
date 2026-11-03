@@ -75,7 +75,9 @@ class BiathlonAppTest {
         compose.onNodeWithText("Calendar").performClick()
         compose.onNodeWithText("Season", substring = true).performClick()
         compose.onNodeWithText(SeasonId.containing(Instant.now()).previous.displayName).performClick()
-        compose.waitForText("Nordvik")
+        // A past season opens on its last event, below the first.
+        compose.waitForText("Hohenwald")
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Nordvik"))
         compose.onNodeWithText("Nordvik").performClick()
         compose.waitForText("Men's Sprint")
         compose.onNodeWithText("Men's Sprint").performClick()

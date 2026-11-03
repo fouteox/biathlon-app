@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -25,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -44,6 +46,7 @@ import com.fouteox.biathlon.kit.IbuClient
 import com.fouteox.biathlon.kit.Nation
 import com.fouteox.biathlon.kit.RaceKind
 import com.fouteox.biathlon.kit.ResultRow
+import kotlinx.coroutines.flow.combine
 
 /** The app's client, which tests replace with the fictional World Cup. */
 val LocalIbuClient = staticCompositionLocalOf<IbuClient> { error("No IbuClient provided") }
@@ -98,22 +101,33 @@ fun StateBadge(state: Competition.State) {
     }
 }
 
-/** A screen of the app: its title in the top app bar, with a back button below a tab's root. */
+/**
+ * A screen of the app: its title in the top app bar, with a back button below a tab's root,
+ * and the choices it filters its list by under the bar.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Screen(title: String, onBack: (() -> Unit)?, content: @Composable (PaddingValues) -> Unit) {
+fun Screen(
+    title: String,
+    onBack: (() -> Unit)?,
+    pickers: (@Composable RowScope.() -> Unit)? = null,
+    content: @Composable (PaddingValues) -> Unit,
+) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.back))
+            Column {
+                TopAppBar(
+                    title = { Text(title) },
+                    navigationIcon = {
+                        if (onBack != null) {
+                            IconButton(onClick = onBack) {
+                                Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.back))
+                            }
                         }
-                    }
-                },
-            )
+                    },
+                )
+                pickers?.let { PickerRow(it) }
+            }
         },
         content = content,
     )
@@ -121,7 +135,8 @@ fun Screen(title: String, onBack: (() -> Unit)?, content: @Composable (PaddingVa
 
 /**
  * A screen's list once its data loads, pulled to refresh; until then, a progress indicator,
- * or what went wrong with a button to try again.
+ * or what went wrong with a button to try again. [alsoLoading]: the data the list shows besides
+ * its own, which loads on its own and refreshes with it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -130,10 +145,14 @@ fun <T> LoadableList(
     padding: PaddingValues,
     listState: LazyListState = rememberLazyListState(),
     empty: (T) -> Int? = { null },
+    alsoLoading: List<LoadViewModel<*>> = emptyList(),
     content: LazyListScope.(T) -> Unit,
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
-    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val all = listOf(viewModel) + alsoLoading
+    val isRefreshing by remember(all) { combine(all.map { it.isRefreshing }) { flags -> flags.any { it } } }
+        .collectAsStateWithLifecycle(initialValue = false)
+    val refresh = { all.forEach { it.refresh() } }
     val modifier = Modifier.fillMaxSize().padding(padding)
     when (val current = state) {
         Loadable.Loading -> Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -144,9 +163,9 @@ fun <T> LoadableList(
         ) {
             Text(stringResource(R.string.unable_to_load), style = MaterialTheme.typography.titleLarge)
             Text(stringResource(R.string.results_are_temporarily_unavailable), textAlign = TextAlign.Center)
-            Button(onClick = viewModel::refresh, enabled = !isRefreshing) { Text(stringResource(R.string.try_again)) }
+            Button(onClick = refresh, enabled = !isRefreshing) { Text(stringResource(R.string.try_again)) }
         }
-        is Loadable.Loaded -> PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = viewModel::refresh, modifier = modifier) {
+        is Loadable.Loaded -> PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = refresh, modifier = modifier) {
             LazyColumn(Modifier.fillMaxSize(), state = listState) { content(current.value) }
             empty(current.value)?.let { message ->
                 Text(
