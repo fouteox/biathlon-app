@@ -537,7 +537,7 @@ async function send(
 
 /**
  * Sends an event to the race's FCM topic; "deferred" when the update has no subrequest left, and
- * "failed" when Google's access token can't be had either.
+ * "failed" when Google's credentials or access token can't be had either.
  */
 async function sendToTopic(
   env: Env,
@@ -547,7 +547,6 @@ async function sendToTopic(
   state: LiveState,
   now: number,
 ): Promise<"sent" | "deferred" | "failed"> {
-  const { projectId } = serviceAccount(env.GOOGLE_SERVICE_ACCOUNT);
   const message = buildTopicMessage(
     {
       raceId,
@@ -559,11 +558,13 @@ async function sendToTopic(
     now,
   );
   try {
+    const { projectId } = serviceAccount(env.GOOGLE_SERVICE_ACCOUNT);
     const outcome = await tokens.send("fcm", (token, signal) => sendFCM(message, projectId, token, signal));
     if (outcome.kind === "sent" || outcome.kind === "deferred") return outcome.kind;
     console.error("FCM topic message failed", raceId, outcome);
   } catch (error) {
-    // A Google access token that can't be fetched holds up neither the APNs channels nor the starts.
+    // Broken Google credentials, or an access token that can't be fetched, hold up neither the
+    // APNs channels nor the starts.
     console.error("FCM topic message failed", raceId, String(error));
   }
   return "failed";

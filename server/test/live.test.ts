@@ -1035,6 +1035,18 @@ describe("Live Update topics", () => {
     expect((await topicRow(env))?.channelId).toBe(`race-${RACE_ID}`);
   });
 
+  it("keeps broadcasting on the APNs channels with a broken Google service account", async () => {
+    const env = { ...(await makeEnv()), GOOGLE_SERVICE_ACCOUNT: "{}" };
+    stubNetwork();
+    await update(env, NOW, race());
+
+    const sent = stubNetwork();
+    await update(env, NOW, race({ IsLive: true }));
+
+    expect(broadcasts(sent)).toHaveLength(2);
+    expect(await topicRow(env)).toBeNull();
+  });
+
   it("keeps broadcasting on the APNs channels while Google's access token can't be had", async () => {
     const env = await makeEnv();
     stubNetwork({ googleUnavailable: true });
