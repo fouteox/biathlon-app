@@ -294,6 +294,17 @@ class LiveUpdatesTest {
         assertEquals("Live", posted().single().extras.getString(Notification.EXTRA_SUB_TEXT))
     }
 
+    /** A late topic message during the lookup doesn't hide the newer state the lookup answers with. */
+    @Test
+    fun showsTheLookedUpStateNewerThanAMessageReceivedMeanwhile() = runBlocking {
+        follow()
+        liveUpdates.receive(LiveUpdate.Update(raceId, RaceLiveState.demo(start)[0], now - Duration.ofMinutes(5)))
+        channel = HttpStatusCode.OK to """{"channelId":"$topic","state":${stateJson(live)},"timestamp":${now.epochSecond}}"""
+        whileLookingUp = { liveUpdates.receive(LiveUpdate.Update(raceId, RaceLiveState.demo(start)[1], now - Duration.ofMinutes(2))) }
+        liveUpdates.refresh(now)
+        assertEquals("1 🇫🇷 PERROT E. 12:41.6", posted().single().extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+    }
+
     @Test
     fun removesAnEndPastItsDismissal() = runBlocking {
         follow()

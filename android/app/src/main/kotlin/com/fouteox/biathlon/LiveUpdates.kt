@@ -160,9 +160,9 @@ class LiveUpdates(
         val shownBefore = lock.withLock { races()[raceId]?.shown }
         val current = lookUp(raceId) ?: return
         lock.withLock {
-            // A message received while the lookup was on its way is newer than its answer, an
-            // end included, which comes without a date of its own to compare.
-            if (races()[raceId]?.shown == shownBefore) receiveAlone(current, now)
+            // An answered end comes without a date to compare: a message received while the
+            // lookup was on its way may be newer. A dated state goes through the usual comparison.
+            if (current.publishedAt != null || races()[raceId]?.shown == shownBefore) receiveAlone(current, now)
         }
     }
 
