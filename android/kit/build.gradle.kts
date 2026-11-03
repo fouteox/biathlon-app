@@ -28,6 +28,7 @@ lint {
 }
 
 dependencies {
+    implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.serialization.json)
     api(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)

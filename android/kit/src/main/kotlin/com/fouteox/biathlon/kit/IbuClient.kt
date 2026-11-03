@@ -7,6 +7,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.URLBuilder
 import io.ktor.http.Url
 import io.ktor.http.appendPathSegments
+import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -53,19 +54,27 @@ class IbuClient(
 
     // Transport
 
-    private suspend inline fun <reified T> get(path: String, vararg query: Pair<String, String>): T {
-        val url = URLBuilder(baseUrl).apply {
-            appendPathSegments(path)
-            query.sortedBy { it.first }.forEach { (name, value) -> parameters.append(name, value) }
-        }.build()
-        val response = httpClient.get(url)
-        if (!response.status.isSuccess()) throw IbuException.Http(response.status.value)
+    /** The response to `path`, decoded as the IBU API's JSON. */
+    internal suspend inline fun <reified T> get(path: String, vararg query: Pair<String, String>): T {
+        val body = body(path, query.asList())
         return try {
-            IbuJson.decodeFromString(response.bodyAsText())
+            IbuJson.decodeFromString(body)
         } catch (error: IllegalArgumentException) {
             // Malformed JSON and unexpected shapes alike: SerializationException is one too.
             throw IbuException.Decoding(path, error)
         }
+    }
+
+    /** The body of a successful response to `path`, with its query sorted by name. */
+    internal suspend fun body(path: String, query: List<Pair<String, String>>): String {
+        val url = URLBuilder(baseUrl).apply {
+            appendPathSegments(path)
+            // Spaces as `%20` rather than Ktor's `+`, as the iOS app sends them: both apps share the server's cache.
+            query.sortedBy { it.first }.forEach { (name, value) -> encodedParameters.append(name, value.encodeURLParameter()) }
+        }.build()
+        val response = httpClient.get(url)
+        if (!response.status.isSuccess()) throw IbuException.Http(response.status.value)
+        return response.bodyAsText()
     }
 
     companion object {

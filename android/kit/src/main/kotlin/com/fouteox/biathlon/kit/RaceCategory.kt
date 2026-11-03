@@ -8,6 +8,9 @@ enum class RaceCategory(val code: String) {
     ;
 
     companion object {
+        /** Standings exist for men and women only. */
+        val WITH_STANDINGS = listOf(MEN, WOMEN)
+
         fun of(code: String): RaceCategory? = entries.firstOrNull { it.code == code }
     }
 }

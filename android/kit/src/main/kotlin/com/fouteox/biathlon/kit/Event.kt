@@ -18,4 +18,6 @@ data class BiathlonEvent(
 
     /** The Olympics, in the World Cup calendar too, end in `SWRLOG__` (`BT2526SWRLOG__`). */
     val isOlympics: Boolean get() = id.endsWith("SWRLOG__")
+
+    enum class Phase { PAST, UNDERWAY, UPCOMING }
 }
