@@ -14,7 +14,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import com.fouteox.biathlon.kit.IbuClient
 import com.fouteox.biathlon.kit.SeasonId
-import com.fouteox.biathlon.kit.WikidataClient
 import com.fouteox.biathlon.kit.sample
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -34,7 +33,7 @@ class BiathlonAppTest {
     val compose = createComposeRule()
 
     private fun launch(client: IbuClient = IbuClient.sample(Instant.now())) {
-        compose.setContent { BiathlonApp(client, WikidataClient.sample(), server = null) }
+        compose.launchApp(client)
     }
 
     @Test

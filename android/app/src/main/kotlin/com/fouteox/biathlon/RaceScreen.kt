@@ -28,10 +28,13 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fouteox.biathlon.kit.Competition
+import com.fouteox.biathlon.kit.FavoriteSet
 import com.fouteox.biathlon.kit.Nation
 import com.fouteox.biathlon.kit.RaceResults
+import com.fouteox.biathlon.kit.ResultRow
 import com.fouteox.biathlon.kit.TvGuide
 import com.fouteox.biathlon.kit.hasAnalysisRankings
+import com.fouteox.biathlon.kit.isFavorite
 import java.time.Instant
 import java.util.Locale
 
@@ -48,6 +51,7 @@ fun RaceScreen(race: Competition, open: (Route) -> Unit, onBack: () -> Unit) {
     RefreshWhileLive(isLive, results::load)
     val tvGuide = rememberTvGuide()
     val guide = tvGuide?.state?.collectAsStateWithLifecycle()?.value?.value
+    val favorites = rememberFavoriteSet()
     Screen(race.title(), onBack, actions = { RaceActions(latest, state.value, open) }) { padding ->
         // A relay's teams opened on their legs.
         var expanded by rememberSaveable { mutableStateOf(setOf<String>()) }
@@ -69,7 +73,7 @@ fun RaceScreen(race: Competition, open: (Route) -> Unit, onBack: () -> Unit) {
                 }
             } else {
                 item { listTitle(loaded, isLive)?.let { SectionHeader(it) } }
-                rows(competition, loaded, expanded, open) { team -> expanded = if (team in expanded) expanded - team else expanded + team }
+                rows(competition, loaded, favorites, expanded, open) { team -> expanded = if (team in expanded) expanded - team else expanded + team }
                 (state as? Loadable.Loaded)?.loadedAt?.takeIf { isLive }?.let { loadedAt ->
                     item { SectionFooter(updatedAt(loadedAt)) }
                 }
@@ -189,18 +193,27 @@ private fun RaceSummary(race: Competition, results: RaceResults) {
     )
 }
 
-private fun LazyListScope.rows(race: Competition, results: RaceResults, expanded: Set<String>, open: (Route) -> Unit, toggle: (String) -> Unit) {
+private fun LazyListScope.rows(
+    race: Competition,
+    results: RaceResults,
+    favorites: FavoriteSet,
+    expanded: Set<String>,
+    open: (Route) -> Unit,
+    toggle: (String) -> Unit,
+) {
+    // A relay team is a favorite through one of its legs too.
+    fun isFavorite(row: ResultRow) = results.isFavorite(row, favorites)
     if (!race.isRelay) {
-        items(results.standings, key = { it.id }) { ResultLink(it, open) }
+        items(results.standings, key = { it.id }) { ResultLink(it, isFavorite(it), open) }
         return
     }
     for (team in results.standings) {
         val isExpanded = team.id in expanded
         item(key = team.id) {
             val state = stringResource(if (isExpanded) R.string.expanded else R.string.collapsed)
-            ResultLine(team, Modifier.clickable { toggle(team.id) }.semantics { stateDescription = state })
+            ResultLine(team, isFavorite(team), Modifier.clickable { toggle(team.id) }.semantics { stateDescription = state })
         }
-        if (isExpanded) items(results.legs(team), key = { it.id }) { ResultLink(it, open, Modifier.padding(start = 24.dp)) }
+        if (isExpanded) items(results.legs(team), key = { it.id }) { ResultLink(it, isFavorite(it), open, Modifier.padding(start = 24.dp)) }
     }
 }
 

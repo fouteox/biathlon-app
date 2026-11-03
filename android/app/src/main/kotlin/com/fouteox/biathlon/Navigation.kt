@@ -56,6 +56,9 @@ sealed interface Route : NavKey {
     data class Nation(val code: String, val category: RaceCategory) : Route
 
     @Serializable
+    data object Favorites : Route
+
+    @Serializable
     data object Search : Route
 
     @Serializable
@@ -67,6 +70,7 @@ enum class Tab(@param:StringRes val label: Int, @param:DrawableRes val icon: Int
     HOME(R.string.home, R.drawable.ic_home, Route.Home),
     CALENDAR(R.string.calendar, R.drawable.ic_calendar_month, Route.Calendar),
     STANDINGS(R.string.standings, R.drawable.ic_format_list_numbered, Route.Standings),
+    FAVORITES(R.string.favorites, R.drawable.ic_star, Route.Favorites),
     SEARCH(R.string.search, R.drawable.ic_search, Route.Search),
 }
 

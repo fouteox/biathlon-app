@@ -24,7 +24,12 @@ fun NationScreen(nation: String, initialCategory: RaceCategory, open: (Route) ->
         LoadViewModel { client.worldCupStandings(shown, StandingsDiscipline.TOTAL, Instant.now()) }
     }
     WhileStarted(standings) { standings.load() }
-    Screen(Nation.namedTitle(nation), onBack, pickers = { CategoryPicker(category) { category = it } }) { padding ->
+    Screen(
+        Nation.namedTitle(nation),
+        onBack,
+        pickers = { CategoryPicker(category) { category = it } },
+        actions = { FavoriteButton(Favorite.Kind.NATION, nation, Nation.localizedName(nation), nation) },
+    ) { padding ->
         LoadableList(standings, padding, empty = { if (it.standings.athletes(nation).isEmpty()) R.string.no_athletes_in_the_standings else null }) { loaded ->
             val athletes = loaded.standings.athletes(nation)
             if (athletes.isEmpty()) return@LoadableList

@@ -28,9 +28,17 @@ import java.time.Duration
 import java.time.Instant
 import kotlinx.coroutines.delay
 
-/** The app, on Material 3's own colors: the wallpaper's where Android has them (12 and later). */
 @Composable
-fun BiathlonApp(client: IbuClient, wikidata: WikidataClient, server: ServerClient?) {
+fun BiathlonApp(client: IbuClient, wikidata: WikidataClient, server: ServerClient?, favorites: Favorites) {
+    AppEnvironment(client, wikidata, server, favorites) { Tabs() }
+}
+
+/**
+ * What every screen reads: Material 3's own colors, the wallpaper's where Android has them (12
+ * and later), and the app's clients and favorites, which tests replace.
+ */
+@Composable
+fun AppEnvironment(client: IbuClient, wikidata: WikidataClient, server: ServerClient?, favorites: Favorites, content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     val colorScheme = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -45,7 +53,9 @@ fun BiathlonApp(client: IbuClient, wikidata: WikidataClient, server: ServerClien
             LocalIbuClient provides client,
             LocalWikidataClient provides wikidata,
             LocalServerClient provides server,
-        ) { Tabs() }
+            LocalFavorites provides favorites,
+            content = content,
+        )
     }
 }
 
@@ -77,6 +87,7 @@ private fun Tabs() {
                     Route.Standings -> StandingsScreen(navigation::open)
                     is Route.Athlete -> AthleteScreen(route.id, route.name, navigation::open, navigation::goBack)
                     is Route.Nation -> NationScreen(route.code, route.category, navigation::open, navigation::goBack)
+                    Route.Favorites -> FavoritesScreen(navigation::open)
                     Route.Search -> SearchScreen(navigation::open)
                     Route.Settings -> SettingsScreen(navigation::goBack)
                 }

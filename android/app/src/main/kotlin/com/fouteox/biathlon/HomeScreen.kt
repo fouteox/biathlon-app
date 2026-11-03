@@ -22,19 +22,23 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.fouteox.biathlon.kit.Competition
+import com.fouteox.biathlon.kit.FavoriteSet
 import com.fouteox.biathlon.kit.HomeFeed
 import com.fouteox.biathlon.kit.Nation
 import com.fouteox.biathlon.kit.RaceResults
+import com.fouteox.biathlon.kit.featuredStandings
+import com.fouteox.biathlon.kit.isFavorite
 
 @Composable
 fun HomeScreen(feed: LoadViewModel<HomeFeed>, open: (Route) -> Unit) {
+    val favorites = rememberFavoriteSet()
     Screen(
         stringResource(R.string.home),
         onBack = null,
         actions = { BarAction(R.drawable.ic_settings, stringResource(R.string.settings)) { open(Route.Settings) } },
     ) { padding ->
         LoadableList(feed, padding, empty = { if (it.isEmpty) R.string.no_races else null }) { feed ->
-            featured(feed, open)
+            featured(feed, favorites, open)
             val live = feed.live
             val next = feed.next
             // The next race keeps its section while another is live.
@@ -44,7 +48,7 @@ fun HomeScreen(feed: LoadViewModel<HomeFeed>, open: (Route) -> Unit) {
             }
             val latest = feed.latestResults
             val finished = feed.latestFinished
-            if (latest != null && finished != null) latestResult(feed, finished, latest, open)
+            if (latest != null && finished != null) latestResult(feed, finished, latest, favorites, open)
         }
     }
 }
@@ -53,7 +57,7 @@ fun HomeScreen(feed: LoadViewModel<HomeFeed>, open: (Route) -> Unit) {
  * The anchor: the live race, otherwise the next one, under its event, the context of the races
  * below; with no race ahead, as after a season's last race, the event on its own.
  */
-private fun LazyListScope.featured(feed: HomeFeed, open: (Route) -> Unit) {
+private fun LazyListScope.featured(feed: HomeFeed, favorites: FavoriteSet, open: (Route) -> Unit) {
     val race = feed.live ?: feed.next
     val event = feed.event
     if (race == null && event != null) item { SectionHeader(stringResource(R.string.event)) }
@@ -62,15 +66,15 @@ private fun LazyListScope.featured(feed: HomeFeed, open: (Route) -> Unit) {
     item { RaceHeading(race, Modifier.clickable { open(Route.Race(race)) }) }
     val results = feed.liveResults
     if (race.state == Competition.State.LIVE && results != null) {
-        items(results.standings.take(LIVE_TOP), key = { "live/${it.id}" }) { ResultLine(it) }
+        topResults(results, LIVE_TOP, favorites, "live")
     }
 }
 
 /** The podium of the latest finished race, its name in the header and its start below. */
-private fun LazyListScope.latestResult(feed: HomeFeed, race: Competition, results: RaceResults, open: (Route) -> Unit) {
+private fun LazyListScope.latestResult(feed: HomeFeed, race: Competition, results: RaceResults, favorites: FavoriteSet, open: (Route) -> Unit) {
     item { SectionHeader(stringResource(R.string.latest_result_arg, race.title())) }
     // Keyed apart from the live race's rows, where the same athletes can rank.
-    items(results.standings.take(PODIUM), key = { "latest/${it.id}" }) { ResultLine(it) }
+    topResults(results, PODIUM, favorites, "latest")
     item {
         ListItem(
             headlineContent = { Text(stringResource(R.string.all_results)) },
@@ -83,6 +87,11 @@ private fun LazyListScope.latestResult(feed: HomeFeed, race: Competition, result
         val event = feed.event(race)?.takeIf { it != feed.event }
         SectionFooter(event?.let { stringResource(R.string.arg_arg, start, Nation.titled(it.shortDescription, it.nation)) } ?: start)
     }
+}
+
+/** The top of the standings, then the favorites ranked below it, keyed under [section]. */
+private fun LazyListScope.topResults(results: RaceResults, top: Int, favorites: FavoriteSet, section: String) {
+    items(results.featuredStandings(top, favorites), key = { "$section/${it.id}" }) { ResultLine(it, results.isFavorite(it, favorites)) }
 }
 
 /**

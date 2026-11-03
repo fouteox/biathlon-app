@@ -39,10 +39,11 @@ fun AnalysisScreen(race: Competition, open: (Route) -> Unit, onBack: () -> Unit)
             MenuPicker(segment, listOf(null) + race.segments(measure), { segmentTitle(measure, it) }) { segment = it }
         },
     ) { padding ->
+        val favorites = rememberFavoriteSet()
         LoadableList(ranking, padding) { results ->
             // The ranking shown, named in the list itself and not only in the pickers.
             item { SectionHeader(stringResource(R.string.arg_arg, stringResource(measure.title), segmentTitle(measure, segment))) }
-            items(results.rows, key = { it.id }) { ResultLink(it, open) }
+            items(results.rows, key = { it.id }) { ResultLink(it, favorites.contains(it), open) }
             item { SectionFooter(stringResource(measure.explanation)) }
         }
     }

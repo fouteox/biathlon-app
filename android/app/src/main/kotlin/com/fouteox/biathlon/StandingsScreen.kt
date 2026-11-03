@@ -35,6 +35,7 @@ import com.fouteox.biathlon.kit.RaceCategory
 import com.fouteox.biathlon.kit.SeasonId
 import com.fouteox.biathlon.kit.SeasonStandings
 import com.fouteox.biathlon.kit.StandingsDiscipline
+import com.fouteox.biathlon.kit.favorites
 import com.fouteox.biathlon.kit.worldCupStandings
 import java.time.Instant
 
@@ -96,9 +97,16 @@ fun StandingsScreen(open: (Route) -> Unit) {
             SeasonPicker(seasons, season) { picked = it.rawValue }
         },
     ) { padding ->
+        val favorites = rememberFavoriteSet()
         LoadableList(standings, padding, empty = ::emptyMessage) { result ->
+            // The reader's own first, with their rank; they keep their place below.
+            val mine = result.standings.favorites(favorites)
+            if (mine.isNotEmpty()) {
+                item { SectionHeader(stringResource(R.string.my_favorites)) }
+                items(mine, key = { "mine/${it.id}" }) { row -> StandingRow(row, shownCategory, open, highlighted = true) }
+            }
             item { SectionHeader(standingsTitle(shownCategory, shownDiscipline)) }
-            items(result.standings.rows, key = { it.id }) { row -> StandingRow(row, shownCategory, open) }
+            items(result.standings.rows, key = { it.id }) { row -> StandingRow(row, shownCategory, open, favorites.contains(row)) }
             item { standingsFooter(result)?.let { SectionFooter(it) } }
         }
     }
@@ -124,9 +132,9 @@ private fun standingsFooter(result: SeasonStandings): String? = when {
     else -> result.standings.asOf
 }
 
-/** A row of the World Cup standings, which opens its athlete or its nation. */
+/** A row of the World Cup standings, which opens its athlete or its nation; [highlighted] for a favorite. */
 @Composable
-fun StandingRow(row: CupRow, category: RaceCategory, open: (Route) -> Unit) {
+fun StandingRow(row: CupRow, category: RaceCategory, open: (Route) -> Unit, highlighted: Boolean = false) {
     val nation = if (row.isNation) row.nation ?: row.name else row.nation
     val route = row.athleteId?.let { Route.Athlete(it, row.name) } ?: Route.Nation(nation.orEmpty(), category)
     ListItem(
@@ -139,7 +147,7 @@ fun StandingRow(row: CupRow, category: RaceCategory, open: (Route) -> Unit) {
         },
         headlineContent = {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(if (row.isNation) Nation.localizedName(nation.orEmpty()) else row.shortName ?: row.name)
+                RowName(if (row.isNation) Nation.localizedName(nation.orEmpty()) else row.shortName ?: row.name, highlighted)
                 if ("yellow" in row.bibColors) {
                     // The leader's bib is yellow: here the color is the information.
                     Icon(painterResource(R.drawable.ic_apparel), stringResource(R.string.yellow_bib), Modifier.size(18.dp), tint = YELLOW_BIB)

@@ -4,8 +4,6 @@ import android.content.ComponentName
 import android.content.Intent
 import android.content.IntentFilter
 import android.provider.CalendarContract
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -58,13 +56,7 @@ class RaceActionsTest {
     private fun race(id: String): Competition = runBlocking { client.race(id) }
 
     private fun show(race: Competition) {
-        compose.setContent {
-            MaterialTheme {
-                CompositionLocalProvider(LocalIbuClient provides client, LocalServerClient provides server) {
-                    RaceScreen(race, open = {}, onBack = {})
-                }
-            }
-        }
+        compose.showScreen(client, server) { RaceScreen(race, open = {}, onBack = {}) }
     }
 
     /** The podium in a sentence, race and place first, names as a voice reads them. */

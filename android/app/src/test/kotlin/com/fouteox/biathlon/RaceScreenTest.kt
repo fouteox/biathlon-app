@@ -1,7 +1,5 @@
 package com.fouteox.biathlon
 
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -31,11 +29,7 @@ class RaceScreenTest {
     @Test
     fun relayTeamsOpenOnTheirLegs() {
         val race = checkNotNull(runBlocking { client.results("BT2526SWRLCP01SMRL") }.competition)
-        compose.setContent {
-            MaterialTheme {
-                CompositionLocalProvider(LocalIbuClient provides client) { RaceScreen(race, open = { opened += it }, onBack = {}) }
-            }
-        }
+        compose.showScreen(client) { RaceScreen(race, open = { opened += it }, onBack = {}) }
         compose.waitForText("NORWAY")
         compose.onNodeWithText("ULDAL M.").assertDoesNotExist()
         compose.onNodeWithText("NORWAY").performClick()

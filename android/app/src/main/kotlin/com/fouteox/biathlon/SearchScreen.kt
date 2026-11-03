@@ -1,8 +1,6 @@
 package com.fouteox.biathlon
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,7 +10,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExpandedFullScreenSearchBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Text
@@ -23,13 +20,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -120,7 +114,8 @@ fun SearchScreen(open: (Route) -> Unit) {
         open(route)
     }
     // Tapping the bar opens the full-screen search; the results stay below it once it closes.
-    val content = @Composable { modifier: Modifier -> SearchResults(results, search::retry, openCollapsed, modifier) }
+    val suggestions = rememberFavorites().orEmpty().filter { it.kind == Favorite.Kind.ATHLETE }
+    val content = @Composable { modifier: Modifier -> SearchResults(results, suggestions, search::retry, openCollapsed, modifier) }
     Scaffold(topBar = { TopSearchBar(state = searchBar, inputField = inputField) }) { padding ->
         content(Modifier.fillMaxSize().padding(padding))
     }
@@ -128,13 +123,29 @@ fun SearchScreen(open: (Route) -> Unit) {
 }
 
 @Composable
-private fun SearchResults(results: SearchViewModel.Results?, retry: () -> Unit, open: (Route) -> Unit, modifier: Modifier) {
+private fun SearchResults(
+    results: SearchViewModel.Results?,
+    suggestions: List<Favorite>,
+    retry: () -> Unit,
+    open: (Route) -> Unit,
+    modifier: Modifier,
+) {
     when (val athletes = results?.athletes) {
-        null -> Prompt(stringResource(R.string.search_for_a_biathlete), stringResource(R.string.type_the_start_of_a_first_or_last_name), modifier)
+        // Before anything is typed, the favorite athletes, who open their profile.
+        null if suggestions.isNotEmpty() -> LazyColumn(modifier) {
+            items(suggestions, key = { it.key }) { favorite ->
+                ListItem(
+                    modifier = Modifier.clickable { open(Route.Athlete(favorite.key, favorite.name)) },
+                    leadingContent = { NationMark(favorite.nation) },
+                    headlineContent = { Text(favorite.title) },
+                )
+            }
+        }
+        null -> Prompt(R.drawable.ic_search, stringResource(R.string.search_for_a_biathlete), stringResource(R.string.type_the_start_of_a_first_or_last_name), modifier)
         Loadable.Loading -> LoadProgress(modifier)
         is Loadable.Failed -> LoadFailure(retry, isRetrying = false, modifier)
         is Loadable.Loaded -> if (athletes.value.isEmpty()) {
-            Prompt(stringResource(R.string.no_results_for_arg, results.query), stringResource(R.string.check_the_spelling_or_try_a_new_search), modifier)
+            Prompt(R.drawable.ic_search, stringResource(R.string.no_results_for_arg, results.query), stringResource(R.string.check_the_spelling_or_try_a_new_search), modifier)
         } else {
             LazyColumn(modifier) {
                 items(athletes.value, key = { it.id }) { athlete ->
@@ -146,19 +157,5 @@ private fun SearchResults(results: SearchViewModel.Results?, retry: () -> Unit, 
                 }
             }
         }
-    }
-}
-
-/** What to do, or what happened, in place of the results. */
-@Composable
-private fun Prompt(title: String, text: String, modifier: Modifier) {
-    Column(
-        modifier.padding(horizontal = 32.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(painterResource(R.drawable.ic_search), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
     }
 }

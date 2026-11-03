@@ -4,6 +4,8 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
+    alias(libs.plugins.room)
 }
 
 /**
@@ -171,6 +173,11 @@ kotlin {
     }
 }
 
+// The favorites' database schemas, versioned to write and test its migrations.
+room {
+    schemaDirectory("$projectDir/schemas")
+}
+
 dependencies {
     implementation(project(":kit"))
     implementation(platform(libs.compose.bom))
@@ -185,6 +192,9 @@ dependencies {
     // Athletes' photos, with OkHttp as the IBU client.
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
+    // The favorites, as SwiftData keeps them on iOS.
+    implementation(libs.room.runtime)
+    ksp(libs.room.compiler)
 
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
