@@ -58,6 +58,9 @@ class LiveUpdatesTest {
     /** What `GET /v1/races/:id/channels/fcm` answers. */
     private var channel: Pair<HttpStatusCode, String> = HttpStatusCode.NotFound to """{"error":"no channel for this race"}"""
 
+    /** What happens while the lookup is on its way. */
+    private var whileLookingUp: (suspend () -> Unit)? = null
+
     private val subscriptions = mutableListOf<String>()
 
     /** What FCM calls once each subscription succeeds, which [subscribed] stands for. */
@@ -83,6 +86,7 @@ class LiveUpdatesTest {
             HttpClient(
                 MockEngine { request ->
                     assertEquals("https://server.example/v1/races/$raceId/channels/fcm", request.url.toString())
+                    whileLookingUp?.invoke()
                     respond(channel.second, channel.first)
                 },
             ),
@@ -276,6 +280,18 @@ class LiveUpdatesTest {
         liveUpdates.receive(LiveUpdate.Update(raceId, RaceLiveState.demo(start)[0], now - Duration.ofMinutes(2)))
         liveUpdates.receive(LiveUpdate.End(raceId, live, now + Duration.ofMinutes(30), now - Duration.ofMinutes(1)), now)
         assertEquals(setOf(raceId), followed())
+    }
+
+    /** A cancellation called off while the catch-up's lookup was on its way, which answers with the old end. */
+    @Test
+    fun keepsFollowingARaceReinstatedWhileLookingItUp() = runBlocking {
+        follow()
+        liveUpdates.receive(LiveUpdate.Update(raceId, RaceLiveState.demo(start)[0], now - Duration.ofMinutes(5)))
+        channel = HttpStatusCode.Gone to """{"state":${stateJson(RaceLiveState(Competition.State.CANCELLED, start, emptyList()))},"dismissalDate":${now.epochSecond + 1800}}"""
+        whileLookingUp = { liveUpdates.receive(LiveUpdate.Update(raceId, live, now)) }
+        liveUpdates.refresh(now)
+        assertEquals(setOf(raceId), followed())
+        assertEquals("Live", posted().single().extras.getString(Notification.EXTRA_SUB_TEXT))
     }
 
     @Test
