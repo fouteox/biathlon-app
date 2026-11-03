@@ -5,7 +5,8 @@ name: Release Android
 # android/play/listings: the counterpart of Xcode Cloud's TestFlight builds. The checks run
 # again on that exact commit first.
 #
-# Skipped until the upload key is set up (the ANDROID_UPLOAD_KEY_ALIAS variable); sent to
+# Skipped until the upload key is set up (the ANDROID_UPLOAD_KEY_ALIAS repository variable,
+# as the job's condition runs before the environment's variables reach it); sent to
 # Google Play once the access is set up too (the GOOGLE_PLAY_SERVICE_ACCOUNT variable). Until
 # then, the signed bundle is kept as the run's artifact, for its first upload by hand in the
 # Play Console, which the API can't do. Steps in android/play/README.md.

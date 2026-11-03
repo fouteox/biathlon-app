@@ -21,7 +21,9 @@ then signs it with the app's key, which Google keeps.
    - the secrets `ANDROID_UPLOAD_KEYSTORE_BASE64` (`base64 -i upload.jks`),
      `ANDROID_UPLOAD_KEYSTORE_PASSWORD` and `ANDROID_UPLOAD_KEY_PASSWORD` (the same password, as
      keytool keeps PKCS12 key stores);
-   - the variable `ANDROID_UPLOAD_KEY_ALIAS` (`upload`), which turns the workflow on.
+   - and in the repository's variables (Settings > Secrets and variables > Actions >
+     Variables), the variable `ANDROID_UPLOAD_KEY_ALIAS` (`upload`), which turns the workflow
+     on: the workflow reads it before the `production` environment's variables are available.
 2. **The app in the Play Console**: create it (package `com.fouteox.biathlon`), then upload by
    hand the signed bundle of a workflow run (its artifact) to the internal testing track: the
    API can't create an app.
