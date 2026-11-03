@@ -1,6 +1,6 @@
-import type { APNsEnvironment, PushOutcome } from "./apns";
+import type { PushOutcome } from "./apns";
 import { DEFERRED, type Deferred, type ProviderTokens } from "./providerTokens";
-import type { LotPush } from "./pushSender";
+import { serviceOf, type LotPush, type PushService } from "./pushSender";
 import { SUBREQUESTS_PER_RUN } from "./subrequests";
 
 /** The pushes one Durable Object invocation sends: its whole budget of external subrequests. */
@@ -56,23 +56,23 @@ export class PushLots {
   async flush(): Promise<void> {
     const pending = this.pending;
     this.pending = [];
-    const environments = Map.groupBy(pending, ({ push }) => push.environment);
-    await Promise.all([...environments].map(([environment, items]) => this.sendAll(environment, items)));
+    const services = Map.groupBy(pending, ({ push }) => serviceOf(push));
+    await Promise.all([...services].map(([service, items]) => this.sendAll(service, items)));
   }
 
   /**
-   * Sends one environment's pushes. Those APNs answers with an expired provider token go
+   * Sends one service's pushes. Those it answers with an expired provider token go
    * again once, with a new one, as `ProviderTokens.send` does for a single request. Without a
    * provider token, none is sent: each is a retry, or stays expired.
    */
-  private async sendAll(environment: APNsEnvironment, items: Pending[]): Promise<void> {
+  private async sendAll(service: PushService, items: Pending[]): Promise<void> {
     const pushes = items.map(({ push }) => push);
-    const outcomes = await this.tokens.token(environment).then(
+    const outcomes = await this.tokens.token(service).then(
       (providerToken) => this.lots(providerToken, pushes),
       (error: unknown) => pushes.map(() => retry(error)),
     );
     const expired = outcomes.flatMap((outcome, index) => (outcome.kind === "expiredProviderToken" ? [index] : []));
-    const renewed = expired.length > 0 ? await this.tokens.renew(environment).catch(() => undefined) : undefined;
+    const renewed = expired.length > 0 ? await this.tokens.renew(service).catch(() => undefined) : undefined;
     if (renewed) {
       const retried = await this.lots(
         renewed,

@@ -1,12 +1,16 @@
 import { isEnvironment, probe } from "./apns";
 import {
+  deleteAndroidDevice,
   deleteOwnedDevice,
   isDeviceToken,
   ownsDevice,
+  parseAndroidRegistration,
   parseRegistration,
+  saveAndroidDevice,
   saveDevice,
   type DeviceRegistration,
 } from "./devices";
+import { isInstallationId } from "./fcm";
 import {
   deleteOwnedStartToken,
   ownsStartToken,
@@ -18,6 +22,7 @@ import {
 import { IBU_BASE_URL } from "./ibu";
 import { isPurpose, issueChallenge } from "./challenges";
 import { authorize, pruneKeys, registerKey } from "./keys";
+import { checkIntegrity } from "./playIntegrity";
 import { channelFor, pruneChannels } from "./live";
 import { TV_COVERAGE } from "./tvCoverage";
 import { claimCronRun, pruneRaces, runCron } from "./watcher";
@@ -32,6 +37,9 @@ export default {
       const match = url.pathname.match(pattern);
       if (match) return register(request, env, decodeURIComponent(match[1] ?? "").toLowerCase());
     }
+
+    const androidDevice = url.pathname.match(/^\/v1\/android-devices\/([^/]+)$/);
+    if (androidDevice) return registerAndroidDevice(request, env, decodeURIComponent(androidDevice[1] ?? ""));
 
     if (url.pathname === "/v1/app-attest/challenges" && request.method === "POST") {
       const limited = await rateLimited(env.CHALLENGE_RATE_LIMITER, request);
@@ -134,6 +142,24 @@ async function registerToken<Registration>(request: Request, env: Env, token: st
   if (!(await store.owns(env.DB, token, auth.keyId))) return json({ error: "token registered by another key" }, 403);
   if (registration !== undefined) await store.save(env.DB, registration, auth.keyId, Date.now());
   else await store.delete(env.DB, token, auth.keyId);
+  return new Response(null, { status: 204 });
+}
+
+/**
+ * Registers (`PUT`) or unregisters (`DELETE`) an Android device by its Firebase Installation ID,
+ * the request vouched for by its Play Integrity token. Checked last: each check spends Google's quota.
+ */
+async function registerAndroidDevice(request: Request, env: Env, fid: string): Promise<Response> {
+  if (request.method !== "PUT" && request.method !== "DELETE") return new Response(null, { status: 405 });
+  if (!isInstallationId(fid)) return json({ error: "invalid installation ID" }, 400);
+  // Read once: the request hash covers these exact bytes.
+  const body = new Uint8Array(await request.arrayBuffer());
+  const registration = request.method === "PUT" ? parseAndroidRegistration(fid, parseJSON(body)) : undefined;
+  if (typeof registration === "string") return json({ error: registration }, 400);
+  const failure = await checkIntegrity(env, request, body, Date.now());
+  if (failure) return json({ error: failure.error }, failure.status);
+  if (registration !== undefined) await saveAndroidDevice(env.DB, registration, Date.now());
+  else await deleteAndroidDevice(env.DB, fid);
   return new Response(null, { status: 204 });
 }
 
