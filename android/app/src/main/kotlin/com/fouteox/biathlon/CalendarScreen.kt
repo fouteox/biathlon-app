@@ -46,7 +46,9 @@ fun CalendarScreen(open: (Route) -> Unit) {
     val seasons = remember { SeasonId.since(SeasonId.FIRST_WITH_RACES, Instant.now()) }
     var season by rememberSaveable { mutableStateOf(seasons.first().rawValue) }
     // A season's list keeps its own data: picking it again shows it at once, then refreshes it.
-    val events = viewModel(key = season) { LoadViewModel { client.events(SeasonId(season)) } }
+    // Its fetch captures the season it was made for, not the state, which can be another's.
+    val shown = SeasonId(season)
+    val events = viewModel(key = shown.rawValue) { LoadViewModel { client.events(shown) } }
     WhileStarted(events) { events.load() }
     Scaffold(
         topBar = {

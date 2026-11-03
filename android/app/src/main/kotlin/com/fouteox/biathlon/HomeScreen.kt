@@ -58,14 +58,15 @@ private fun LazyListScope.featured(feed: HomeFeed, open: (Route) -> Unit) {
     item { RaceHeading(race, Modifier.clickable { open(Route.Race(race)) }) }
     val results = feed.liveResults
     if (race.state == Competition.State.LIVE && results != null) {
-        items(results.standings.take(LIVE_TOP), key = { it.id }) { ResultLine(it) }
+        items(results.standings.take(LIVE_TOP), key = { "live/${it.id}" }) { ResultLine(it) }
     }
 }
 
 /** The podium of the latest finished race, its name in the header and its start below. */
 private fun LazyListScope.latestResult(feed: HomeFeed, race: Competition, results: RaceResults, open: (Route) -> Unit) {
     item { SectionHeader(stringResource(R.string.latest_result_arg, race.title())) }
-    items(results.standings.take(PODIUM), key = { it.id }) { ResultLine(it) }
+    // Keyed apart from the live race's rows, where the same athletes can rank.
+    items(results.standings.take(PODIUM), key = { "latest/${it.id}" }) { ResultLine(it) }
     item {
         ListItem(
             headlineContent = { Text(stringResource(R.string.all_results)) },
