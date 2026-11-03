@@ -29,13 +29,21 @@ import java.time.Instant
 import kotlinx.coroutines.delay
 
 @Composable
-fun BiathlonApp(client: IbuClient, wikidata: WikidataClient, server: ServerClient?, favorites: Favorites, notifications: NotificationSettings) {
-    AppEnvironment(client, wikidata, server, favorites, notifications) { Tabs() }
+fun BiathlonApp(
+    client: IbuClient,
+    wikidata: WikidataClient,
+    server: ServerClient?,
+    favorites: Favorites,
+    notifications: NotificationSettings,
+    liveUpdates: LiveUpdates?,
+) {
+    AppEnvironment(client, wikidata, server, favorites, notifications, liveUpdates) { Tabs() }
 }
 
 /**
  * What every screen reads: Material 3's own colors, the wallpaper's where Android has them (12
- * and later), and the app's clients, favorites and notification settings, which tests replace.
+ * and later), and the app's clients, favorites, notification settings and races followed live,
+ * which tests replace.
  */
 @Composable
 fun AppEnvironment(
@@ -44,6 +52,7 @@ fun AppEnvironment(
     server: ServerClient?,
     favorites: Favorites,
     notifications: NotificationSettings,
+    liveUpdates: LiveUpdates?,
     content: @Composable () -> Unit,
 ) {
     val dark = isSystemInDarkTheme()
@@ -62,6 +71,7 @@ fun AppEnvironment(
             LocalServerClient provides server,
             LocalFavorites provides favorites,
             LocalNotificationSettings provides notifications,
+            LocalLiveUpdates provides liveUpdates,
             content = content,
         )
     }
@@ -71,6 +81,8 @@ fun AppEnvironment(
 private fun Tabs() {
     val homeFeed = rememberHomeFeed()
     val navigation = rememberNavigation()
+    val liveUpdates = LocalLiveUpdates.current
+    WhileStarted(liveUpdates) { liveUpdates?.refresh() }
     NavigationSuiteScaffold(
         navigationSuiteItems = {
             for (tab in Tab.entries) {

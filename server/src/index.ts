@@ -63,7 +63,7 @@ export default {
       const live = await channelFor(env.DB, raceId, service);
       if (!live) return json({ error: "no channel for this race" }, 404, NO_STORE);
       return "ended" in live
-        ? json({ state: live.ended, dismissalDate: live.dismissalDate }, 410, NO_STORE)
+        ? json({ state: live.ended, dismissalDate: live.dismissalDate, timestamp: live.timestamp }, 410, NO_STORE)
         : json(live, 200, NO_STORE);
     }
 

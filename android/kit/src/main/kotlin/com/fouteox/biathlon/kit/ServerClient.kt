@@ -16,6 +16,7 @@ import io.ktor.http.appendPathSegments
 import io.ktor.http.content.ByteArrayContent
 import io.ktor.http.isSuccess
 import java.security.MessageDigest
+import java.time.Instant
 import java.util.Base64
 import kotlinx.serialization.Serializable
 
@@ -30,6 +31,28 @@ class ServerClient(
         if (response.status != HttpStatusCode.OK) throw ServerException.Http(response.status.value)
         return try {
             IbuJson.decodeFromString(response.bodyAsText())
+        } catch (error: IllegalArgumentException) {
+            throw ServerException.Decoding(route, error)
+        }
+    }
+
+    /**
+     * The race's Live Update as its FCM topic last published it, for a race just followed or a
+     * message missed: the topic keeps no message for a device subscribed after it was sent.
+     * `null` until the topic opens, shortly before the start (`RaceLiveState.LEAD`).
+     */
+    suspend fun liveUpdate(raceId: String): LiveUpdate? {
+        val route = "v1/races/$raceId/channels/fcm"
+        val response = httpClient.get(URLBuilder(baseUrl).appendPathSegments("v1", "races", raceId, "channels", "fcm").build())
+        return try {
+            when (response.status) {
+                HttpStatusCode.OK -> IbuJson.decodeFromString<OpenTopic>(response.bodyAsText())
+                    .let { LiveUpdate.Update(raceId, it.state, Instant.ofEpochSecond(it.timestamp)) }
+                HttpStatusCode.Gone -> IbuJson.decodeFromString<EndedTopic>(response.bodyAsText())
+                    .let { LiveUpdate.End(raceId, it.state, Instant.ofEpochSecond(it.dismissalDate), Instant.ofEpochSecond(it.timestamp)) }
+                HttpStatusCode.NotFound -> null
+                else -> throw ServerException.Http(response.status.value)
+            }
         } catch (error: IllegalArgumentException) {
             throw ServerException.Decoding(route, error)
         }
@@ -63,6 +86,14 @@ class ServerClient(
         const val PLAY_INTEGRITY_HEADER = "X-Play-Integrity-Token"
     }
 }
+
+/** `GET /v1/races/:id/channels/fcm` while the topic is open: its state and when it was published, in seconds since 1970. */
+@Serializable
+private data class OpenTopic(val state: RaceLiveState, val timestamp: Long)
+
+/** The same once the race is over: its final state and when it goes, in seconds since 1970. */
+@Serializable
+private data class EndedTopic(val state: RaceLiveState, val dismissalDate: Long, val timestamp: Long)
 
 /** What the server stores of an Android device's alert preferences (`parseAndroidRegistration` in server/src/devices.ts). */
 @Serializable

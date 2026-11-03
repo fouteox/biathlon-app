@@ -1,7 +1,9 @@
 package com.fouteox.biathlon
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationManager
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.hasScrollToNodeAction
@@ -10,8 +12,10 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.core.content.getSystemService
 import com.fouteox.biathlon.kit.RaceCategory
+import java.time.Duration
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -45,7 +49,8 @@ class SettingsScreenTest {
         showSettings()
         compose.onNodeWithText("Race cancelled").assertIsOff().performClick()
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Mixed"))
-        compose.onNodeWithText("Mixed").assertIsOn().performClick()
+        // Scrolled to the top of the list, under the top app bar, which a tap would hit: toggled as TalkBack does.
+        compose.onNodeWithText("Mixed").assertIsOn().performSemanticsAction(SemanticsActions.OnClick)
         compose.waitUntil { preferences().categories == setOf(RaceCategory.MEN, RaceCategory.WOMEN) }
         assertTrue(preferences().cancellationAlerts)
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("Race cancelled"))
@@ -81,5 +86,25 @@ class SettingsScreenTest {
         showSettings()
         compose.waitForText("Notifications are turned off in Settings.")
         compose.onNodeWithText("Open Settings").assertExists()
+    }
+
+    /** Debug builds: the Live Update's every state, then its end, without a race. */
+    @Test
+    fun showsTheLiveUpdateDemo() {
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        RaceNotifications.createChannels(RuntimeEnvironment.getApplication())
+        showSettings()
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("End the live update demo"))
+        val notifications = shadowOf(checkNotNull(RuntimeEnvironment.getApplication().getSystemService<NotificationManager>()))
+        val texts = (1..3).map {
+            compose.onNodeWithText("Show the next live update demo state").performSemanticsAction(SemanticsActions.OnClick)
+            notifications.allNotifications.single().extras.getCharSequence(Notification.EXTRA_TEXT).toString()
+        }
+        assertTrue(texts[0].startsWith("Start "))
+        assertEquals("1 🇫🇷 PERROT E. 12:41.6", texts[2])
+        compose.onNodeWithText("End the live update demo").performSemanticsAction(SemanticsActions.OnClick)
+        val end = notifications.allNotifications.single()
+        assertEquals("Finished", end.extras.getString(Notification.EXTRA_SUB_TEXT))
+        assertEquals(Duration.ofMinutes(1).toMillis(), end.timeoutAfter)
     }
 }

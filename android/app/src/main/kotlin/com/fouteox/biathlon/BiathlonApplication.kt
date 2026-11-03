@@ -39,6 +39,9 @@ class BiathlonApplication : Application(), Configuration.Provider {
         server?.let { PushRegistration.open(this, it, notificationSettings, PlayIntegrity(this)::token) }
     }
 
+    /** The races followed live, whose states the server publishes. */
+    val liveUpdates: LiveUpdates? by lazy { server?.let { LiveUpdates.open(this, it) } }
+
     val reminders: Reminders by lazy { Reminders.open(this, ibu, notificationSettings) }
 
     @OptIn(FlowPreview::class)

@@ -6,6 +6,8 @@
     <!-- The reminders before a start: exact alarms, granted by the user, set again after a restart. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- The races followed live, as Live Updates: a permission the user can turn off, not asked for. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
 
     <!-- The calendar apps a race can be added to, without the calendar permission. -->
     <queries>
@@ -69,6 +71,9 @@
                 <action android:name="android.intent.action.LOCALE_CHANGED" />
             </intent-filter>
         </receiver>
+        <receiver
+            android:name=".LiveUpdates$UnpinReceiver"
+            android:exported="false" />
         <receiver
             android:name=".Reminders$ReminderReceiver"
             android:exported="false" />

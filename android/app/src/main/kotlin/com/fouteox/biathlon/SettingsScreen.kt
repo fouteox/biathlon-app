@@ -39,9 +39,13 @@ import androidx.core.app.AlarmManagerCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.getSystemService
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fouteox.biathlon.kit.LiveUpdate
 import com.fouteox.biathlon.kit.NotificationPreferences
 import com.fouteox.biathlon.kit.RaceCategory
 import com.fouteox.biathlon.kit.RaceKind
+import com.fouteox.biathlon.kit.RaceLiveState
+import java.time.Duration
+import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
@@ -125,6 +129,30 @@ private class NotificationControls(
         RaceNotifications.showReminder(context, SAMPLE_RACE_ID, context.getString(RaceKind.MEN_SPRINT.title), RaceNotifications.reminderText(context, minutes))
     }
 
+    /** The demo race's start and its next state, from the first tap until its end. */
+    private var demo: Pair<Instant, Int>? = null
+
+    /**
+     * Debug builds: each tap shows the demo race's next state in its Live Update, from its start
+     * list, ten minutes before its start, to its result, then its cancellation, as the iOS app's
+     * Live Activity demo.
+     */
+    fun showLiveUpdateDemo() {
+        val now = Instant.now()
+        val (start, step) = demo ?: (now + DEMO_LEAD to 0)
+        val states = RaceLiveState.demo(start)
+        RaceNotifications.showLiveUpdate(context, context.getString(RaceKind.MEN_SPRINT.title), LiveUpdate.Update(DEMO_RACE_ID, states[step], now), now)
+        demo = start to (step + 1) % states.size
+    }
+
+    /** The demo race's end, which stays a minute rather than a race's 30 minutes, to see it go. */
+    fun endLiveUpdateDemo() {
+        val now = Instant.now()
+        val end = LiveUpdate.End(DEMO_RACE_ID, RaceLiveState.demoResult(demo?.first ?: now), now + Duration.ofMinutes(1), now)
+        RaceNotifications.showLiveUpdate(context, context.getString(RaceKind.MEN_SPRINT.title), end, now)
+        demo = null
+    }
+
     /** The system's "Alarms & reminders" access for the app, which exists from Android 12 on. */
     @RequiresApi(Build.VERSION_CODES.S)
     fun openExactAlarmSettings() {
@@ -198,11 +226,18 @@ private fun LazyListScope.notificationItems(controls: NotificationControls, pref
         item { SectionHeader("Developer") }
         item { ListItem(modifier = Modifier.clickable(onClick = controls::showSampleAlert), headlineContent = { Text("Show a sample alert") }) }
         item { ListItem(modifier = Modifier.clickable(onClick = controls::showSampleReminder), headlineContent = { Text("Show a sample reminder") }) }
+        item { ListItem(modifier = Modifier.clickable(onClick = controls::showLiveUpdateDemo), headlineContent = { Text("Show the next live update demo state") }) }
+        item { ListItem(modifier = Modifier.clickable(onClick = controls::endLiveUpdateDemo), headlineContent = { Text("End the live update demo") }) }
     }
 }
 
 /** A men's sprint of the 2026-27 World Cup, for the sample notifications. */
 private const val SAMPLE_RACE_ID = "BT2627SWRLCP01SMSP"
+
+/** A men's sprint no race has, as the iOS app's `demoRaceID`: the demo leaves the races followed alone. */
+private const val DEMO_RACE_ID = "demo__________SMSP"
+
+private val DEMO_LEAD = Duration.ofMinutes(10)
 
 @Composable
 private fun SwitchRow(text: String, checked: Boolean, onChange: (Boolean) -> Unit) {

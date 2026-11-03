@@ -33,7 +33,7 @@ fun ComposeContentTestRule.launchApp(
     wikidata: WikidataClient = WikidataClient.sample(),
     favorites: Favorites = inMemoryFavorites(),
 ) {
-    setContent { BiathlonApp(client, wikidata, server = null, favorites, temporaryNotificationSettings()) }
+    setContent { BiathlonApp(client, wikidata, server = null, favorites, temporaryNotificationSettings(), liveUpdates = null) }
 }
 
 /** One screen, with what the app gives every screen. */
@@ -42,7 +42,8 @@ fun ComposeContentTestRule.showScreen(
     server: ServerClient? = null,
     favorites: Favorites = inMemoryFavorites(),
     notifications: NotificationSettings = temporaryNotificationSettings(),
+    liveUpdates: LiveUpdates? = null,
     content: @Composable () -> Unit,
 ) {
-    setContent { AppEnvironment(client, WikidataClient.sample(), server, favorites, notifications, content) }
+    setContent { AppEnvironment(client, WikidataClient.sample(), server, favorites, notifications, liveUpdates, content) }
 }

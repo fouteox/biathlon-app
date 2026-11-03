@@ -196,7 +196,8 @@ export async function givenTokens(tokens: ProviderTokens): Promise<ProviderToken
  * The channel the app subscribes a race's Live Activity to, for its APNs environment, or the
  * race's FCM topic for its Live Update, with the state last published on it: the channel stores
  * no messages, so a new activity starts from it. Once the end is sent, which a new subscriber would miss,
- * only the final state and its dismissal date, for the app to end the activities that missed it. None while
+ * only the final state, its dismissal date and when the race ended, for the app to end the activities that
+ * missed it and to tell the end apart from the states before it, which FCM can deliver later. None while
  * a dropped channel waits for its replacement.
  */
 export async function channelFor(
@@ -204,7 +205,9 @@ export async function channelFor(
   raceId: string,
   service: PushService,
 ): Promise<
-  { channelId: string; state: LiveState; timestamp: number } | { ended: LiveState; dismissalDate: number } | undefined
+  | { channelId: string; state: LiveState; timestamp: number }
+  | { ended: LiveState; dismissalDate: number; timestamp: number }
+  | undefined
 > {
   const row = await db
     .prepare(
@@ -221,7 +224,9 @@ export async function channelFor(
     }>();
   if (!row) return undefined;
   const state = JSON.parse(row.state) as LiveState;
-  if (row.endedAt !== null) return { ended: state, dismissalDate: dismissalDate(row.endedAt) };
+  if (row.endedAt !== null) {
+    return { ended: state, dismissalDate: dismissalDate(row.endedAt), timestamp: broadcastTimestamp(row.endedAt) };
+  }
   return row.deletedAt === null
     ? { channelId: row.channelId, state, timestamp: broadcastTimestamp(row.publishedAt) }
     : undefined;
