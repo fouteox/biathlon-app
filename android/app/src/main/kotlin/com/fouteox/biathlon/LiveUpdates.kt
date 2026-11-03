@@ -114,6 +114,8 @@ class LiveUpdates(
             // Unfollowed while its unsubscription was on its way, or after its end.
             race == null -> topics.unsubscribe(LiveUpdate.topic(update.raceId))
             update is LiveUpdate.Update -> showIfNew(update)
+            // A cancellation called off: the reinstated race's state is newer than its end.
+            !races.isNew(update) -> Unit
             update is LiveUpdate.End -> {
                 RaceNotifications.showLiveUpdate(context, title(update.raceId, race), update, now)
                 edit { it.unfollow(update.raceId) }
@@ -122,9 +124,10 @@ class LiveUpdates(
         }
     }
 
+    /** Shows a newer state, or the same one again where it is no longer on screen: after a restart, or before the permission to notify. */
     private suspend fun showIfNew(update: LiveUpdate.Update) {
         val races = races()
-        if (!races.isNew(update)) return
+        if (!races.isNew(update) && RaceNotifications.isLiveUpdateShown(context, update.raceId)) return
         RaceNotifications.showLiveUpdate(context, title(update.raceId, checkNotNull(races[update.raceId])), update)
         edit { it.shown(update) }
     }

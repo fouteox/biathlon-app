@@ -198,7 +198,7 @@ class LiveUpdatesTest {
         follow()
         liveUpdates.receive(LiveUpdate.Update(raceId, live, now))
         val result = RaceLiveState.demoResult(start)
-        liveUpdates.receive(LiveUpdate.End(raceId, result, now + Duration.ofMinutes(30)), now)
+        liveUpdates.receive(LiveUpdate.End(raceId, result, now + Duration.ofMinutes(30), now + Duration.ofMinutes(1)), now)
         val notification = posted().single()
         assertFalse(notification.flags and Notification.FLAG_ONGOING_EVENT != 0)
         assertFalse(notification.extras.getBoolean(Notification.EXTRA_REQUEST_PROMOTED_ONGOING))
@@ -208,11 +208,33 @@ class LiveUpdatesTest {
         assertEquals(listOf("+$topic", "-$topic"), subscriptions)
     }
 
+    /** A cancellation called off: its end, delivered late, is older than the reinstated race's state. */
+    @Test
+    fun keepsFollowingARaceReinstatedBeforeItsEndArrives() = runBlocking {
+        follow()
+        liveUpdates.receive(LiveUpdate.Update(raceId, live, now))
+        liveUpdates.receive(LiveUpdate.End(raceId, RaceLiveState(Competition.State.CANCELLED, start, emptyList()), now + Duration.ofMinutes(30), now - Duration.ofMinutes(1)), now)
+        assertEquals(setOf(raceId), followed())
+        assertEquals("Live", posted().single().extras.getString(Notification.EXTRA_SUB_TEXT))
+    }
+
+    /** After a restart, or a state that arrived before the notification permission: shown again on return. */
+    @Test
+    fun showsAgainAStateNoLongerOnScreen() = runBlocking {
+        channel = HttpStatusCode.OK to """{"channelId":"$topic","state":${stateJson(live)},"timestamp":${now.epochSecond}}"""
+        shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        follow()
+        assertEquals(emptyList<Notification>(), posted())
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        liveUpdates.refresh(now)
+        assertEquals("1 🇫🇷 PERROT E. 12:41.6", posted().single().extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+    }
+
     @Test
     fun removesAnEndPastItsDismissal() = runBlocking {
         follow()
         liveUpdates.receive(LiveUpdate.Update(raceId, live, now))
-        liveUpdates.receive(LiveUpdate.End(raceId, live, now - Duration.ofMinutes(1)), now)
+        liveUpdates.receive(LiveUpdate.End(raceId, live, now - Duration.ofMinutes(1), now + Duration.ofMinutes(1)), now)
         assertEquals(emptyList<Notification>(), posted())
         assertEquals(emptySet<String>(), followed())
     }

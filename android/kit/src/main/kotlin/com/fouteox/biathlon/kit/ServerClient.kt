@@ -49,7 +49,7 @@ class ServerClient(
                 HttpStatusCode.OK -> IbuJson.decodeFromString<OpenTopic>(response.bodyAsText())
                     .let { LiveUpdate.Update(raceId, it.state, Instant.ofEpochSecond(it.timestamp)) }
                 HttpStatusCode.Gone -> IbuJson.decodeFromString<EndedTopic>(response.bodyAsText())
-                    .let { LiveUpdate.End(raceId, it.state, Instant.ofEpochSecond(it.dismissalDate)) }
+                    .let { LiveUpdate.End(raceId, it.state, Instant.ofEpochSecond(it.dismissalDate), publishedAt = null) }
                 HttpStatusCode.NotFound -> null
                 else -> throw ServerException.Http(response.status.value)
             }

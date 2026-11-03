@@ -123,6 +123,9 @@ object RaceNotifications {
         notify(context, update.raceId, LIVE_UPDATE_ID, builder.build())
     }
 
+    fun isLiveUpdateShown(context: Context, raceId: String): Boolean =
+        NotificationManagerCompat.from(context).activeNotifications.any { it.tag == raceId && it.id == LIVE_UPDATE_ID }
+
     fun cancelLiveUpdate(context: Context, raceId: String) = NotificationManagerCompat.from(context).cancel(raceId, LIVE_UPDATE_ID)
 
     /** The start until someone leads, unless the race won't run. */

@@ -11,11 +11,23 @@ sealed interface LiveUpdate {
     val raceId: String
     val state: RaceLiveState
 
-    /** The race's state as of [publishedAt]: one published earlier than the last shown arrived late. */
-    data class Update(override val raceId: String, override val state: RaceLiveState, val publishedAt: Instant) : LiveUpdate
+    /** When the server published it: FCM doesn't keep messages in order, so one older than the state on screen came late. */
+    val publishedAt: Instant?
 
-    /** The race is over: its final [state] stays until [dismissal], 30 minutes after the end (`dismissalDate`, server/src/live.ts). */
-    data class End(override val raceId: String, override val state: RaceLiveState, val dismissal: Instant) : LiveUpdate
+    /** The race's state. */
+    data class Update(override val raceId: String, override val state: RaceLiveState, override val publishedAt: Instant) : LiveUpdate
+
+    /**
+     * The race is over: its final [state] stays until [dismissal], 30 minutes after the end
+     * (`dismissalDate`, server/src/live.ts). [publishedAt] is `null` for the end the server
+     * answers with as the race's current state, which comes as no message.
+     */
+    data class End(
+        override val raceId: String,
+        override val state: RaceLiveState,
+        val dismissal: Instant,
+        override val publishedAt: Instant?,
+    ) : LiveUpdate
 
     companion object {
         /** The race's FCM topic (`raceTopic`, server/src/fcm.ts). */
@@ -25,10 +37,10 @@ sealed interface LiveUpdate {
         fun parse(data: Map<String, String>): LiveUpdate? {
             val raceId = data["raceId"] ?: return null
             val state = data["state"]?.let(::decodeState) ?: return null
-            val timestamp = data["timestamp"]?.toLongOrNull() ?: return null
+            val publishedAt = data["timestamp"]?.toLongOrNull()?.let(Instant::ofEpochSecond) ?: return null
             return when (data["event"]) {
-                "update" -> Update(raceId, state, Instant.ofEpochSecond(timestamp))
-                "end" -> data["dismissalDate"]?.toLongOrNull()?.let { End(raceId, state, Instant.ofEpochSecond(it)) }
+                "update" -> Update(raceId, state, publishedAt)
+                "end" -> data["dismissalDate"]?.toLongOrNull()?.let { End(raceId, state, Instant.ofEpochSecond(it), publishedAt) }
                 else -> null
             }
         }

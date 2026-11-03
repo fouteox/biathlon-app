@@ -148,7 +148,7 @@ private class NotificationControls(
     /** The demo race's end, which stays a minute rather than a race's 30 minutes, to see it go. */
     fun endLiveUpdateDemo() {
         val now = Instant.now()
-        val end = LiveUpdate.End(DEMO_RACE_ID, RaceLiveState.demoResult(demo?.first ?: now), now + Duration.ofMinutes(1))
+        val end = LiveUpdate.End(DEMO_RACE_ID, RaceLiveState.demoResult(demo?.first ?: now), now + Duration.ofMinutes(1), now)
         RaceNotifications.showLiveUpdate(context, context.getString(RaceKind.MEN_SPRINT.title), end, now)
         demo = null
     }

@@ -53,7 +53,7 @@ class LiveUpdateTest {
             LiveUpdate.parse(mapOf("raceId" to raceId, "event" to "update", "state" to state, "timestamp" to "1795707000")),
         )
         assertEquals(
-            LiveUpdate.End(raceId, live, instant("2026-11-26T16:00:00Z")),
+            LiveUpdate.End(raceId, live, instant("2026-11-26T16:00:00Z"), publishedAt = instant("2026-11-26T15:30:00Z")),
             LiveUpdate.parse(
                 mapOf("raceId" to raceId, "event" to "end", "state" to state, "timestamp" to "1795707000", "dismissalDate" to "1795708800"),
             ),
@@ -87,7 +87,7 @@ class LiveUpdateTest {
             server(HttpStatusCode.OK, """{"channelId":"race-$raceId","state":$stateJson,"timestamp":1795707000}""").liveUpdate(raceId),
         )
         assertEquals(
-            LiveUpdate.End(raceId, live, instant("2026-11-26T16:00:00Z")),
+            LiveUpdate.End(raceId, live, instant("2026-11-26T16:00:00Z"), publishedAt = null),
             server(HttpStatusCode.Gone, """{"state":$stateJson,"dismissalDate":1795708800}""").liveUpdate(raceId),
         )
         assertNull(server(HttpStatusCode.NotFound, """{"error":"no channel for this race"}""").liveUpdate(raceId))
@@ -124,5 +124,16 @@ class LiveUpdateTest {
         assertFalse(shown.isNew(first.copy(publishedAt = instant("2026-11-26T15:29:00Z"))))
         assertTrue(shown.isNew(first.copy(publishedAt = instant("2026-11-26T15:31:00Z"))))
         assertFalse(FollowedRaces().isNew(first))
+    }
+
+    @Test
+    fun takesAnEndOlderThanTheStateOnScreenForAReinstatedRacesOld() {
+        val shown = FollowedRaces().follow(raceId, "x", instant("2026-11-26T15:15:00Z"))
+            .shown(LiveUpdate.Update(raceId, live, instant("2026-11-26T15:30:00Z")))
+        val dismissal = instant("2026-11-26T16:00:00Z")
+        assertFalse(shown.isNew(LiveUpdate.End(raceId, live, dismissal, publishedAt = instant("2026-11-26T15:29:00Z"))))
+        assertTrue(shown.isNew(LiveUpdate.End(raceId, live, dismissal, publishedAt = instant("2026-11-26T15:31:00Z"))))
+        // The server's current state, looked up rather than received.
+        assertTrue(shown.isNew(LiveUpdate.End(raceId, live, dismissal, publishedAt = null)))
     }
 }

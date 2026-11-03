@@ -147,21 +147,26 @@ private fun LiveUpdateToggle(liveUpdates: LiveUpdates, race: Competition, canBeF
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var isOver by rememberSaveable { mutableStateOf(false) }
-    // Asked in context, as for the alerts: when a race is first followed.
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    val follow = {
+        scope.launch {
+            try {
+                liveUpdates.follow(race.id, race.shortDescription, race.startTime)
+            } catch (_: LiveUpdates.RaceOverException) {
+                isOver = true
+            }
+        }
+    }
+    // Asked in context, as for the alerts, when a race is first followed: followed once answered,
+    // so that its state shows as soon as it may.
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { follow() }
     IconToggleButton(
         checked = isFollowed,
-        onCheckedChange = { follow ->
-            if (follow && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !NotificationManagerCompat.from(context).areNotificationsEnabled()) {
-                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-            scope.launch {
-                if (!follow) return@launch liveUpdates.stop(race.id)
-                try {
-                    liveUpdates.follow(race.id, race.shortDescription, race.startTime)
-                } catch (_: LiveUpdates.RaceOverException) {
-                    isOver = true
-                }
+        onCheckedChange = { checked ->
+            when {
+                !checked -> scope.launch { liveUpdates.stop(race.id) }
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !NotificationManagerCompat.from(context).areNotificationsEnabled() ->
+                    permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                else -> follow()
             }
         },
     ) {
