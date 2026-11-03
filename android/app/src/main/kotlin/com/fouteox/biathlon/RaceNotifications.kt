@@ -93,11 +93,13 @@ object RaceNotifications {
      * as the iOS app's Live Activity: an ongoing notification Android promotes to the top of the
      * shade, the lock screen and a status bar chip, with the action to unpin it Android asks of
      * events the user follows. Then its end, which stays until its dismissal without being promoted.
+     * A tap opens the race. [name]: the IBU's English name of the race.
      */
-    fun showLiveUpdate(context: Context, title: String, update: LiveUpdate, now: Instant = Instant.now()) {
+    fun showLiveUpdate(context: Context, name: String, update: LiveUpdate, now: Instant = Instant.now()) {
         val state = update.state
         val leaders = state.leaders.map(::leaderLine)
-        val builder = builder(context, LIVE_UPDATE_CHANNEL, title)
+        val builder = builder(context, LIVE_UPDATE_CHANNEL, raceTitle(context.resources, update.raceId, name))
+            .setContentIntent(DeepLink.Race(update.raceId, name).pendingIntent(context))
             .setSubText(context.getString(state.phase.label))
             .setContentText(leaders.firstOrNull() ?: startText(context, state))
         // The podium in full once the notification shows expanded, as Android shows Live Updates.
@@ -153,6 +155,7 @@ object RaceNotifications {
         }
     }
 
+    /** A notification that opens the app, as the iOS app's alerts and reminders do. */
     private fun builder(context: Context, channel: String, title: String): NotificationCompat.Builder {
         val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(context, channel)

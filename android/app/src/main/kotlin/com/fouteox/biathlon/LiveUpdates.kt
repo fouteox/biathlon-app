@@ -13,7 +13,6 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.fouteox.biathlon.kit.FollowedRaces
 import com.fouteox.biathlon.kit.LiveUpdate
-import com.fouteox.biathlon.kit.RaceKind
 import com.fouteox.biathlon.kit.ServerClient
 import com.fouteox.biathlon.kit.ServerException
 import com.google.firebase.messaging.FirebaseMessaging
@@ -111,7 +110,7 @@ class LiveUpdates(
             // A cancellation called off: the reinstated race's state is newer than its end.
             !races.isNew(update) -> Unit
             update is LiveUpdate.End -> {
-                RaceNotifications.showLiveUpdate(context, title(update.raceId, race), update, now)
+                RaceNotifications.showLiveUpdate(context, race.name, update, now)
                 edit { it.unfollow(update.raceId) }
                 topics.unsubscribe(LiveUpdate.topic(update.raceId))
             }
@@ -125,7 +124,7 @@ class LiveUpdates(
     private suspend fun showIfNew(update: LiveUpdate.Update) {
         val races = races()
         if (races.isOlder(update) || !races.isNew(update) && RaceNotifications.isLiveUpdateShown(context, update.raceId)) return
-        RaceNotifications.showLiveUpdate(context, title(update.raceId, checkNotNull(races[update.raceId])), update)
+        RaceNotifications.showLiveUpdate(context, checkNotNull(races[update.raceId]).name, update)
         edit { it.shown(update) }
     }
 
@@ -174,8 +173,6 @@ class LiveUpdates(
     private suspend fun edit(transform: (FollowedRaces) -> FollowedRaces) {
         store.edit { it[RACES] = transform(FollowedRaces.decoded(it[RACES])).encoded() }
     }
-
-    private fun title(raceId: String, race: FollowedRaces.Race) = RaceKind.of(raceId)?.let { context.getString(it.title) } ?: race.name
 
     /** Stops following a race from its Live Update: its Unpin action, or its dismissal. */
     class UnpinReceiver : BroadcastReceiver() {

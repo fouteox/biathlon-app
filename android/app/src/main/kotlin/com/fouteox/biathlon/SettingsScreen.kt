@@ -141,7 +141,7 @@ private class NotificationControls(
         val now = Instant.now()
         val (start, step) = demo ?: (now + DEMO_LEAD to 0)
         val states = RaceLiveState.demo(start)
-        RaceNotifications.showLiveUpdate(context, context.getString(RaceKind.MEN_SPRINT.title), LiveUpdate.Update(DEMO_RACE_ID, states[step], now), now)
+        RaceNotifications.showLiveUpdate(context, DEMO_RACE_NAME, LiveUpdate.Update(DEMO_RACE_ID, states[step], now), now)
         demo = start to (step + 1) % states.size
     }
 
@@ -149,7 +149,7 @@ private class NotificationControls(
     fun endLiveUpdateDemo() {
         val now = Instant.now()
         val end = LiveUpdate.End(DEMO_RACE_ID, RaceLiveState.demoResult(demo?.first ?: now), now + Duration.ofMinutes(1), now)
-        RaceNotifications.showLiveUpdate(context, context.getString(RaceKind.MEN_SPRINT.title), end, now)
+        RaceNotifications.showLiveUpdate(context, DEMO_RACE_NAME, end, now)
         demo = null
     }
 
@@ -236,6 +236,7 @@ private const val SAMPLE_RACE_ID = "BT2627SWRLCP01SMSP"
 
 /** A men's sprint no race has, as the iOS app's `demoRaceID`: the demo leaves the races followed alone. */
 private const val DEMO_RACE_ID = "demo__________SMSP"
+private const val DEMO_RACE_NAME = "Men 10 km Sprint"
 
 private val DEMO_LEAD = Duration.ofMinutes(10)
 

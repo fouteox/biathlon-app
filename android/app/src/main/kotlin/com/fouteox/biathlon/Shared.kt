@@ -90,7 +90,10 @@ val RaceKind.title: Int
 fun Competition.title(): String = title(LocalResources.current)
 
 /** [title], outside a screen. */
-fun Competition.title(resources: Resources): String = kind?.let { resources.getString(it.title) } ?: shortDescription
+fun Competition.title(resources: Resources): String = raceTitle(resources, id, shortDescription)
+
+/** A race's title from its ID, falling back to [name], the IBU's English name, for a kind the app doesn't know. */
+fun raceTitle(resources: Resources, raceId: String, name: String): String = RaceKind.of(raceId)?.let { resources.getString(it.title) } ?: name
 
 @get:StringRes
 val Competition.State.label: Int

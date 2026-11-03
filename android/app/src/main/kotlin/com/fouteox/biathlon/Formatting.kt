@@ -24,6 +24,9 @@ enum class DateSkeleton(private val pattern: String) {
     /** Day, date and time, with the year, since the calendar goes back to 1957-58. */
     START("EEEEdMMMMyjmm"),
 
+    /** Day, date and time, abbreviated, where space is short: the widget. */
+    SHORT_START("EEEdMMMjmm"),
+
     /** The time alone, where a header already gives the day. */
     TIME("jmm"),
 

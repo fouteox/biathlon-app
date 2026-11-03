@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The "Next race" widget: two cells by two, resizable, reloaded by NextRaceWidget.Reload
+     rather than on a period. Its size in cells from Android 12, in dp before, as the guide advises
+     (https://developer.android.com/develop/ui/compose/glance/create-app-widget#widget-sizing-attributes). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:description="@string/the_live_race_otherwise_the_next_one"
+    android:initialLayout="@layout/glance_default_loading_layout"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen"
+    tools:targetApi="s" />

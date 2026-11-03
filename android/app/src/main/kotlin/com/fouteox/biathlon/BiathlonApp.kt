@@ -12,8 +12,10 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -27,6 +29,7 @@ import com.fouteox.biathlon.kit.homeFeed
 import java.time.Duration
 import java.time.Instant
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 
 @Composable
 fun BiathlonApp(
@@ -36,8 +39,10 @@ fun BiathlonApp(
     favorites: Favorites,
     notifications: NotificationSettings,
     liveUpdates: LiveUpdates?,
+    /** The links the app opens: from the widget, the Live Updates and the app shortcuts. */
+    links: Flow<DeepLink>,
 ) {
-    AppEnvironment(client, wikidata, server, favorites, notifications, liveUpdates) { Tabs() }
+    AppEnvironment(client, wikidata, server, favorites, notifications, liveUpdates) { Tabs(links) }
 }
 
 /**
@@ -78,9 +83,21 @@ fun AppEnvironment(
 }
 
 @Composable
-private fun Tabs() {
+private fun Tabs(links: Flow<DeepLink>) {
     val homeFeed = rememberHomeFeed()
     val navigation = rememberNavigation()
+    val resources = LocalResources.current
+    LaunchedEffect(links) {
+        links.collect { link ->
+            navigation.show(
+                when (link) {
+                    is DeepLink.Race -> Route.RaceById(link.id, raceTitle(resources, link.id, link.name))
+                    DeepLink.NextRace -> Route.Featured(FeaturedRace.UPCOMING)
+                    DeepLink.LatestResult -> Route.Featured(FeaturedRace.LATEST_RESULT)
+                },
+            )
+        }
+    }
     val liveUpdates = LocalLiveUpdates.current
     WhileStarted(liveUpdates) { liveUpdates?.refresh() }
     NavigationSuiteScaffold(
@@ -104,6 +121,7 @@ private fun Tabs() {
                     is Route.Race -> RaceScreen(route.race, navigation::open, navigation::goBack)
                     is Route.Analysis -> AnalysisScreen(route.race, navigation::open, navigation::goBack)
                     is Route.RaceById -> RaceByIdScreen(route.id, route.title, navigation::open, navigation::goBack)
+                    is Route.Featured -> FeaturedRaceScreen(route.race, navigation::open, navigation::goBack)
                     Route.Standings -> StandingsScreen(navigation::open)
                     is Route.Athlete -> AthleteScreen(route.id, route.name, navigation::open, navigation::goBack)
                     is Route.Nation -> NationScreen(route.code, route.category, navigation::open, navigation::goBack)

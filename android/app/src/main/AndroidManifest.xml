@@ -30,6 +30,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- "Next race" and "Latest result", on a touch and hold of the app's icon. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <!-- Push alerts, addressed to the Firebase Installation ID rather than to an FCM token. -->
@@ -70,6 +74,17 @@
                 <action android:name="android.intent.action.TIMEZONE_CHANGED" />
                 <action android:name="android.intent.action.LOCALE_CHANGED" />
             </intent-filter>
+        </receiver>
+        <receiver
+            android:name=".NextRaceWidget$Receiver"
+            android:exported="false"
+            android:label="@string/next_race">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/next_race_widget" />
         </receiver>
         <receiver
             android:name=".LiveUpdates$UnpinReceiver"

@@ -217,6 +217,9 @@ dependencies {
     implementation(libs.firebase.messaging)
     implementation(libs.play.integrity)
     implementation(libs.kotlinx.coroutines.play.services)
+    // The "Next race" widget.
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
 
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
@@ -226,5 +229,7 @@ dependencies {
     testImplementation(testFixtures(project(":kit")))
     testImplementation(libs.ktor.client.mock)
     testImplementation(libs.work.testing)
+    testImplementation(libs.glance.testing)
+    testImplementation(libs.glance.appwidget.testing)
     debugImplementation(libs.compose.ui.test.manifest)
 }
