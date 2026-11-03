@@ -1,5 +1,7 @@
 package com.fouteox.biathlon
 
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
@@ -81,6 +83,20 @@ class BiathlonAppTest {
         compose.onNodeWithText("Results").assertExists()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.waitForText("Women's Sprint")
+    }
+
+    /** A past season opens on its last event, not on the current season's position. */
+    @Test
+    @Config(qualifiers = "h360dp")
+    fun aPastSeasonOpensOnItsLastEvent() {
+        launch()
+        compose.onNodeWithText("Calendar").performClick()
+        compose.waitForText("Nordvik")
+        compose.onNodeWithText("Season", substring = true).performClick()
+        compose.onNodeWithText(SeasonId.containing(Instant.now()).previous.displayName).performClick()
+        compose.waitForText("Hohenwald")
+        compose.onNodeWithText("Hohenwald").assertIsDisplayed()
+        compose.onNodeWithText("Nordvik").assertIsNotDisplayed()
     }
 
     /** A first load that fails says so, and tries again on demand. */

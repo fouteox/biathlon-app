@@ -26,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fouteox.biathlon.kit.BiathlonEvent
 import com.fouteox.biathlon.kit.Nation
@@ -37,6 +36,8 @@ import com.fouteox.biathlon.kit.groupedByMonth
 import com.fouteox.biathlon.kit.phase
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.mapNotNull
 
 /** The World Cup calendar of a season, by month, opening on the event underway or the next one. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,13 +62,13 @@ fun CalendarScreen(open: (Route) -> Unit) {
         val zone = ZoneId.systemDefault()
         // Kept per season, so that coming back from an event leaves the list where it was.
         val listState = rememberSaveable(season, saver = LazyListState.Saver) { LazyListState() }
-        val loaded by events.state.collectAsStateWithLifecycle()
         var scrolledSeason by rememberSaveable { mutableStateOf<String?>(null) }
-        // The season opens on the event underway, or the next one, not on November: once per season.
-        LaunchedEffect(loaded, season) {
-            val list = loaded.value ?: return@LaunchedEffect
-            if (scrolledSeason == season) return@LaunchedEffect
-            scrolledSeason = season
+        // The season opens on the event underway, or the next one, not on November: once per
+        // season, from its own view model's events rather than those still shown of the last.
+        LaunchedEffect(events) {
+            if (scrolledSeason == shown.rawValue) return@LaunchedEffect
+            val list = events.state.mapNotNull { it.value }.first()
+            scrolledSeason = shown.rawValue
             val event = list.eventToShow(Instant.now(), zone) ?: return@LaunchedEffect
             listState.scrollToItem(calendarIndex(list, event, zone))
         }
