@@ -1,0 +1,16 @@
+Verfolge die Saison des Biathlon-Weltcups: jedes Rennen, seine Startliste und seine Ergebnisse, live während des Rennens.
+
+• Übersicht: das laufende Rennen, sonst das nächste, und das letzte Podium.
+• Kalender: alle Weltcup-Stationen und Rennen der Saison und vergangener Saisons.
+• Ergebnisse, Live-Ergebnisse und Rennanalyse: Lauf-, Schießstand- und Schießzeiten.
+• Weltcup-Wertungen, mit deinen Lieblingsathleten und -nationen hervorgehoben.
+• Athleten und Nationen: ihre bisherigen Ergebnisse und ihr Wikipedia-Artikel.
+• Favoriten, auf deinem Gerät gespeichert.
+• Benachrichtigungen, wenn ein Rennen abgesagt oder sein Start verschoben wird, und eine Erinnerung vor dem Start.
+• Live-Updates: verfolge ein Rennen auf dem Sperrbildschirm und in der Statusleiste.
+• Ein Widget und Verknüpfungen für das nächste Rennen und das letzte Ergebnis.
+• Die TV-Sender, die jedes Rennen zeigen, das Rennen in deinem Kalender und das Podium zum Teilen.
+
+Auf Englisch, Französisch und Deutsch.
+
+Diese App ist nicht mit der Internationalen Biathlon-Union (IBU) verbunden.

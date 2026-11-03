@@ -1,0 +1,16 @@
+Follow the Biathlon World Cup season: every race, its start list and its results, live while the race is on.
+
+• Home: the live race, otherwise the next one, and the latest podium.
+• Calendar: every event and race of the season, and of past seasons.
+• Results, live results and the race analysis: course, range and shooting times.
+• World Cup standings, with your favorite athletes and nations highlighted.
+• Athletes and nations: their results history and Wikipedia article.
+• Favorites, kept on your device.
+• Alerts when a race is cancelled or its start moves, and a reminder before the start.
+• Live updates: follow a race from the lock screen and the status bar.
+• A widget and shortcuts for the next race and the latest result.
+• The TV channels showing each race, the race in your calendar, and the podium to share.
+
+In English, French and German.
+
+This app is not affiliated with the International Biathlon Union (IBU).
