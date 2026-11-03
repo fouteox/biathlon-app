@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Biathlon"
-include(":app")
+include(":app", ":kit")
