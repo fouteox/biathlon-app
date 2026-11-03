@@ -1,6 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { sendPush, type APNsEnvironment, type PushOutcome, type PushRequest } from "./apns";
-import { sendFCM, type FCMPush } from "./fcm";
+import { ENVIRONMENTS, sendPush, type APNsEnvironment, type PushOutcome, type PushRequest } from "./apns";
+import { buildMessage, sendFCM, type FCMPush } from "./fcm";
 import { serviceAccount } from "./google";
 import { buildPayload, type AlertInput } from "./payload";
 import { deadlineSignal } from "./subrequests";
@@ -13,6 +13,12 @@ export type LotPush = (Omit<PushRequest, "payload"> & ({ payload: unknown } | { 
 
 /** The service a push goes through, each with its own credentials: an APNs environment, or FCM. */
 export type PushService = APNsEnvironment | "fcm";
+
+export const PUSH_SERVICES: readonly PushService[] = [...ENVIRONMENTS, "fcm"];
+
+export function isPushService(value: unknown): value is PushService {
+  return PUSH_SERVICES.includes(value as PushService);
+}
 
 export function serviceOf(push: LotPush): PushService {
   return "fid" in push ? "fcm" : push.environment;
@@ -45,7 +51,7 @@ export class PushSender extends DurableObject<Env> {
         const signal = deadlineSignal(deadline);
         if ("fid" in push) {
           const { projectId } = serviceAccount(this.env.GOOGLE_SERVICE_ACCOUNT);
-          outcomes[index] = await sendFCM(push, projectId, providerToken, Date.now(), signal);
+          outcomes[index] = await sendFCM(buildMessage(push, Date.now()), projectId, providerToken, signal);
         } else {
           const payload = "alert" in push ? buildPayload(push.alert) : push.payload;
           outcomes[index] = await sendPush({ ...push, payload }, providerToken, signal);

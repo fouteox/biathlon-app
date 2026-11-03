@@ -73,6 +73,10 @@ function stubNetwork(
     results?: unknown;
     resultsStatus?: number;
     broadcastReason?: string;
+    /** The status FCM answers with, an error; it accepts every message without. */
+    fcmStatus?: number;
+    /** Whether Google's token endpoint is down, which leaves FCM unreachable. */
+    googleUnavailable?: boolean;
     failingHost?: string;
     deviceStatus?: number;
     deviceReason?: string;
@@ -88,8 +92,19 @@ function stubNetwork(
   let channels = 0;
   answer(async (request) => {
     const { method, url } = request;
+    // Google's access token, whose request isn't JSON, for the races' FCM topics.
+    if (url === "https://oauth2.googleapis.com/token") {
+      return options.googleUnavailable
+        ? new Response(null, { status: 503 })
+        : Response.json({ access_token: "google-token", expires_in: 3599, token_type: "Bearer" });
+    }
     const body = await request.text();
     sent.push({ method, url, headers: Object.fromEntries(request.headers), body: body ? JSON.parse(body) : undefined });
+    if (url.startsWith("https://fcm.googleapis.com/")) {
+      return options.fcmStatus
+        ? Response.json({ error: { status: "UNAVAILABLE" } }, { status: options.fcmStatus })
+        : Response.json({ name: "projects/biathlon-test/messages/1" });
+    }
     if (url.includes("biathlonresults.com")) {
       await options.duringResults?.();
       return Response.json(options.results ?? live.results, { status: options.resultsStatus ?? 200 });
@@ -192,8 +207,11 @@ function recordLots(): () => number[] {
 const pushLots = (env: Env, now: number, capacity: number) =>
   new PushLots(env, new ProviderTokens(env, now, new SubrequestBudget()), capacity);
 
+/** The race's APNs channels; its FCM topic has tests of its own. */
 const channels = (env: Env) =>
-  env.DB.prepare("SELECT environment, channel_id AS channelId, state FROM live_channels ORDER BY environment")
+  env.DB.prepare(
+    "SELECT environment, channel_id AS channelId, state FROM live_channels WHERE environment <> 'fcm' ORDER BY environment",
+  )
     .all<{ environment: string; channelId: string; state: string }>()
     .then(({ results }) => results);
 
@@ -226,6 +244,11 @@ const unanswered = (path: string) =>
 const alarmOf = (raceId = RACE_ID) => runInDurableObject(activity(raceId), (_, state) => state.storage.getAlarm());
 
 const broadcasts = (sent: Sent[]) => sent.filter((request) => request.url.includes("/4/broadcasts/"));
+
+const FCM_SEND = "https://fcm.googleapis.com/v1/projects/biathlon-test/messages:send";
+
+/** The requests to APNs and the IBU API, those to FCM aside: the race's topic has tests of its own. */
+const withoutFCM = (sent: Sent[]) => sent.filter((request) => request.url !== FCM_SEND);
 
 describe("Live Activity channels", () => {
   it("opens one channel per APNs environment for an upcoming race, without broadcasting", async () => {
@@ -431,7 +454,9 @@ describe("Live Activity channels", () => {
       { aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 1, "content-state": ahead } },
       { aps: { timestamp: NOW / 1000, event: "update", "relevance-score": 1, "content-state": ahead } },
     ]);
-    expect(sent.filter((request) => request.method !== "GET" && !request.url.includes("/4/broadcasts/"))).toEqual([]);
+    expect(
+      withoutFCM(sent).filter((request) => request.method !== "GET" && !request.url.includes("/4/broadcasts/")),
+    ).toEqual([]);
 
     const ended = stubNetwork({ results: relay.results });
     await sync(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 120_000);
@@ -596,7 +621,9 @@ describe("Live Activity channels", () => {
       ["channel-1", live.state],
       ["channel-2", live.state],
     ]);
-    const { results } = await env.DB.prepare("SELECT deleted_at AS deletedAt FROM live_channels").all();
+    const { results } = await env.DB.prepare(
+      "SELECT deleted_at AS deletedAt FROM live_channels WHERE environment <> 'fcm'",
+    ).all();
     expect(results).toEqual([{ deletedAt: null }, { deletedAt: null }]);
   });
 
@@ -624,7 +651,7 @@ describe("Live Activity channels", () => {
     await sync(env, finished, NOW);
 
     const { results } = await env.DB.prepare(
-      "SELECT ended_at AS endedAt, end_sent_at AS endSentAt FROM live_channels",
+      "SELECT ended_at AS endedAt, end_sent_at AS endSentAt FROM live_channels WHERE environment <> 'fcm'",
     ).all();
     expect(results).toEqual([
       { endedAt: NOW, endSentAt: null },
@@ -885,6 +912,142 @@ describe("Live Activity channels", () => {
   });
 });
 
+describe("Live Update topics", () => {
+  /** The race of `race()`, an hour later: its Live Update isn't due yet at `NOW`. */
+  const later = (overrides: Partial<IBUCompetition> = {}) => race({ StartTime: "2026-11-26T16:30:00Z", ...overrides });
+  /** The messages sent to FCM, their state parsed: its keys come in no set order. */
+  const toTopic = (sent: Sent[]) =>
+    sent
+      .filter((request) => request.url === FCM_SEND)
+      .map((request) => {
+        const { message } = request.body as { message: { data: { state: string } } };
+        return { ...message, data: { ...message.data, state: JSON.parse(message.data.state) as unknown } };
+      });
+  const topicRow = (env: Env) =>
+    env.DB.prepare(
+      "SELECT channel_id AS channelId, state, deleted_at AS deletedAt FROM live_channels WHERE environment = 'fcm'",
+    ).first<{ channelId: string; state: string; deletedAt: number | null }>();
+  const get = (env: Env, path: string) =>
+    worker.fetch(new Request(`https://server.test${path}`), env, createExecutionContext());
+  const upcoming = { phase: "scheduled", startTime: 817403400, leaders: [] };
+
+  it("opens the race's topic 30 minutes before the start, its first message starting the Live Update", async () => {
+    const env = await makeEnv();
+    const early = stubNetwork();
+    await sync(env, [later()], NOW);
+    expect(toTopic(early)).toEqual([]);
+    expect(await topicRow(env)).toBeNull();
+    expect((await get(env, `/v1/races/${RACE_ID}/channels/fcm`)).status).toBe(404);
+
+    const due = stubNetwork();
+    await sync(env, [later()], NOW + 30 * 60_000);
+
+    expect(toTopic(due)).toEqual([
+      {
+        topic: `race-${RACE_ID}`,
+        android: { collapseKey: `race-${RACE_ID}`, priority: "HIGH", ttl: "3600s" },
+        data: {
+          raceId: RACE_ID,
+          event: "update",
+          state: upcoming,
+          timestamp: String((NOW + 30 * 60_000) / 1000),
+        },
+      },
+    ]);
+    expect(due.find((request) => request.url === FCM_SEND)?.headers.authorization).toBe("Bearer google-token");
+    const response = await get(env, `/v1/races/${RACE_ID}/channels/fcm`);
+    expect(await response.json()).toEqual({
+      channelId: `race-${RACE_ID}`,
+      state: upcoming,
+      timestamp: (NOW + 30 * 60_000) / 1000,
+    });
+  });
+
+  it("sends each new state of the race to its topic once", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await sync(env, [race()], NOW);
+
+    const sent = stubNetwork();
+    await sync(env, [race({ IsLive: true })], NOW);
+    await sync(env, [race({ IsLive: true })], NOW + 60_000);
+
+    expect(toTopic(sent).map((message) => message.data)).toEqual([
+      { raceId: RACE_ID, event: "update", state: live.state, timestamp: String(NOW / 1000) },
+    ]);
+  });
+
+  it("sends the end once, which FCM keeps for offline devices until its dismissal date", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await sync(env, [race()], NOW);
+    const finished = [race({ StatusId: 11, ScheduleStatus: "FINISHED" })];
+
+    const sent = stubNetwork({ results: relay.results });
+    await sync(env, finished, NOW);
+    await sync(env, finished, NOW + 10 * 60_000);
+    await sync(env, finished, NOW + 60 * 60_000);
+
+    const dismissalDate = NOW / 1000 + 30 * 60;
+    expect(toTopic(sent)).toEqual([
+      {
+        topic: `race-${RACE_ID}`,
+        android: { collapseKey: `race-${RACE_ID}`, priority: "HIGH", ttl: "1800s" },
+        data: {
+          raceId: RACE_ID,
+          event: "end",
+          state: relayFinal,
+          timestamp: String(NOW / 1000),
+          dismissalDate: String(dismissalDate),
+        },
+      },
+    ]);
+    expect((await topicRow(env))?.deletedAt).toBe(NOW);
+    const response = await get(env, `/v1/races/${RACE_ID}/channels/fcm`);
+    expect(response.status).toBe(410);
+    expect(await response.json()).toEqual({ state: relayFinal, dismissalDate });
+  });
+
+  it("sends the end again at the next run when FCM fails", async () => {
+    const env = await makeEnv();
+    stubNetwork();
+    await sync(env, [race()], NOW);
+    const finished = [race({ StatusId: 11, ScheduleStatus: "FINISHED" })];
+    stubNetwork({ results: relay.results, fcmStatus: 503 });
+    await sync(env, finished, NOW);
+
+    const sent = stubNetwork({ results: relay.results });
+    await sync(env, finished, NOW + 60_000);
+
+    expect(toTopic(sent).map((message) => (message.data as { event?: string }).event)).toEqual(["end"]);
+  });
+
+  it("opens the topic at the next run when FCM fails", async () => {
+    const env = await makeEnv();
+    stubNetwork({ fcmStatus: 503 });
+    await sync(env, [race()], NOW);
+    expect(await topicRow(env)).toBeNull();
+
+    const sent = stubNetwork();
+    await sync(env, [race()], NOW + 60_000);
+
+    expect(toTopic(sent)).toHaveLength(1);
+    expect((await topicRow(env))?.channelId).toBe(`race-${RACE_ID}`);
+  });
+
+  it("keeps broadcasting on the APNs channels while Google's access token can't be had", async () => {
+    const env = await makeEnv();
+    stubNetwork({ googleUnavailable: true });
+    await sync(env, [race()], NOW);
+
+    const sent = stubNetwork({ googleUnavailable: true });
+    await sync(env, [race({ IsLive: true })], NOW);
+
+    expect(broadcasts(sent)).toHaveLength(2);
+    expect(await topicRow(env)).toBeNull();
+  });
+});
+
 describe("pruning", () => {
   const HOUR = 60 * 60_000;
 
@@ -1043,7 +1206,7 @@ describe("GET /v1/races/:id/channels/:environment", () => {
     const sent = stubNetwork({ results: relay.results });
     await sync(env, [race({ StatusId: 11, ScheduleStatus: "FINISHED" })], NOW + 60_000);
 
-    expect(sent.filter((request) => !request.url.includes("biathlonresults.com"))).toEqual([]);
+    expect(withoutFCM(sent).filter((request) => !request.url.includes("biathlonresults.com"))).toEqual([]);
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(410);
     expect(await response.json()).toEqual({ state: relayFinal, dismissalDate: (NOW + 60_000) / 1000 + 30 * 60 });
