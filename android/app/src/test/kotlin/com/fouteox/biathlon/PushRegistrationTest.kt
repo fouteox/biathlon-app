@@ -128,6 +128,22 @@ class PushRegistrationTest {
         assertEquals(listOf(HttpMethod.Put, HttpMethod.Delete, HttpMethod.Delete), requests.map { it.method })
     }
 
+    /** A refused request doesn't undo an earlier one that may have reached the server. */
+    @Test
+    fun triesToForgetAgainAfterARefusal() = runBlocking {
+        registration.registered("fid-1")
+        turnAlertsOn()
+        status = HttpStatusCode.GatewayTimeout
+        sync()
+        settings.update { it.copy(cancellationAlerts = false) }
+        status = HttpStatusCode.Unauthorized
+        assertEquals(PushRegistration.Outcome.FAILED, sync())
+        status = HttpStatusCode.NoContent
+        sync()
+        sync()
+        assertEquals(listOf(HttpMethod.Put, HttpMethod.Delete, HttpMethod.Delete), requests.map { it.method })
+    }
+
     /** A DELETE whose answer is lost may have reached the server: turning alerts on again registers again. */
     @Test
     fun registersAgainAfterAnUnansweredUnregistration() = runBlocking {

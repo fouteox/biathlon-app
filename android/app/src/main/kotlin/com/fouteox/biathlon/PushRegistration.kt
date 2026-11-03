@@ -70,13 +70,9 @@ class PushRegistration(
             Outcome.DONE
         } catch (error: ServerException.Http) {
             Log.e(TAG, "Server sync refused", error)
-            if (error.status == 429 || error.status >= 500) {
-                Outcome.RETRY
-            } else {
-                // Refused: the server kept its state.
-                store.edit { it.remove(SENT) }
-                Outcome.FAILED
-            }
+            // A refusal leaves the server unchanged by this request, not by an earlier one left
+            // without an answer: its state stays unknown until a request is accepted.
+            if (error.status == 429 || error.status >= 500) Outcome.RETRY else Outcome.FAILED
         } catch (error: IOException) {
             Log.w(TAG, "Server unreachable", error)
             Outcome.RETRY
