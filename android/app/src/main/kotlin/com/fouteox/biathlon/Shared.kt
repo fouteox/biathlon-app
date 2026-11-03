@@ -1,0 +1,231 @@
+package com.fouteox.biathlon
+
+import androidx.annotation.StringRes
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.fouteox.biathlon.kit.Competition
+import com.fouteox.biathlon.kit.IbuClient
+import com.fouteox.biathlon.kit.Nation
+import com.fouteox.biathlon.kit.RaceKind
+import com.fouteox.biathlon.kit.ResultRow
+
+/** The app's client, which tests replace with the fictional World Cup. */
+val LocalIbuClient = staticCompositionLocalOf<IbuClient> { error("No IbuClient provided") }
+
+/** A race's name in the device's language, from the catalog the iOS app and the server's alerts share. */
+@get:StringRes
+val RaceKind.title: Int
+    get() = when (this) {
+        RaceKind.MEN_SPRINT -> R.string.race_smsp
+        RaceKind.WOMEN_SPRINT -> R.string.race_swsp
+        RaceKind.MEN_PURSUIT -> R.string.race_smpu
+        RaceKind.WOMEN_PURSUIT -> R.string.race_swpu
+        RaceKind.MEN_INDIVIDUAL -> R.string.race_smin
+        RaceKind.WOMEN_INDIVIDUAL -> R.string.race_swin
+        RaceKind.MEN_SHORT_INDIVIDUAL -> R.string.race_smsi
+        RaceKind.WOMEN_SHORT_INDIVIDUAL -> R.string.race_swsi
+        RaceKind.MEN_MASS_START -> R.string.race_smms
+        RaceKind.WOMEN_MASS_START -> R.string.race_swms
+        RaceKind.MEN_RELAY -> R.string.race_smrl
+        RaceKind.WOMEN_RELAY -> R.string.race_swrl
+        RaceKind.MIXED_RELAY -> R.string.race_mxrl
+        RaceKind.SINGLE_MIXED_RELAY -> R.string.race_mxsr
+    }
+
+/** Falls back to the IBU's English name for a kind the app doesn't know yet. */
+@Composable
+@ReadOnlyComposable
+fun Competition.title(): String = kind?.let { stringResource(it.title) } ?: shortDescription
+
+@get:StringRes
+val Competition.State.label: Int
+    get() = when (this) {
+        Competition.State.SCHEDULED -> R.string.upcoming
+        Competition.State.LIVE -> R.string.live
+        Competition.State.CANCELLED -> R.string.cancelled
+        Competition.State.FINISHED -> R.string.finished
+    }
+
+val Competition.State.tint: Color
+    @Composable @ReadOnlyComposable
+    get() = when (this) {
+        Competition.State.LIVE -> MaterialTheme.colorScheme.error
+        Competition.State.SCHEDULED -> MaterialTheme.colorScheme.primary
+        Competition.State.CANCELLED, Competition.State.FINISHED -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+/** The state in race lists, where upcoming goes without a badge: the start time says it. */
+@Composable
+fun StateBadge(state: Competition.State) {
+    if (state != Competition.State.SCHEDULED) {
+        Text(stringResource(state.label), color = state.tint, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+    }
+}
+
+/** A screen of the app: its title in the top app bar, with a back button below a tab's root. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Screen(title: String, onBack: (() -> Unit)?, content: @Composable (PaddingValues) -> Unit) {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(title) },
+                navigationIcon = {
+                    if (onBack != null) {
+                        IconButton(onClick = onBack) {
+                            Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.back))
+                        }
+                    }
+                },
+            )
+        },
+        content = content,
+    )
+}
+
+/**
+ * A screen's list once its data loads, pulled to refresh; until then, a progress indicator,
+ * or what went wrong with a button to try again.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun <T> LoadableList(
+    viewModel: LoadViewModel<T>,
+    padding: PaddingValues,
+    listState: LazyListState = rememberLazyListState(),
+    empty: (T) -> Int? = { null },
+    content: LazyListScope.(T) -> Unit,
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
+    val modifier = Modifier.fillMaxSize().padding(padding)
+    when (val current = state) {
+        Loadable.Loading -> Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        is Loadable.Failed -> Column(
+            modifier.padding(horizontal = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(stringResource(R.string.unable_to_load), style = MaterialTheme.typography.titleLarge)
+            Text(stringResource(R.string.results_are_temporarily_unavailable), textAlign = TextAlign.Center)
+            Button(onClick = viewModel::refresh, enabled = !isRefreshing) { Text(stringResource(R.string.try_again)) }
+        }
+        is Loadable.Loaded -> PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = viewModel::refresh, modifier = modifier) {
+            LazyColumn(Modifier.fillMaxSize(), state = listState) { content(current.value) }
+            empty(current.value)?.let { message ->
+                Text(
+                    stringResource(message),
+                    Modifier.align(Alignment.Center).padding(32.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+/** A list section's title, as Material lists head their groups. */
+@Composable
+fun SectionHeader(text: String) {
+    Text(
+        text,
+        Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 8.dp).semantics { heading() },
+        style = MaterialTheme.typography.titleSmall,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+/** A line under a section, as the iOS app's section footers. */
+@Composable
+fun SectionFooter(text: String) {
+    Text(
+        text,
+        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
+
+/** A nation's flag, or its IOC code when no flag is known. */
+@Composable
+fun NationMark(code: String?) {
+    val flag = Nation.flag(code)
+    when {
+        flag != null -> Text(flag)
+        code != null -> Text(code, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** An athlete's or a team's result: rank or status (DNF…), flag, name, shootings, time and gap. */
+@Composable
+fun ResultLine(row: ResultRow, modifier: Modifier = Modifier) {
+    ListItem(
+        modifier = modifier,
+        leadingContent = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(row.irm ?: row.rank.orEmpty(), Modifier.width(40.dp), style = MaterialTheme.typography.titleMedium)
+                NationMark(row.nation)
+            }
+        },
+        headlineContent = { Text(row.shortName ?: row.name) },
+        supportingContent = row.shootings?.let { { Text(it) } },
+        trailingContent = {
+            Column(horizontalAlignment = Alignment.End) {
+                row.totalTime?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                row.behind?.takeIf { it != "0.0" }?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+            }
+        },
+    )
+}
+
+/** How much of a race's start a row says: all of it, or the time alone under a header that gives the day. */
+enum class StartDetail(val skeleton: DateSkeleton) {
+    FULL(DateSkeleton.START),
+    TIME_ONLY(DateSkeleton.TIME),
+}
+
+@Composable
+fun RaceRow(race: Competition, modifier: Modifier = Modifier, start: StartDetail = StartDetail.FULL) {
+    ListItem(
+        modifier = modifier,
+        headlineContent = { Text(race.title(), fontWeight = FontWeight.SemiBold) },
+        supportingContent = { Text(formatted(race.startTime, start.skeleton)) },
+        trailingContent = { StateBadge(race.state) },
+    )
+}

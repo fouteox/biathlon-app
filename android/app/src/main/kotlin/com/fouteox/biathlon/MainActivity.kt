@@ -9,6 +9,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { BiathlonApp() }
+        val client = (application as BiathlonApplication).ibu
+        setContent { BiathlonApp(client) }
     }
 }

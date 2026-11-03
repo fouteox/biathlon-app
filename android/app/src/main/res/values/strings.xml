@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- The app's other texts come from the String Catalog shared with iOS (generateCatalogStrings). -->
     <string name="app_name" translatable="false">Biathlon</string>
-    <string name="home">Home</string>
 </resources>

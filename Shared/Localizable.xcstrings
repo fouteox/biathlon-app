@@ -262,6 +262,30 @@
         }
       }
     },
+    "Back": {
+      "comment": "Android: the top app bar's button back to the previous screen, read by TalkBack.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retour"
+          }
+        }
+      }
+    },
     "Biathletes": {
       "localizations": {
         "de": {
@@ -338,6 +362,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Catégorie"
+          }
+        }
+      }
+    },
+    "Collapsed": {
+      "comment": "Android: a relay team's row whose legs are hidden, read by TalkBack.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eingeklappt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Collapsed"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Réduit"
           }
         }
       }
@@ -475,6 +523,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Étape"
+          }
+        }
+      }
+    },
+    "Expanded": {
+      "comment": "Android: a relay team's row whose legs are shown, read by TalkBack.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgeklappt"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expanded"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Développé"
           }
         }
       }
