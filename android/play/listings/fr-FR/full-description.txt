@@ -1,0 +1,16 @@
+Suivez la saison de Coupe du monde de biathlon : chaque course, sa liste de départ et ses résultats, en direct pendant la course.
+
+• Accueil : la course en direct, sinon la prochaine, et le dernier podium.
+• Calendrier : toutes les étapes et les courses de la saison, et des saisons passées.
+• Résultats, résultats en direct et analyse de course : temps de ski, au pas de tir et au tir.
+• Classements de la Coupe du monde, avec vos athlètes et nations favoris mis en avant.
+• Athlètes et nations : leur historique de résultats et leur article Wikipédia.
+• Favoris, gardés sur votre appareil.
+• Alertes quand une course est annulée ou que son départ change, et rappel avant le départ.
+• Mises à jour en direct : suivez une course depuis l'écran de verrouillage et la barre d'état.
+• Un widget et des raccourcis pour la prochaine course et le dernier résultat.
+• Les chaînes TV qui diffusent chaque course, la course dans votre agenda et le podium à partager.
+
+En anglais, en français et en allemand.
+
+Cette application n'est pas affiliée à l'Union internationale de biathlon (IBU).

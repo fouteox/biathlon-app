@@ -41,17 +41,31 @@ android {
         applicationId = "com.fouteox.biathlon"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
+        // Each upload to Google Play needs a higher version code: the release workflow's run number.
+        versionCode = providers.gradleProperty("versionCode").map(String::toInt).getOrElse(1)
         versionName = xcconfigSetting("Project.xcconfig", "MARKETING_VERSION").get()
         // IBU data goes through the server's cache, as on iOS; straight to the IBU without a server.
         buildConfigField("String", "SERVER_URL", "\"${xcconfigSetting("Project.xcconfig", "BIATHLON_SERVER_URL").get()}\"")
-        // Linked from Settings, hidden while empty.
         // The Google Cloud project of Firebase, which Play Integrity tokens are requested for.
         buildConfigField("long", "CLOUD_PROJECT_NUMBER", "${googleServicesProjectNumber().get()}L")
+        // Linked from Settings, hidden while empty.
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"${xcconfigSetting("Biathlon.xcconfig", "BIATHLON_PRIVACY_POLICY_URL").get()}\"")
+    }
+    // The upload key, which Google Play checks before signing the app with its own key (Play App
+    // Signing, https://developer.android.com/studio/publish/app-signing): only in the release
+    // workflow, whose secrets hold it. Elsewhere the release bundle builds unsigned.
+    val uploadKeystore = providers.environmentVariable("ANDROID_UPLOAD_KEYSTORE")
+    val upload = uploadKeystore.orNull?.let { keystore ->
+        signingConfigs.create("upload") {
+            storeFile = file(keystore)
+            storePassword = providers.environmentVariable("ANDROID_UPLOAD_KEYSTORE_PASSWORD").get()
+            keyAlias = providers.environmentVariable("ANDROID_UPLOAD_KEY_ALIAS").get()
+            keyPassword = providers.environmentVariable("ANDROID_UPLOAD_KEY_PASSWORD").get()
+        }
     }
     buildTypes {
         release {
+            signingConfig = upload
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
