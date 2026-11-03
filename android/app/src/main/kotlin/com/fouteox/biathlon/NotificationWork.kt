@@ -1,6 +1,8 @@
 package com.fouteox.biathlon
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -44,6 +46,23 @@ object NotificationWork {
     fun refreshRemindersDaily(context: Context) {
         val request = PeriodicWorkRequestBuilder<ReminderWorker>(Duration.ofDays(1)).setConstraints(online).build()
         WorkManager.getInstance(context).enqueueUniquePeriodicWork("reminders-daily", ExistingPeriodicWorkPolicy.KEEP, request)
+    }
+
+    /**
+     * The alerts' dates are written on the server in the device's language and time zone, and the
+     * reminders and channels in its language: a change of either is sent and applied.
+     */
+    class SystemChangeReceiver : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            when (intent.action) {
+                Intent.ACTION_TIMEZONE_CHANGED -> syncPush(context)
+                Intent.ACTION_LOCALE_CHANGED -> {
+                    syncPush(context)
+                    refreshReminders(context)
+                    RaceNotifications.createChannels(context)
+                }
+            }
+        }
     }
 
     class PushSyncWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {

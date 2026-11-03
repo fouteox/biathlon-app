@@ -115,6 +115,36 @@ class PushRegistrationTest {
     }
 
     @Test
+    fun triesToForgetAgainAfterAFailedAttempt() = runBlocking {
+        registration.registered("fid-1")
+        turnAlertsOn()
+        status = HttpStatusCode.GatewayTimeout
+        sync()
+        settings.update { it.copy(cancellationAlerts = false) }
+        sync()
+        status = HttpStatusCode.NoContent
+        sync()
+        sync()
+        assertEquals(listOf(HttpMethod.Put, HttpMethod.Delete, HttpMethod.Delete), requests.map { it.method })
+    }
+
+    /** A DELETE whose answer is lost may have reached the server: turning alerts on again registers again. */
+    @Test
+    fun registersAgainAfterAnUnansweredUnregistration() = runBlocking {
+        registration.registered("fid-1")
+        turnAlertsOn()
+        sync()
+        settings.update { it.copy(cancellationAlerts = false) }
+        status = HttpStatusCode.GatewayTimeout
+        sync()
+        turnAlertsOn()
+        status = HttpStatusCode.NoContent
+        sync()
+        sync()
+        assertEquals(listOf(HttpMethod.Put, HttpMethod.Delete, HttpMethod.Put), requests.map { it.method })
+    }
+
+    @Test
     fun hasNothingToForgetForADeviceNeverRegistered() = runBlocking {
         registration.registered("fid-1")
         assertEquals(PushRegistration.Outcome.DONE, sync())

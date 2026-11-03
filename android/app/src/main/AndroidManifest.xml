@@ -60,6 +60,15 @@
                 tools:node="remove" />
         </provider>
 
+        <!-- Both broadcasts are exempt from the limits on implicit broadcasts. -->
+        <receiver
+            android:name=".NotificationWork$SystemChangeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.intent.action.LOCALE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".Reminders$ReminderReceiver"
             android:exported="false" />

@@ -49,10 +49,11 @@ class PushRegistration(
         // The registration's data class text: equal for equal registrations.
         val request = "$fid $registration"
         val synced = stored[SYNCED]
-        val upToDate = if (registration == null) {
-            // Nothing for the server to forget: no registration of this installation was accepted,
-            // nor sent without an answer, unless forgotten since.
-            listOfNotNull(synced, stored[SENT]).none { it.startsWith("$fid ") && it != request }
+        // A request sent without an answer may or may not have changed the server: the current one
+        // is sent then, whatever it is.
+        val upToDate = stored[SENT] == null && if (registration == null) {
+            // Forgotten already, or never registered with this installation.
+            synced == request || synced?.startsWith("$fid ") != true
         } else {
             synced == request && stored[RESEND] != true
         }
@@ -69,7 +70,13 @@ class PushRegistration(
             Outcome.DONE
         } catch (error: ServerException.Http) {
             Log.e(TAG, "Server sync refused", error)
-            if (error.status == 429 || error.status >= 500) Outcome.RETRY else Outcome.FAILED
+            if (error.status == 429 || error.status >= 500) {
+                Outcome.RETRY
+            } else {
+                // Refused: the server kept its state.
+                store.edit { it.remove(SENT) }
+                Outcome.FAILED
+            }
         } catch (error: IOException) {
             Log.w(TAG, "Server unreachable", error)
             Outcome.RETRY
@@ -87,7 +94,7 @@ class PushRegistration(
         /** The request the server last accepted: the installation ID, then the registration. */
         private val SYNCED = stringPreferencesKey("synced")
 
-        /** The request last sent, until the server accepts it. */
+        /** The request last sent, until the server accepts one: the server's state is unknown meanwhile. */
         private val SENT = stringPreferencesKey("sent")
 
         /** Set as FCM reports the installation, until the server has its registration again. */
