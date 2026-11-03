@@ -1,3 +1,0 @@
-.build/
-# jextract's Swift thunks, generated before each build.
-Sources/BiathlonKit/Generated/

@@ -15,63 +15,6 @@ jobs:
       - run: swift test
         working-directory: Packages/BiathlonKit
 
-  android:
-    name: App (Android)
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: android
-    steps:
-      - uses: actions/checkout@v7
-      # Gradle and jextract run on it, and swiftkit-core builds with it.
-      - uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: 25
-      - uses: ./.github/actions/swift-android-setup
-      # swiftkit-core, the Java side of swift-java, is not on Maven Central: it is built from
-      # the swift-java release that SwiftPM resolved, into the local Maven repository.
-      - name: Publish swiftkit-core
-        run: |
-          swift package resolve --package-path swift
-          version=$(jq -r '.pins[] | select(.identity == "swift-java") | .state.version' swift/Package.resolved)
-          cd swift/.build/checkouts/swift-java
-          ./gradlew :SwiftKitCore:publishToMavenLocal -PswiftkitVersion="$version"
-      # A Gradle invocation builds either the debug or the release variants (kit/build.gradle.kts).
-      - name: Build the release bundle
-        run: ./gradlew :app:bundleRelease
-      - name: Report the bundle size
-        run: |
-          bundle=app/build/outputs/bundle/release/app-release.aab
-          {
-            echo "### Android App Bundle"
-            echo "$(du -h "$bundle" | cut -f1) in all; the native libraries, compressed:"
-            echo '```'
-            unzip -v "$bundle" 'base/lib/*'
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      # The UI test runs on BiathlonKit's fictional World Cup, through the Swift library.
-      - name: Test on the emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          target: google_apis
-          working-directory: android
-          script: ./gradlew :app:connectedDebugAndroidTest
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: android-reports
-          path: |
-            android/app/build/outputs/bundle
-            android/app/build/reports
-
   format:
     name: Swift format
     runs-on: ubuntu-24.04
@@ -90,6 +33,24 @@ jobs:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/server-setup
       - run: npm run check
+
+  android:
+    name: App (Android)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      # Also validates the Gradle Wrapper's checksum.
+      - uses: gradle/actions/setup-gradle@v6
+      # Lint (warnings as errors), the Robolectric tests of both build types, and the release
+      # bundle, minified as it would ship.
+      - run: ./gradlew check :app:bundleRelease
 
   app-ios:
     name: App (iOS Simulator)

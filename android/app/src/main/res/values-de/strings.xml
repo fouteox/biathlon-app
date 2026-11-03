@@ -1,5 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="calendar_title">Saisonkalender</string>
-    <string name="calendar_unavailable">Der Kalender ist nicht verfügbar.</string>
+    <string name="home">Übersicht</string>
 </resources>
