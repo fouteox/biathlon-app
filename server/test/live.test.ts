@@ -1005,7 +1005,7 @@ describe("Live Update topics", () => {
     expect((await topicRow(env))?.deletedAt).toBe(NOW);
     const response = await get(env, `/v1/races/${RACE_ID}/channels/fcm`);
     expect(response.status).toBe(410);
-    expect(await response.json()).toEqual({ state: relayFinal, dismissalDate });
+    expect(await response.json()).toEqual({ state: relayFinal, dismissalDate, timestamp: NOW / 1000 });
   });
 
   it("sends the end again at the next run when FCM fails", async () => {
@@ -1212,7 +1212,11 @@ describe("GET /v1/races/:id/channels/:environment", () => {
       await sync(env, finished, now);
       const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
       expect(response.status).toBe(410);
-      expect(await response.json()).toEqual({ state: relayFinal, dismissalDate: NOW / 1000 + 30 * 60 });
+      expect(await response.json()).toEqual({
+        state: relayFinal,
+        dismissalDate: NOW / 1000 + 30 * 60,
+        timestamp: NOW / 1000,
+      });
     }
   });
 
@@ -1229,7 +1233,11 @@ describe("GET /v1/races/:id/channels/:environment", () => {
     expect(later.filter((request) => !request.url.includes("biathlonresults.com"))).toEqual([]);
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(410);
-    expect(await response.json()).toEqual({ state: relayFinal, dismissalDate: NOW / 1000 + 30 * 60 });
+    expect(await response.json()).toEqual({
+      state: relayFinal,
+      dismissalDate: NOW / 1000 + 30 * 60,
+      timestamp: NOW / 1000,
+    });
   });
 
   it("answers 404 for a channel APNs no longer knows, until it is replaced", async () => {
@@ -1255,7 +1263,11 @@ describe("GET /v1/races/:id/channels/:environment", () => {
     expect(withoutFCM(sent).filter((request) => !request.url.includes("biathlonresults.com"))).toEqual([]);
     const response = await get(env, `/v1/races/${RACE_ID}/channels/sandbox`);
     expect(response.status).toBe(410);
-    expect(await response.json()).toEqual({ state: relayFinal, dismissalDate: (NOW + 60_000) / 1000 + 30 * 60 });
+    expect(await response.json()).toEqual({
+      state: relayFinal,
+      dismissalDate: (NOW + 60_000) / 1000 + 30 * 60,
+      timestamp: (NOW + 60_000) / 1000,
+    });
   });
 
   it("answers 404 for a race without a channel and 400 for an unknown environment", async () => {

@@ -31,14 +31,10 @@ data class FollowedRaces(private val races: Map<String, Race> = emptyMap()) {
 
     fun unfollow(raceId: String) = FollowedRaces(races - raceId)
 
-    /**
-     * Whether `update` is of a race followed, and newer than the state on screen: FCM doesn't keep
-     * messages in order. The server's current state, without a date, always is.
-     */
+    /** Whether `update` is of a race followed, and newer than the state on screen: FCM doesn't keep messages in order. */
     fun isNew(update: LiveUpdate): Boolean {
         val race = races[update.raceId] ?: return false
-        val publishedAt = update.publishedAt ?: return true
-        return race.shown == null || publishedAt.epochSecond > race.shown
+        return race.shown == null || update.publishedAt.epochSecond > race.shown
     }
 
     /** Whether `update` was published before the state on screen, which it must not replace. */

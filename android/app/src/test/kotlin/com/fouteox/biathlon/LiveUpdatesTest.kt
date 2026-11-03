@@ -195,7 +195,7 @@ class LiveUpdatesTest {
     fun endsOnceSubscribedARaceThatEndedMeanwhile() = runBlocking {
         channel = HttpStatusCode.OK to """{"channelId":"$topic","state":${stateJson(live)},"timestamp":${now.epochSecond}}"""
         follow()
-        channel = HttpStatusCode.Gone to """{"state":${stateJson(RaceLiveState.demoResult(start))},"dismissalDate":${now.epochSecond + 1800}}"""
+        channel = HttpStatusCode.Gone to """{"state":${stateJson(RaceLiveState.demoResult(start))},"dismissalDate":${now.epochSecond + 1800},"timestamp":${now.epochSecond + 60}}"""
         subscribed()
         assertEquals("Finished", posted().single().extras.getString(Notification.EXTRA_SUB_TEXT))
         assertEquals(emptySet<String>(), followed())
@@ -211,7 +211,7 @@ class LiveUpdatesTest {
 
     @Test
     fun doesNotFollowARaceOver() {
-        channel = HttpStatusCode.Gone to """{"state":${stateJson(live)},"dismissalDate":${now.epochSecond + 1800}}"""
+        channel = HttpStatusCode.Gone to """{"state":${stateJson(live)},"dismissalDate":${now.epochSecond + 1800},"timestamp":${now.epochSecond}}"""
         assertThrows(LiveUpdates.RaceOverException::class.java) { follow() }
         assertEquals(emptySet<String>(), followed())
         assertEquals(listOf("+$topic", "-$topic"), subscriptions)
@@ -287,7 +287,8 @@ class LiveUpdatesTest {
     fun keepsFollowingARaceReinstatedWhileLookingItUp() = runBlocking {
         follow()
         liveUpdates.receive(LiveUpdate.Update(raceId, RaceLiveState.demo(start)[0], now - Duration.ofMinutes(5)))
-        channel = HttpStatusCode.Gone to """{"state":${stateJson(RaceLiveState(Competition.State.CANCELLED, start, emptyList()))},"dismissalDate":${now.epochSecond + 1800}}"""
+        channel = HttpStatusCode.Gone to
+            """{"state":${stateJson(RaceLiveState(Competition.State.CANCELLED, start, emptyList()))},"dismissalDate":${now.epochSecond + 1800},"timestamp":${now.epochSecond - 60}}"""
         whileLookingUp = { liveUpdates.receive(LiveUpdate.Update(raceId, live, now)) }
         liveUpdates.refresh(now)
         assertEquals(setOf(raceId), followed())
@@ -303,6 +304,18 @@ class LiveUpdatesTest {
         whileLookingUp = { liveUpdates.receive(LiveUpdate.Update(raceId, RaceLiveState.demo(start)[1], now - Duration.ofMinutes(2))) }
         liveUpdates.refresh(now)
         assertEquals("1 🇫🇷 PERROT E. 12:41.6", posted().single().extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+    }
+
+    /** A late message from before the end, received while the lookup was on its way, doesn't hold the end back. */
+    @Test
+    fun endsARaceWhoseEndTheLookupFindsAfterALateMessage() = runBlocking {
+        follow()
+        liveUpdates.receive(LiveUpdate.Update(raceId, RaceLiveState.demo(start)[0], now - Duration.ofMinutes(5)))
+        channel = HttpStatusCode.Gone to """{"state":${stateJson(RaceLiveState.demoResult(start))},"dismissalDate":${now.epochSecond + 1800},"timestamp":${now.epochSecond}}"""
+        whileLookingUp = { liveUpdates.receive(LiveUpdate.Update(raceId, live, now - Duration.ofMinutes(2))) }
+        liveUpdates.refresh(now)
+        assertEquals(emptySet<String>(), followed())
+        assertEquals("Finished", posted().single().extras.getString(Notification.EXTRA_SUB_TEXT))
     }
 
     @Test

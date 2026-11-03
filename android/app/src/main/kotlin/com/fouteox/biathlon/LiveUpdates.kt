@@ -101,9 +101,7 @@ class LiveUpdates(
     }
 
     /** A message of a race's topic: a state newer than the one on screen, or the race's end. */
-    suspend fun receive(update: LiveUpdate, now: Instant = Instant.now()) = lock.withLock { receiveAlone(update, now) }
-
-    private suspend fun receiveAlone(update: LiveUpdate, now: Instant) {
+    suspend fun receive(update: LiveUpdate, now: Instant = Instant.now()) = lock.withLock {
         val races = races()
         val race = races[update.raceId]
         when {
@@ -157,13 +155,7 @@ class LiveUpdates(
 
     /** Shows the race's current state, as the server last published it. */
     private suspend fun catchUp(raceId: String, now: Instant = Instant.now()) {
-        val shownBefore = lock.withLock { races()[raceId]?.shown }
-        val current = lookUp(raceId) ?: return
-        lock.withLock {
-            // An answered end comes without a date to compare: a message received while the
-            // lookup was on its way may be newer. A dated state goes through the usual comparison.
-            if (current.publishedAt != null || races()[raceId]?.shown == shownBefore) receiveAlone(current, now)
-        }
+        lookUp(raceId)?.let { receive(it, now) }
     }
 
     /** The race's current state; `null` before its topic opens, or when the server can't be reached, its topic then bringing the next. */

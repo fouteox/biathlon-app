@@ -12,21 +12,20 @@ sealed interface LiveUpdate {
     val state: RaceLiveState
 
     /** When the server published it: FCM doesn't keep messages in order, so one older than the state on screen came late. */
-    val publishedAt: Instant?
+    val publishedAt: Instant
 
     /** The race's state. */
     data class Update(override val raceId: String, override val state: RaceLiveState, override val publishedAt: Instant) : LiveUpdate
 
     /**
      * The race is over: its final [state] stays until [dismissal], 30 minutes after the end
-     * (`dismissalDate`, server/src/live.ts). [publishedAt] is `null` for the end the server
-     * answers with as the race's current state, which comes as no message.
+     * (`dismissalDate`, server/src/live.ts). Looked up, [publishedAt] is when the race ended.
      */
     data class End(
         override val raceId: String,
         override val state: RaceLiveState,
         val dismissal: Instant,
-        override val publishedAt: Instant?,
+        override val publishedAt: Instant,
     ) : LiveUpdate
 
     companion object {

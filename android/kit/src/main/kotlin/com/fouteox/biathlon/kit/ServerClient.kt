@@ -49,7 +49,7 @@ class ServerClient(
                 HttpStatusCode.OK -> IbuJson.decodeFromString<OpenTopic>(response.bodyAsText())
                     .let { LiveUpdate.Update(raceId, it.state, Instant.ofEpochSecond(it.timestamp)) }
                 HttpStatusCode.Gone -> IbuJson.decodeFromString<EndedTopic>(response.bodyAsText())
-                    .let { LiveUpdate.End(raceId, it.state, Instant.ofEpochSecond(it.dismissalDate), publishedAt = null) }
+                    .let { LiveUpdate.End(raceId, it.state, Instant.ofEpochSecond(it.dismissalDate), Instant.ofEpochSecond(it.timestamp)) }
                 HttpStatusCode.NotFound -> null
                 else -> throw ServerException.Http(response.status.value)
             }
@@ -93,7 +93,7 @@ private data class OpenTopic(val state: RaceLiveState, val timestamp: Long)
 
 /** The same once the race is over: its final state and when it goes, in seconds since 1970. */
 @Serializable
-private data class EndedTopic(val state: RaceLiveState, val dismissalDate: Long)
+private data class EndedTopic(val state: RaceLiveState, val dismissalDate: Long, val timestamp: Long)
 
 /** What the server stores of an Android device's alert preferences (`parseAndroidRegistration` in server/src/devices.ts). */
 @Serializable

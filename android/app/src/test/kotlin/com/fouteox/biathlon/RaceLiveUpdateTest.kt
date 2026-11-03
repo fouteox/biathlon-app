@@ -89,7 +89,7 @@ class RaceLiveUpdateTest {
     @Test
     fun saysWhenTheRaceIsAlreadyOver() {
         // The calendar still lists the race as upcoming, the server knows it ended.
-        channel = HttpStatusCode.Gone to """{"state":{"phase":"finished","startTime":817398900,"leaders":[]},"dismissalDate":1795708800}"""
+        channel = HttpStatusCode.Gone to """{"state":{"phase":"finished","startTime":817398900,"leaders":[]},"dismissalDate":1795708800,"timestamp":1795707000}"""
         show(race("BT2829SWRLCP01SMSP"))
         compose.onNodeWithContentDescription("Live update").performClick()
         compose.waitForText("This race is over.")
