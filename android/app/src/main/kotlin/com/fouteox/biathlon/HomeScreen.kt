@@ -101,7 +101,7 @@ private fun RaceHeading(race: Competition, modifier: Modifier = Modifier) {
             Text(stringResource(R.string.start_arg, formatted(race.startTime, DateSkeleton.TIME)), color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             Text(formatted(race.startTime, DateSkeleton.START), color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(formattedFromNow(race.startTime), style = MaterialTheme.typography.titleMedium)
+            Text(formattedFromNow(race.startTime, currentTime()), style = MaterialTheme.typography.titleMedium)
         }
     }
 }

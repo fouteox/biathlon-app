@@ -1,17 +1,22 @@
 package com.fouteox.biathlon
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollToNode
 import com.fouteox.biathlon.kit.BiathlonEvent
 import com.fouteox.biathlon.kit.Competition
 import com.fouteox.biathlon.kit.HomeFeed
 import com.fouteox.biathlon.kit.RaceResults
 import com.fouteox.biathlon.kit.ResultRow
+import java.time.Clock
 import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
+import java.time.ZoneOffset
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
@@ -45,5 +50,32 @@ class HomeScreenTest {
         compose.waitForText("SOLBERG I.")
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("All results"))
         compose.waitUntil { compose.onAllNodes(hasText("SOLBERG I.")).fetchSemanticsNodes().size == 2 }
+    }
+
+    /** Home left open before a race counts down to its start. */
+    @Test
+    fun countsDownToTheNextRace() {
+        val clock = SettableClock(Instant.parse("2026-12-03T14:50:00Z"))
+        val event = BiathlonEvent("BT2627SWRLCP01", "Nordvik", clock.instant(), clock.instant().plus(Duration.ofDays(6)))
+        val next = Competition("BT2627SWRLCP01SMSP", "Men 10 km Sprint", clock.instant().plus(Duration.ofMinutes(10)))
+        val loaded = LoadViewModel { HomeFeed(events = listOf(event), races = listOf(next)) }
+        runBlocking { loaded.load() }
+        compose.setContent {
+            CompositionLocalProvider(LocalClock provides clock) {
+                MaterialTheme { HomeScreen(loaded, open = {}) }
+            }
+        }
+        compose.onNodeWithText("In 10 minutes").assertExists()
+        clock.now = clock.now.plus(Duration.ofMinutes(5))
+        compose.mainClock.advanceTimeBy(Duration.ofSeconds(10).toMillis())
+        compose.onNodeWithText("In 5 minutes").assertExists()
+    }
+
+    private class SettableClock(var now: Instant) : Clock() {
+        override fun instant(): Instant = now
+
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+
+        override fun withZone(zone: ZoneId): Clock = this
     }
 }

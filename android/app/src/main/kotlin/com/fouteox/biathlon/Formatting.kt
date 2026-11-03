@@ -64,7 +64,5 @@ fun formattedDays(start: Instant, end: Instant): String {
 }
 
 /** How far away a start is, "In 3 days", as the system says it. */
-@Composable
-@ReadOnlyComposable
-fun formattedFromNow(instant: Instant): String =
-    DateUtils.getRelativeTimeSpanString(instant.toEpochMilli(), System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS).toString()
+fun formattedFromNow(instant: Instant, now: Instant): String =
+    DateUtils.getRelativeTimeSpanString(instant.toEpochMilli(), now.toEpochMilli(), DateUtils.MINUTE_IN_MILLIS).toString()
