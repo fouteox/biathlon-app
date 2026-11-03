@@ -112,11 +112,12 @@ class BiathlonAppTest {
         compose.onNode(hasContentDescription("Back")).assertDoesNotExist()
     }
 
-    /** Settings, from Home, say where the data comes from and the app's version, from the iOS app's settings. */
+    /** Settings, from Home, say where the data comes from and the app's version, under the notifications, as the iOS app's settings. */
     @Test
     fun settingsSayWhereTheDataComesFrom() {
         launch()
         compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("IBU Datacenter"))
         compose.onNodeWithText("IBU Datacenter").assertExists()
         compose.onNodeWithText(BuildConfig.VERSION_NAME).assertExists()
         compose.onNodeWithContentDescription("Back").performClick()

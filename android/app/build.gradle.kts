@@ -6,6 +6,8 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.room)
+    // Reads google-services.json, the Firebase project's public identifiers.
+    alias(libs.plugins.google.services)
 }
 
 /**
@@ -22,6 +24,16 @@ fun xcconfigSetting(file: String, name: String): Provider<String> = providers
         setting.groupValues[1].replace("$()", "").trim()
     }
 
+/** The project number in google-services.json, which the Google services plugin reads too. */
+fun googleServicesProjectNumber(): Provider<String> = providers
+    .fileContents(layout.projectDirectory.file("google-services.json"))
+    .asText
+    .map { text ->
+        @Suppress("UNCHECKED_CAST")
+        val projectInfo = (JsonSlurper().parseText(text) as Map<String, Any?>)["project_info"] as Map<String, String>
+        projectInfo.getValue("project_number")
+    }
+
 android {
     namespace = "com.fouteox.biathlon"
     compileSdk = libs.versions.compileSdk.get().toInt()
@@ -34,6 +46,8 @@ android {
         // IBU data goes through the server's cache, as on iOS; straight to the IBU without a server.
         buildConfigField("String", "SERVER_URL", "\"${xcconfigSetting("Project.xcconfig", "BIATHLON_SERVER_URL").get()}\"")
         // Linked from Settings, hidden while empty.
+        // The Google Cloud project of Firebase, which Play Integrity tokens are requested for.
+        buildConfigField("long", "CLOUD_PROJECT_NUMBER", "${googleServicesProjectNumber().get()}L")
         buildConfigField("String", "PRIVACY_POLICY_URL", "\"${xcconfigSetting("Biathlon.xcconfig", "BIATHLON_PRIVACY_POLICY_URL").get()}\"")
     }
     buildTypes {
@@ -195,6 +209,14 @@ dependencies {
     // The favorites, as SwiftData keeps them on iOS.
     implementation(libs.room.runtime)
     ksp(libs.room.compiler)
+    // Notifications: the settings, push alerts and the reminders' alarms.
+    implementation(libs.core.ktx)
+    implementation(libs.datastore.preferences)
+    implementation(libs.work.runtime)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
+    implementation(libs.play.integrity)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     testImplementation(platform(libs.compose.bom))
     testImplementation(libs.compose.ui.test.junit4)
@@ -203,5 +225,6 @@ dependencies {
     // The fictional World Cup the screens are tested on.
     testImplementation(testFixtures(project(":kit")))
     testImplementation(libs.ktor.client.mock)
+    testImplementation(libs.work.testing)
     debugImplementation(libs.compose.ui.test.manifest)
 }

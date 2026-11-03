@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "600167276141",
+    "project_id": "biathlon-live-1f39e",
+    "storage_bucket": "biathlon-live-1f39e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:600167276141:android:c85f816ef5402667dae964",
+        "android_client_info": {
+          "package_name": "com.fouteox.biathlon"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBexy54mjEjL1c53bmD9gPiQB18Q80mgMg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

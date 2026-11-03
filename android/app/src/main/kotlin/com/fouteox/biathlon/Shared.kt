@@ -1,5 +1,6 @@
 package com.fouteox.biathlon
 
+import android.content.res.Resources
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
@@ -37,6 +38,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -85,7 +87,10 @@ val RaceKind.title: Int
 /** Falls back to the IBU's English name for a kind the app doesn't know yet. */
 @Composable
 @ReadOnlyComposable
-fun Competition.title(): String = kind?.let { stringResource(it.title) } ?: shortDescription
+fun Competition.title(): String = title(LocalResources.current)
+
+/** [title], outside a screen. */
+fun Competition.title(resources: Resources): String = kind?.let { resources.getString(it.title) } ?: shortDescription
 
 @get:StringRes
 val Competition.State.label: Int
