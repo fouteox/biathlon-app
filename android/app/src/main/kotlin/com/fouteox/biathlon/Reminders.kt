@@ -63,7 +63,11 @@ class Reminders(
         } else {
             emptyList()
         }
-        for (raceId in store.data.first()[SCHEDULED].orEmpty()) {
+        val previous = store.data.first()[SCHEDULED].orEmpty()
+        val scheduled = reminders.map { it.race.id }.toSet()
+        // Recorded before the alarms are set, so that one set by a refresh cancelled or killed midway is still cancelled by the next.
+        store.edit { it[SCHEDULED] = previous + scheduled }
+        for (raceId in previous) {
             alarms.cancel(alarm(raceId, PendingIntent.FLAG_NO_CREATE) ?: continue)
         }
         for (reminder in reminders) {
@@ -73,7 +77,7 @@ class Reminders(
             val operation = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
             AlarmManagerCompat.setExactAndAllowWhileIdle(alarms, AlarmManager.RTC_WAKEUP, reminder.fireTime.toEpochMilli(), operation)
         }
-        store.edit { it[SCHEDULED] = reminders.map { reminder -> reminder.race.id }.toSet() }
+        store.edit { it[SCHEDULED] = scheduled }
         return true
     }
 

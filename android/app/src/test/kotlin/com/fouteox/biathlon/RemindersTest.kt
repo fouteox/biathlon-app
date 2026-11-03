@@ -7,7 +7,9 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Looper
 import androidx.core.content.getSystemService
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
 import com.fouteox.biathlon.kit.IbuClient
 import com.fouteox.biathlon.kit.RaceCategory
 import io.ktor.client.HttpClient
@@ -20,9 +22,12 @@ import java.nio.file.Files
 import java.time.Instant
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Test
@@ -60,13 +65,22 @@ class RemindersTest {
         ),
     )
     private val settings = temporaryNotificationSettings()
+    private val alarms = shadowOf(checkNotNull(context.getSystemService<AlarmManager>()))
+
+    /** Makes the reminders' bookkeeping wait forever once alarms are set, as a refresh cancelled there. */
+    private var stallOnceAlarmsAreSet = false
+    private val store = PreferenceDataStoreFactory.create { File(Files.createTempDirectory("reminders").toFile(), "reminders.preferences_pb") }
     private val reminders = Reminders(
         context,
         client,
         settings,
-        PreferenceDataStoreFactory.create { File(Files.createTempDirectory("reminders").toFile(), "reminders.preferences_pb") },
+        object : DataStore<Preferences> by store {
+            override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences {
+                if (stallOnceAlarmsAreSet && alarms.scheduledAlarms.isNotEmpty()) awaitCancellation()
+                return store.updateData(transform)
+            }
+        },
     )
-    private val alarms = shadowOf(checkNotNull(context.getSystemService<AlarmManager>()))
 
     private fun race(id: String, category: String, start: String) =
         """{"RaceId":"$id","catId":"$category","ShortDescription":"$id","StartTime":"$start","StatusId":1,"ScheduleStatus":"SCHEDULED"}"""
@@ -132,6 +146,21 @@ class RemindersTest {
         val turningOff = launch(Dispatchers.Default) { reminders.refresh(now) }
         calendarAnswer.complete(Unit)
         joinAll(fetching, turningOff)
+        assertEquals(emptyList<Instant>(), scheduledTimes)
+    }
+
+    /** A refresh replaced by a newer one while it sets the alarms leaves none the next refresh doesn't know of. */
+    @Test
+    fun cancelsTheAlarmsOfARefreshCancelledMidway() = runBlocking {
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        settings.update { it.copy(reminderEnabled = true) }
+        stallOnceAlarmsAreSet = true
+        val refreshing = launch(Dispatchers.Default) { reminders.refresh(now) }
+        while (alarms.scheduledAlarms.isEmpty()) yield()
+        refreshing.cancelAndJoin()
+        stallOnceAlarmsAreSet = false
+        settings.update { it.copy(reminderEnabled = false) }
+        reminders.refresh(now)
         assertEquals(emptyList<Instant>(), scheduledTimes)
     }
 
