@@ -49,6 +49,7 @@ class BiathlonApplication : Application(), Configuration.Provider {
         super.onCreate()
         RaceNotifications.createChannels(this)
         NotificationWork.refreshRemindersDaily(this)
+        MainScope().launch { NextRaceWidget.publishPreview(this@BiathlonApplication) }
         // The preferences found at launch, then each change, after a pause that groups quick changes.
         MainScope().launch {
             notificationSettings.preferences.debounce(500.milliseconds).collect {

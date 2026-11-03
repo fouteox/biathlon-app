@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app shortcuts, on a touch and hold of the app's icon, as the iOS app's App Shortcuts:
+     each opens a link of DeepLink. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:icon="@mipmap/ic_shortcut_next_race"
+        android:shortcutId="next-race"
+        android:shortcutShortLabel="@string/next_race">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="biathlon://next-race"
+            android:targetClass="com.fouteox.biathlon.MainActivity"
+            android:targetPackage="com.fouteox.biathlon" />
+    </shortcut>
+    <shortcut
+        android:icon="@mipmap/ic_shortcut_latest_result"
+        android:shortcutId="latest-result"
+        android:shortcutShortLabel="@string/latest_result">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="biathlon://latest-result"
+            android:targetClass="com.fouteox.biathlon.MainActivity"
+            android:targetPackage="com.fouteox.biathlon" />
+    </shortcut>
+</shortcuts>

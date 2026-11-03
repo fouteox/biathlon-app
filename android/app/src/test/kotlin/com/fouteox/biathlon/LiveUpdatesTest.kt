@@ -132,7 +132,7 @@ class LiveUpdatesTest {
 
     private fun followed() = runBlocking { liveUpdates.followed.first() }
 
-    private fun follow() = runBlocking { liveUpdates.follow(raceId, "Men's 10km Sprint", start) }
+    private fun follow() = runBlocking { liveUpdates.follow(raceId, NAME, start) }
 
     @Test
     fun showsAFollowedRacesStateAtOnceAsALiveUpdate() {
@@ -157,6 +157,8 @@ class LiveUpdatesTest {
         assertEquals(raceId, unpin.data?.schemeSpecificPart)
         assertEquals(LiveUpdates.UnpinReceiver::class.java.name, unpin.component?.className)
         assertEquals(notification.actions.single().actionIntent, notification.deleteIntent)
+        // A tap opens the race, as the iOS app's Live Activity.
+        assertEquals(DeepLink.Race(raceId, NAME), DeepLink.of(shadowOf(notification.contentIntent).savedIntent))
     }
 
     @Test
@@ -360,8 +362,13 @@ class LiveUpdatesTest {
     fun showsTheDemoStatesWithoutARace() {
         val states = RaceLiveState.demo(start)
         for (state in states) {
-            RaceNotifications.showLiveUpdate(context, "Men's Sprint", LiveUpdate.Update("demo", state, now), now)
+            RaceNotifications.showLiveUpdate(context, NAME, LiveUpdate.Update("demo", state, now), now)
             assertPromotable(posted().single())
         }
+    }
+
+    private companion object {
+        /** The IBU's English name of the race. */
+        const val NAME = "Men 10 km Sprint"
     }
 }

@@ -23,6 +23,21 @@ class HomeFeed(
     val next: Competition? get() = races.firstOrNull { it.state == Competition.State.SCHEDULED }
     val latestFinished: Competition? get() = races.lastOrNull { it.state == Competition.State.FINISHED }
 
+    /** The live race, otherwise the next one: what the widget shows and the "Next race" shortcut opens. */
+    val upcomingRace: Competition? get() = live ?: next
+
+    /**
+     * When the widget loads the feed again: every 15 minutes while a race is live, at the next
+     * race's start, otherwise every hour, which also catches a start moved. Never sooner than 5
+     * minutes, for a start already past that the race hasn't gone live at.
+     */
+    fun widgetReloadTime(now: Instant): Instant {
+        if (live != null) return now.plusSeconds(WIDGET_LIVE_INTERVAL_SECONDS)
+        val latest = now.plusSeconds(WIDGET_INTERVAL_SECONDS)
+        val next = next ?: return latest
+        return minOf(maxOf(next.startTime, now.plusSeconds(WIDGET_MINIMUM_INTERVAL_SECONDS)), latest)
+    }
+
     /**
      * When the app, open before a race with none live, fetches the feed again so the live race
      * shows by itself: at the next race's start, then every minute, as the IBU marks a race live
@@ -46,6 +61,9 @@ class HomeFeed(
 
     companion object {
         const val LATE_START_INTERVAL_SECONDS = 60L
+        const val WIDGET_LIVE_INTERVAL_SECONDS = 15 * 60L
+        const val WIDGET_INTERVAL_SECONDS = 60 * 60L
+        const val WIDGET_MINIMUM_INTERVAL_SECONDS = 5 * 60L
     }
 }
 

@@ -12,6 +12,8 @@ import com.fouteox.biathlon.kit.sample
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import org.robolectric.RuntimeEnvironment
 
 /** Waits for a text the network brings, which the fictional World Cup serves at once. */
@@ -32,8 +34,9 @@ fun ComposeContentTestRule.launchApp(
     client: IbuClient = IbuClient.sample(Instant.now()),
     wikidata: WikidataClient = WikidataClient.sample(),
     favorites: Favorites = inMemoryFavorites(),
+    links: Flow<DeepLink> = emptyFlow(),
 ) {
-    setContent { BiathlonApp(client, wikidata, server = null, favorites, temporaryNotificationSettings(), liveUpdates = null) }
+    setContent { BiathlonApp(client, wikidata, server = null, favorites, temporaryNotificationSettings(), liveUpdates = null, links) }
 }
 
 /** One screen, with what the app gives every screen. */

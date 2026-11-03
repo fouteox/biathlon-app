@@ -14,12 +14,19 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import com.fouteox.biathlon.kit.IbuClient
 import com.fouteox.biathlon.kit.SeasonId
+import com.fouteox.biathlon.kit.featuredRaces
 import com.fouteox.biathlon.kit.sample
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.respondError
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
 import java.time.Instant
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.runBlocking
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -122,5 +129,46 @@ class BiathlonAppTest {
         compose.onNodeWithText(BuildConfig.VERSION_NAME).assertExists()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("IBU Datacenter").assertDoesNotExist()
+    }
+
+    /** The race the widget or the Live Update opens, on Home over the tab open, with a way back. */
+    @Test
+    fun aLinkOpensItsRaceOnHome() {
+        val client = IbuClient.sample(Instant.now())
+        val race = runBlocking { client.featuredRaces(Instant.now()) }.latestFinished!!
+        val links = MutableSharedFlow<DeepLink>(extraBufferCapacity = 1)
+        compose.launchApp(client, links = links)
+        compose.onNodeWithText("Calendar").performClick()
+        compose.waitForText("Nordvik")
+        links.tryEmit(DeepLink.Race(race.id, race.shortDescription))
+        compose.waitForText("Results")
+        compose.onNodeWithText("Nordvik").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Settings").assertExists()
+    }
+
+    /** The "Next race" shortcut: the live race, otherwise the next one. */
+    @Test
+    fun theNextRaceShortcutOpensTheLiveRace() {
+        compose.launchApp(IbuClient.sample(Instant.now(), liveRace = true), links = flowOf(DeepLink.NextRace))
+        compose.waitForText("Results · Live")
+        compose.onNodeWithContentDescription("Back").assertExists()
+    }
+
+    /** The "Latest result" shortcut: the latest finished race's results, to share. */
+    @Test
+    fun theLatestResultShortcutOpensTheLatestResults() {
+        compose.launchApp(links = flowOf(DeepLink.LatestResult))
+        compose.waitForText("Results")
+        compose.onNodeWithContentDescription("Share").assertExists()
+    }
+
+    /** Without a race to open, the shortcut says so. */
+    @Test
+    fun theLatestResultShortcutSaysWhenThereIsNone() {
+        val noRaces = IbuClient(httpClient = HttpClient(MockEngine { respond("[]", headers = headersOf(HttpHeaders.ContentType, "application/json")) }))
+        compose.launchApp(noRaces, links = flowOf(DeepLink.LatestResult))
+        compose.waitForText("No results yet.")
     }
 }

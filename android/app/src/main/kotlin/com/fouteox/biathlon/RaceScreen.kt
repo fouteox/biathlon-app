@@ -43,6 +43,7 @@ import com.fouteox.biathlon.kit.Nation
 import com.fouteox.biathlon.kit.RaceResults
 import com.fouteox.biathlon.kit.ResultRow
 import com.fouteox.biathlon.kit.TvGuide
+import com.fouteox.biathlon.kit.featuredRaces
 import com.fouteox.biathlon.kit.hasAnalysisRankings
 import com.fouteox.biathlon.kit.isFavorite
 import java.time.Instant
@@ -292,6 +293,22 @@ fun RaceByIdScreen(raceId: String, title: String, open: (Route) -> Unit, onBack:
         is Loadable.Loaded -> RaceScreen(loaded.value, open, onBack)
         // Loading or failed, under the title the link gave.
         else -> Screen(title, onBack) { padding -> LoadableList(race, padding) {} }
+    }
+}
+
+/**
+ * The race an app shortcut opens, found when it opens; under its title until then, or without one.
+ * Once found, the race stays the screen's, as its results and their refreshes are that race's.
+ */
+@Composable
+fun FeaturedRaceScreen(featured: FeaturedRace, open: (Route) -> Unit, onBack: () -> Unit) {
+    val client = LocalIbuClient.current
+    val feed = viewModel(key = "featured") { LoadViewModel { client.featuredRaces(Instant.now()) } }
+    WhileStarted(feed) { if (feed.state.value !is Loadable.Loaded) feed.load() }
+    val state by feed.state.collectAsStateWithLifecycle()
+    when (val race = state.value?.let(featured.race)) {
+        null -> Screen(stringResource(featured.title), onBack) { padding -> LoadableList(feed, padding, empty = { featured.none }) {} }
+        else -> RaceScreen(race, open, onBack)
     }
 }
 

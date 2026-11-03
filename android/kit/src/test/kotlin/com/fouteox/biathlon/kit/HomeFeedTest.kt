@@ -96,6 +96,46 @@ class HomeFeedTest {
         assertFalse(feed(race("B", "2026-11-28T14:00:00Z")).isEmpty)
     }
 
+    @Test
+    fun theWidgetShowsTheLiveRaceAndReloadsEveryQuarterOfAnHour() {
+        val now = instant("2026-11-27T11:30:00Z")
+        val feed = feed(race("LIVE", "2026-11-27T11:00:00Z", isLive = true), race("NEXT", "2026-11-27T11:40:00Z"))
+
+        assertEquals("LIVE", feed.upcomingRace?.id)
+        assertEquals(now.plusSeconds(15 * 60), feed.widgetReloadTime(now))
+    }
+
+    @Test
+    fun theWidgetShowsTheNextRaceAndReloadsAtItsStartWithinTheHour() {
+        val feed = feed(race("NEXT", "2026-11-27T12:10:00Z"))
+
+        assertEquals("NEXT", feed.upcomingRace?.id)
+        assertEquals(instant("2026-11-27T12:10:00Z"), feed.widgetReloadTime(instant("2026-11-27T11:30:00Z")))
+    }
+
+    /** A start a day away can still move: the widget checks every hour. */
+    @Test
+    fun theWidgetReloadsHourlyBeforeALaterRace() {
+        val now = instant("2026-11-27T11:30:00Z")
+        assertEquals(now.plusSeconds(60 * 60), feed(race("NEXT", "2026-11-28T14:00:00Z")).widgetReloadTime(now))
+    }
+
+    /** A start past that the race hasn't gone live at yet: the widget asks again five minutes later. */
+    @Test
+    fun theWidgetWaitsFiveMinutesForARaceLateToStart() {
+        val now = instant("2026-11-27T11:30:00Z")
+        assertEquals(now.plusSeconds(5 * 60), feed(race("NEXT", "2026-11-27T11:15:00Z")).widgetReloadTime(now))
+    }
+
+    @Test
+    fun theWidgetReloadsHourlyWithNoRaceAhead() {
+        val now = instant("2026-11-27T11:30:00Z")
+        val feed = feed(race("DONE", "2026-11-26T15:00:00Z", status = 11, scheduleStatus = "FINISHED"))
+
+        assertNull(feed.upcomingRace)
+        assertEquals(now.plusSeconds(60 * 60), feed.widgetReloadTime(now))
+    }
+
     /** Opened before a race, the app fetches the feed again at the start, so the live race shows without a pull to refresh. */
     @Test
     fun theAppRefreshesAtTheNextStart() {

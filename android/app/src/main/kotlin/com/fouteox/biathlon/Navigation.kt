@@ -19,6 +19,7 @@ import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.runtime.serialization.NavBackStackSerializer
 import com.fouteox.biathlon.kit.BiathlonEvent
 import com.fouteox.biathlon.kit.Competition
+import com.fouteox.biathlon.kit.HomeFeed
 import com.fouteox.biathlon.kit.RaceCategory
 import kotlinx.serialization.Serializable
 
@@ -45,6 +46,10 @@ sealed interface Route : NavKey {
     @Serializable
     data class RaceById(val id: String, val title: String) : Route
 
+    /** The race an app shortcut opens, as the home feed finds it when it opens. */
+    @Serializable
+    data class Featured(val race: FeaturedRace) : Route
+
     @Serializable
     data object Standings : Route
 
@@ -63,6 +68,12 @@ sealed interface Route : NavKey {
 
     @Serializable
     data object Settings : Route
+}
+
+/** The races the app shortcuts open, each with its title while it loads and what it says without one. */
+enum class FeaturedRace(@param:StringRes val title: Int, @param:StringRes val none: Int, val race: (HomeFeed) -> Competition?) {
+    UPCOMING(R.string.next_race, R.string.no_race_scheduled, HomeFeed::upcomingRace),
+    LATEST_RESULT(R.string.latest_result, R.string.no_results_yet, HomeFeed::latestFinished),
 }
 
 /** The navigation bar's destinations, each with its own back stack, as the iOS app's tabs. */
@@ -86,6 +97,18 @@ class Navigation(selected: MutableState<Tab>, private val backStacks: Map<Tab, N
 
     fun open(route: Route) {
         backStack.add(route)
+    }
+
+    /**
+     * A link's screen, over Home, the tab the app starts on, as on iOS: in place of the screens
+     * Home had open, whichever tab was selected.
+     */
+    fun show(route: Route) {
+        selected = Tab.HOME
+        backStacks.getValue(Tab.HOME).apply {
+            retainAll(listOf(Tab.HOME.root))
+            add(route)
+        }
     }
 
     /** A tab tapped again goes back to its root. */
