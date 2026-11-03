@@ -37,6 +37,10 @@ sealed interface Route : NavKey {
     @Serializable
     data class Race(val race: Competition) : Route
 
+    /** A finished race's rankings of the times on the course, on the range and on the shooting mat. */
+    @Serializable
+    data class Analysis(val race: Competition) : Route
+
     /** A race known by its ID alone, such as an athlete's result, with its title. */
     @Serializable
     data class RaceById(val id: String, val title: String) : Route
@@ -50,6 +54,12 @@ sealed interface Route : NavKey {
     /** A nation's athletes in the standings of [category]. */
     @Serializable
     data class Nation(val code: String, val category: RaceCategory) : Route
+
+    @Serializable
+    data object Search : Route
+
+    @Serializable
+    data object Settings : Route
 }
 
 /** The navigation bar's destinations, each with its own back stack, as the iOS app's tabs. */
@@ -57,6 +67,7 @@ enum class Tab(@param:StringRes val label: Int, @param:DrawableRes val icon: Int
     HOME(R.string.home, R.drawable.ic_home, Route.Home),
     CALENDAR(R.string.calendar, R.drawable.ic_calendar_month, Route.Calendar),
     STANDINGS(R.string.standings, R.drawable.ic_format_list_numbered, Route.Standings),
+    SEARCH(R.string.search, R.drawable.ic_search, Route.Search),
 }
 
 /**

@@ -1,6 +1,8 @@
 package com.fouteox.biathlon
 
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,10 +48,14 @@ import com.fouteox.biathlon.kit.IbuClient
 import com.fouteox.biathlon.kit.Nation
 import com.fouteox.biathlon.kit.RaceKind
 import com.fouteox.biathlon.kit.ResultRow
+import com.fouteox.biathlon.kit.WikidataClient
 import kotlinx.coroutines.flow.combine
 
 /** The app's client, which tests replace with the fictional World Cup. */
 val LocalIbuClient = staticCompositionLocalOf<IbuClient> { error("No IbuClient provided") }
+
+/** Finds athletes' Wikipedia articles; tests replace it too. */
+val LocalWikidataClient = staticCompositionLocalOf<WikidataClient> { error("No WikidataClient provided") }
 
 /** A race's name in the device's language, from the catalog the iOS app and the server's alerts share. */
 @get:StringRes
@@ -102,8 +108,8 @@ fun StateBadge(state: Competition.State) {
 }
 
 /**
- * A screen of the app: its title in the top app bar, with a back button below a tab's root,
- * and the choices it filters its list by under the bar.
+ * A screen of the app: its title in the top app bar, with a back button below a tab's root and
+ * its [actions] at the end, and the choices it filters its list by under the bar.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,6 +117,7 @@ fun Screen(
     title: String,
     onBack: (() -> Unit)?,
     pickers: (@Composable RowScope.() -> Unit)? = null,
+    actions: @Composable RowScope.() -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
@@ -125,6 +132,7 @@ fun Screen(
                             }
                         }
                     },
+                    actions = actions,
                 )
                 pickers?.let { PickerRow(it) }
             }
@@ -155,28 +163,50 @@ fun <T> LoadableList(
     val refresh = { all.forEach { it.refresh() } }
     val modifier = Modifier.fillMaxSize().padding(padding)
     when (val current = state) {
-        Loadable.Loading -> Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        is Loadable.Failed -> Column(
-            modifier.padding(horizontal = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(stringResource(R.string.unable_to_load), style = MaterialTheme.typography.titleLarge)
-            Text(stringResource(R.string.results_are_temporarily_unavailable), textAlign = TextAlign.Center)
-            Button(onClick = refresh, enabled = !isRefreshing) { Text(stringResource(R.string.try_again)) }
-        }
+        Loadable.Loading -> LoadProgress(modifier)
+        is Loadable.Failed -> LoadFailure(refresh, isRetrying = isRefreshing, modifier)
         is Loadable.Loaded -> PullToRefreshBox(isRefreshing = isRefreshing, onRefresh = refresh, modifier = modifier) {
             LazyColumn(Modifier.fillMaxSize(), state = listState) { content(current.value) }
-            empty(current.value)?.let { message ->
-                Text(
-                    stringResource(message),
-                    Modifier.align(Alignment.Center).padding(32.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            empty(current.value)?.let { message -> EmptyMessage(stringResource(message), Modifier.align(Alignment.Center)) }
         }
     }
+}
+
+/** A button in the top app bar, named for TalkBack. */
+@Composable
+fun BarAction(@DrawableRes icon: Int, label: String, onClick: () -> Unit) {
+    IconButton(onClick = onClick) { Icon(painterResource(icon), contentDescription = label) }
+}
+
+@Composable
+fun LoadProgress(modifier: Modifier = Modifier) {
+    Box(modifier, contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+}
+
+/** A first load that failed, with a button to try again. */
+@Composable
+fun LoadFailure(retry: () -> Unit, isRetrying: Boolean, modifier: Modifier = Modifier) {
+    Column(
+        modifier.padding(horizontal = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(stringResource(R.string.unable_to_load), style = MaterialTheme.typography.titleLarge)
+        Text(stringResource(R.string.results_are_temporarily_unavailable), textAlign = TextAlign.Center)
+        Button(onClick = retry, enabled = !isRetrying) { Text(stringResource(R.string.try_again)) }
+    }
+}
+
+/** What a list would show, when it has nothing to. */
+@Composable
+fun EmptyMessage(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        modifier.padding(32.dp),
+        style = MaterialTheme.typography.titleMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+    )
 }
 
 /** A list section's title, as Material lists head their groups. */
@@ -231,6 +261,13 @@ fun ResultLine(row: ResultRow, modifier: Modifier = Modifier) {
             }
         },
     )
+}
+
+/** A result row leading to its athlete, when it has one. */
+@Composable
+fun ResultLink(row: ResultRow, open: (Route) -> Unit, modifier: Modifier = Modifier) {
+    val id = row.athleteId
+    ResultLine(row, if (id != null) modifier.clickable { open(Route.Athlete(id, row.name)) } else modifier)
 }
 
 /** How much of a race's start a row says: all of it, or the time alone under a header that gives the day. */

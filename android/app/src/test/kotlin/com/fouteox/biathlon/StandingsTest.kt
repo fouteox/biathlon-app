@@ -1,5 +1,6 @@
 package com.fouteox.biathlon
 
+import android.content.Intent
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -12,13 +13,18 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
 import com.fouteox.biathlon.kit.IbuClient
+import com.fouteox.biathlon.kit.WikidataClient
 import com.fouteox.biathlon.kit.sample
+import java.net.URI
 import java.time.Instant
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 
 /** The standings, a nation's athletes and an athlete's profile, on the fictional World Cup. */
 @RunWith(RobolectricTestRunner::class)
@@ -31,7 +37,12 @@ class StandingsTest {
 
     @Before
     fun openStandings() {
-        compose.setContent { BiathlonApp(IbuClient.sample(Instant.now()) { it == "AllResults" && resultsUnavailable }) }
+        compose.setContent {
+            BiathlonApp(
+                IbuClient.sample(Instant.now()) { it == "AllResults" && resultsUnavailable },
+                WikidataClient.sample(mapOf("BTNORSM01" to mapOf("en" to URI("https://en.wikipedia.org/wiki/Aksel_Vangen")))),
+            )
+        }
         compose.onNodeWithText("Standings").performClick()
         compose.waitForText("VANGEN A.")
     }
@@ -87,5 +98,16 @@ class StandingsTest {
         resultsUnavailable = false
         compose.onNode(hasScrollToNodeAction()).performTouchInput { swipeDown() }
         compose.waitForText("1 · 1000 points")
+    }
+
+    /** The athlete's Wikipedia article opens in the browser. */
+    @Test
+    fun anAthleteLinksToTheirWikipediaArticle() {
+        compose.onNodeWithText("VANGEN A.").performClick()
+        compose.waitForText("Wikipedia")
+        compose.onNodeWithText("Wikipedia").performClick()
+        val intent = shadowOf(RuntimeEnvironment.getApplication()).nextStartedActivity
+        assertEquals(Intent.ACTION_VIEW, intent.action)
+        assertEquals("https://en.wikipedia.org/wiki/Aksel_Vangen", intent.dataString)
     }
 }

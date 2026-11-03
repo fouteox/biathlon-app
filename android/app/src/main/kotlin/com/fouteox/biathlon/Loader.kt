@@ -38,14 +38,8 @@ class LoadViewModel<T>(private val fetch: suspend () -> T) : ViewModel() {
     val isRefreshing: StateFlow<Boolean> = mutableIsRefreshing.asStateFlow()
 
     suspend fun load() {
-        try {
-            mutableState.value = Loadable.Loaded(fetch(), Instant.now())
-        } catch (cancellation: CancellationException) {
-            throw cancellation
-        } catch (error: Exception) {
-            Log.e(TAG, "Load failed", error)
-            if (state.value !is Loadable.Loaded) mutableState.value = Loadable.Failed(error)
-        }
+        val result = attempt(fetch)
+        if (result is Loadable.Loaded || state.value !is Loadable.Loaded) mutableState.value = result
     }
 
     /** A load the user asked for, pulling the list or trying again, in the view model's scope. */
@@ -60,7 +54,14 @@ class LoadViewModel<T>(private val fetch: suspend () -> T) : ViewModel() {
         }
     }
 
-    private companion object {
-        const val TAG = "Loader"
-    }
+}
+
+/** `fetch`'s value, or its failure, logged; a cancelled load (the screen went away) is no result. */
+suspend fun <T> attempt(fetch: suspend () -> T): Loadable<T> = try {
+    Loadable.Loaded(fetch(), Instant.now())
+} catch (cancellation: CancellationException) {
+    throw cancellation
+} catch (error: Exception) {
+    Log.e("Loader", "Load failed", error)
+    Loadable.Failed(error)
 }

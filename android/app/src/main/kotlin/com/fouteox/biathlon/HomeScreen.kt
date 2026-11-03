@@ -28,7 +28,11 @@ import com.fouteox.biathlon.kit.RaceResults
 
 @Composable
 fun HomeScreen(feed: LoadViewModel<HomeFeed>, open: (Route) -> Unit) {
-    Screen(stringResource(R.string.home), onBack = null) { padding ->
+    Screen(
+        stringResource(R.string.home),
+        onBack = null,
+        actions = { BarAction(R.drawable.ic_settings, stringResource(R.string.settings)) { open(Route.Settings) } },
+    ) { padding ->
         LoadableList(feed, padding, empty = { if (it.isEmpty) R.string.no_races else null }) { feed ->
             featured(feed, open)
             val live = feed.live

@@ -7,15 +7,15 @@ plugins {
 }
 
 /**
- * The iOS app's settings file holds the server URL both apps use. The double slash is escaped
- * there (`https:/$()/…`), as xcconfig files read `//` as the start of a comment.
+ * A setting of the iOS app's xcconfig files, which hold what both apps share. Their double
+ * slashes are escaped (`https:/$()/…`), as xcconfig files read `//` as the start of a comment.
  */
-val serverUrl: Provider<String> = providers
-    .fileContents(layout.projectDirectory.file("../../Configs/Project.xcconfig"))
+fun xcconfigSetting(file: String, name: String): Provider<String> = providers
+    .fileContents(layout.projectDirectory.file("../../Configs/$file"))
     .asText
     .map { text ->
-        val setting = checkNotNull(Regex("""^BIATHLON_SERVER_URL\s*=(.*)$""", RegexOption.MULTILINE).find(text)) {
-            "BIATHLON_SERVER_URL is missing from Configs/Project.xcconfig"
+        val setting = checkNotNull(Regex("""^$name\s*=(.*)$""", RegexOption.MULTILINE).find(text)) {
+            "$name is missing from Configs/$file"
         }
         setting.groupValues[1].replace("$()", "").trim()
     }
@@ -28,9 +28,11 @@ android {
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = 1
-        versionName = "1.0.0"
+        versionName = xcconfigSetting("Project.xcconfig", "MARKETING_VERSION").get()
         // IBU data goes through the server's cache, as on iOS; straight to the IBU without a server.
-        buildConfigField("String", "SERVER_URL", "\"${serverUrl.get()}\"")
+        buildConfigField("String", "SERVER_URL", "\"${xcconfigSetting("Project.xcconfig", "BIATHLON_SERVER_URL").get()}\"")
+        // Linked from Settings, hidden while empty.
+        buildConfigField("String", "PRIVACY_POLICY_URL", "\"${xcconfigSetting("Biathlon.xcconfig", "BIATHLON_PRIVACY_POLICY_URL").get()}\"")
     }
     buildTypes {
         release {

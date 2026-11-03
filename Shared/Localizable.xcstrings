@@ -366,6 +366,30 @@
         }
       }
     },
+    "Check the spelling or try a new search.": {
+      "comment": "Android: under a search that found no athlete, as iOS words it.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Überprüfe die Schreibweise oder versuche es mit einer neuen Suche."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check the spelling or try a new search."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vérifiez l’orthographe ou lancez une nouvelle recherche."
+          }
+        }
+      }
+    },
     "Collapsed": {
       "comment": "Android: a relay team's row whose legs are hidden, read by TalkBack.",
       "extractionState": "manual",
@@ -996,6 +1020,30 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aucune course"
+          }
+        }
+      }
+    },
+    "No results for “%@”": {
+      "comment": "Android: a search that found no athlete, with the text searched for, as iOS words it.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Ergebnisse für „%@“"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No results for “%@”"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aucun résultat pour « %@ »"
           }
         }
       }
