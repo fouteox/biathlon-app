@@ -42,11 +42,13 @@ data class Competition(
             }
         }
 
+    /** Named as the server names a race's `phase` (`RaceStatus`, server/src/ibu.ts). */
+    @Serializable
     enum class State {
-        SCHEDULED,
-        LIVE,
-        CANCELLED,
-        FINISHED,
+        @SerialName("scheduled") SCHEDULED,
+        @SerialName("live") LIVE,
+        @SerialName("cancelled") CANCELLED,
+        @SerialName("finished") FINISHED,
         ;
 
         /** Still to be watched: its TV channels, its live alerts. */

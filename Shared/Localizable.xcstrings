@@ -528,6 +528,42 @@
         }
       }
     },
+    "Live update": {
+      "comment": "Android: the race screen's toggle that follows the race in a Live Update, the notification Android pins while the race runs (the iOS app's Live Activity).",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Update"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mise à jour en direct"
+          }
+        }
+      }
+    },
+    "Live updates": {
+      "comment": "Android: the name of the notification channel of the races followed live, in the system's notification settings.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Updates"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mises à jour en direct"
+          }
+        }
+      }
+    },
     "Race alerts": {
       "comment": "Android: the notification channel of the server's alerts, a race cancelled or rescheduled, in the system's notification settings.",
       "extractionState": "manual",
@@ -2140,6 +2176,24 @@
         }
       }
     },
+    "Unable to start the live update": {
+      "comment": "Android: the title of the message shown when a race can't be followed live.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Update kann nicht gestartet werden"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Impossible de lancer la mise à jour en direct"
+          }
+        }
+      }
+    },
     "Underway": {
       "comment": "Badge on an event of the calendar whose days include today.",
       "localizations": {
@@ -2153,6 +2207,24 @@
           "stringUnit": {
             "state": "translated",
             "value": "En cours"
+          }
+        }
+      }
+    },
+    "Unpin": {
+      "comment": "Android: the action of a race's Live Update that stops following the race, which Android asks Live Updates of events the user follows to offer.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht mehr anheften"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ne plus épingler"
           }
         }
       }

@@ -1,21 +1,30 @@
 package com.fouteox.biathlon
 
+import android.Manifest
 import android.content.Intent
+import android.os.Build
 import android.provider.CalendarContract
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -25,6 +34,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
+import androidx.core.app.NotificationManagerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fouteox.biathlon.kit.Competition
@@ -37,6 +47,7 @@ import com.fouteox.biathlon.kit.hasAnalysisRankings
 import com.fouteox.biathlon.kit.isFavorite
 import java.time.Instant
 import java.util.Locale
+import kotlinx.coroutines.launch
 
 /** A race's place and start, then its start list or results, refreshed every 20 seconds while it is live. */
 @Composable
@@ -52,7 +63,10 @@ fun RaceScreen(race: Competition, open: (Route) -> Unit, onBack: () -> Unit) {
     val tvGuide = rememberTvGuide()
     val guide = tvGuide?.state?.collectAsStateWithLifecycle()?.value?.value
     val favorites = rememberFavoriteSet()
-    Screen(race.title(), onBack, actions = { RaceActions(latest, state.value, open) }) { padding ->
+    // While the calendar lists the race as upcoming or live, as on the server, which opens its
+    // topic: the results can lag behind the calendar, as for a cancellation called off.
+    val canBeFollowed = race.state.canBeFollowedLive || state.value?.competition?.state?.canBeFollowedLive == true
+    Screen(race.title(), onBack, actions = { RaceActions(latest, state.value, canBeFollowed, open) }) { padding ->
         // A relay's teams opened on their legs.
         var expanded by rememberSaveable { mutableStateOf(setOf<String>()) }
         val home = LocalConfiguration.current.locales[0].country.ifEmpty { null }
@@ -96,10 +110,11 @@ private fun rememberTvGuide(): LoadViewModel<TvGuide>? {
 
 /**
  * The race's actions in the top app bar: a race has dozens of rows, which they would sit below.
- * The analysis and the podium to share once the results are in, the calendar until the start.
+ * The analysis and the podium to share once the results are in, the calendar until the start,
+ * then the race's Live Update, a state apart from the actions.
  */
 @Composable
-private fun RowScope.RaceActions(race: Competition, results: RaceResults?, open: (Route) -> Unit) {
+private fun RowScope.RaceActions(race: Competition, results: RaceResults?, canBeFollowed: Boolean, open: (Route) -> Unit) {
     val context = LocalContext.current
     if (results != null && results.isResult && race.hasAnalysisRankings) {
         BarAction(R.drawable.ic_timer, stringResource(R.string.course_range_and_shooting_times)) { open(Route.Analysis(race)) }
@@ -116,6 +131,50 @@ private fun RowScope.RaceActions(race: Competition, results: RaceResults?, open:
         if (remember(entry) { entry.resolveActivity(context.packageManager) != null }) {
             BarAction(R.drawable.ic_calendar_add_on, stringResource(R.string.add_to_calendar)) { context.startActivity(entry) }
         }
+    }
+    LocalLiveUpdates.current?.let { LiveUpdateToggle(it, race, canBeFollowed) }
+}
+
+/** The races followed live, which need the server; `null` without one, the races then not followable. */
+val LocalLiveUpdates = staticCompositionLocalOf<LiveUpdates?> { null }
+
+/** Follows the race in a Live Update; a followed race keeps its toggle to stop following. */
+@Composable
+private fun LiveUpdateToggle(liveUpdates: LiveUpdates, race: Competition, canBeFollowed: Boolean) {
+    val followed by liveUpdates.followed.collectAsStateWithLifecycle(initialValue = emptySet())
+    val isFollowed = race.id in followed
+    if (!canBeFollowed && !isFollowed) return
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var isOver by rememberSaveable { mutableStateOf(false) }
+    // Asked in context, as for the alerts: when a race is first followed.
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
+    IconToggleButton(
+        checked = isFollowed,
+        onCheckedChange = { follow ->
+            if (follow && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+                permission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+            scope.launch {
+                if (!follow) return@launch liveUpdates.stop(race.id)
+                try {
+                    liveUpdates.follow(race.id, race.shortDescription, race.startTime)
+                } catch (_: LiveUpdates.RaceOverException) {
+                    isOver = true
+                }
+            }
+        },
+    ) {
+        // TalkBack reads the state, "checked" or "not checked", after the name.
+        Icon(painterResource(R.drawable.ic_live), stringResource(R.string.live_update))
+    }
+    if (isOver) {
+        AlertDialog(
+            onDismissRequest = { isOver = false },
+            confirmButton = { TextButton({ isOver = false }) { Text(stringResource(android.R.string.ok)) } },
+            title = { Text(stringResource(R.string.unable_to_start_the_live_update)) },
+            text = { Text(stringResource(R.string.this_race_is_over)) },
+        )
     }
 }
 
