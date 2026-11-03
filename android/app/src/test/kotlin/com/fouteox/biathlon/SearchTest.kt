@@ -26,7 +26,7 @@ class SearchTest {
 
     @Before
     fun openSearch() {
-        compose.setContent { BiathlonApp(IbuClient.sample(Instant.now()), WikidataClient.sample()) }
+        compose.setContent { BiathlonApp(IbuClient.sample(Instant.now()), WikidataClient.sample(), server = null) }
         compose.onAllNodesWithText("Search").onFirst().performClick()
         compose.onNodeWithText("Search for a biathlete").assertExists()
     }

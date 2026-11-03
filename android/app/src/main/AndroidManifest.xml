@@ -3,6 +3,14 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- The calendar apps a race can be added to, without the calendar permission. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.INSERT" />
+            <data android:mimeType="vnd.android.cursor.dir/event" />
+        </intent>
+    </queries>
+
     <application
         android:name=".BiathlonApplication"
         android:icon="@mipmap/ic_launcher"

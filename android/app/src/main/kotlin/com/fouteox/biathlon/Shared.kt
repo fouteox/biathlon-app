@@ -48,11 +48,15 @@ import com.fouteox.biathlon.kit.IbuClient
 import com.fouteox.biathlon.kit.Nation
 import com.fouteox.biathlon.kit.RaceKind
 import com.fouteox.biathlon.kit.ResultRow
+import com.fouteox.biathlon.kit.ServerClient
 import com.fouteox.biathlon.kit.WikidataClient
 import kotlinx.coroutines.flow.combine
 
 /** The app's client, which tests replace with the fictional World Cup. */
 val LocalIbuClient = staticCompositionLocalOf<IbuClient> { error("No IbuClient provided") }
+
+/** The server, `null` in a build without one; tests replace it too. */
+val LocalServerClient = staticCompositionLocalOf<ServerClient?> { null }
 
 /** Finds athletes' Wikipedia articles; tests replace it too. */
 val LocalWikidataClient = staticCompositionLocalOf<WikidataClient> { error("No WikidataClient provided") }

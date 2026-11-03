@@ -34,7 +34,7 @@ class BiathlonAppTest {
     val compose = createComposeRule()
 
     private fun launch(client: IbuClient = IbuClient.sample(Instant.now())) {
-        compose.setContent { BiathlonApp(client, WikidataClient.sample()) }
+        compose.setContent { BiathlonApp(client, WikidataClient.sample(), server = null) }
     }
 
     @Test
