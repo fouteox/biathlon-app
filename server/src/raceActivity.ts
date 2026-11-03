@@ -1,7 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
-import { broadcast, createChannel, deleteChannel, ENVIRONMENTS, type APNsEnvironment } from "./apns";
+import { broadcast, createChannel, deleteChannel, type APNsEnvironment } from "./apns";
+import { buildTopicMessage, raceTopic, sendFCM } from "./fcm";
+import { serviceAccount } from "./google";
 import { fetchIBU, parseIBUDate, type RaceSnapshot } from "./ibu";
 import {
+  ACTIVITY_LEAD_MS,
   ACTIVITY_LIFETIME_MS,
   broadcastTimestamp,
   calendarFields,
@@ -16,6 +19,7 @@ import {
 import { startActivities } from "./liveStarts";
 import { ProviderTokens, type ProviderTokenSet } from "./providerTokens";
 import { PushLots } from "./pushLots";
+import { PUSH_SERVICES, type PushService } from "./pushSender";
 import { SUBREQUESTS_PER_RUN, SubrequestBudget } from "./subrequests";
 
 /**
@@ -85,9 +89,10 @@ export class RaceActivity extends DurableObject<Env> {
   }
 }
 
+/** A race's APNs channel for an environment, or its FCM topic (`raceTopic`) for `fcm`. */
 interface ChannelRow {
   raceId: string;
-  environment: APNsEnvironment;
+  environment: PushService;
   channelId: string;
   state: string;
   publishedAt: number;
@@ -108,9 +113,9 @@ interface RetiredChannel {
 
 /**
  * Updates the race's activity at `now`: with the race as a cron run's calendar `listed` it, or
- * from an alarm without. A race followable opens a channel per APNs environment, and each new
- * state of the race is broadcast on them; a race over, or unlisted for longer than its activity
- * can last, has its activity ended. The activity then starts on the devices that follow the
+ * from an alarm without. A race followable opens a channel per APNs environment, and its FCM
+ * topic once its activity is due, and each new state of the race is broadcast on them; a race
+ * over, or unlisted for longer than its activity can last, has its activity ended. The activity then starts on the devices that follow the
  * race or whose favorites race it (liveStarts.ts), the ends are sent, again for the devices that were offline, and the
  * channels are deleted at APNs an hour after; the alarm is set for the next of them. The requests
  * still unanswered at `deadline` are given up, for a later update.
@@ -139,7 +144,8 @@ export async function syncRace(
   }
   const current = await readChannels(env.DB, raceId);
   if (followed) {
-    const open = current.filter((row) => row.endedAt === null && !isDropped(row));
+    // The topic needs no start: its first message starts the Live Update.
+    const open = current.filter((row): row is APNsChannelRow => isAPNs(row) && row.endedAt === null && !isDropped(row));
     await startActivities(
       env,
       race,
@@ -158,12 +164,13 @@ export async function syncRace(
   await schedule(storage, current, retired, now);
 }
 
+/** The race's channels, its topic last: a stalled FCM send then holds up none of APNs's. */
 async function readChannels(db: D1Database, raceId: string): Promise<ChannelRow[]> {
   const { results } = await db
     .prepare(
       `SELECT race_id AS raceId, environment, channel_id AS channelId, state, published_at AS publishedAt,
          ended_at AS endedAt, end_sent_at AS endSentAt, deleted_at AS deletedAt, attempted_at AS attemptedAt
-       FROM live_channels WHERE race_id = ?1 ORDER BY environment`,
+       FROM live_channels WHERE race_id = ?1 ORDER BY environment = 'fcm', environment`,
     )
     .bind(raceId)
     .all<ChannelRow>();
@@ -179,7 +186,8 @@ function lazyResults(raceId: string, budget: SubrequestBudget): () => Promise<IB
 /**
  * Broadcasts the race's new state on its open channels, and opens those it lacks, replacing
  * the ended ones of a race followable again, like a cancellation called off, and those APNs
- * no longer knows.
+ * no longer knows. The topic opens only once the activity is due (`ACTIVITY_LEAD_MS`): its
+ * first message starts the Live Update, which Android asks to show only for an event about to start.
  */
 async function follow(
   env: Env,
@@ -194,7 +202,7 @@ async function follow(
   if (reinstated.length > 0) {
     retire(
       storage,
-      reinstated.filter((row) => row.deletedAt === null),
+      reinstated.filter((row): row is APNsChannelRow => isAPNs(row) && row.deletedAt === null),
     );
     await env.DB.batch(
       reinstated.map((row) =>
@@ -211,14 +219,15 @@ async function follow(
     if (row.endedAt === null)
       await publish(env, tokens, row, { ...(JSON.parse(row.state) as LiveState), ...known }, now);
   }
-  for (const environment of ENVIRONMENTS) {
-    const row = kept.find((channel) => channel.environment === environment);
+  for (const service of PUSH_SERVICES) {
+    const row = kept.find((channel) => channel.environment === service);
     if (row && !isDropped(row)) continue;
+    if (service === "fcm" && now < parseIBUDate(race.startTime) - ACTIVITY_LEAD_MS) continue;
     // A dropped channel's replacement starts from its state, which keeps the leaders when the results can't be read.
     const state: LiveState = row
       ? (JSON.parse(row.state) as LiveState)
       : { leaders: [], ...known, ...calendarFields(race) };
-    await openChannel(env, storage, tokens, race.id, environment, state, now);
+    await openChannel(env, storage, tokens, race.id, service, state, now);
   }
 }
 
@@ -242,23 +251,23 @@ async function publish(env: Env, tokens: ProviderTokens, row: ChannelRow, state:
   row.state = stored;
 }
 
-/** Opens the race's channel for `environment`, replacing a dropped one, with `state`. */
+/**
+ * Opens the race's channel for `service`, replacing a dropped one, with `state`: at APNs, or for
+ * FCM by sending `state` to the topic, which needs no creation.
+ */
 async function openChannel(
   env: Env,
   storage: DurableObjectStorage,
   tokens: ProviderTokens,
   raceId: string,
-  environment: APNsEnvironment,
+  service: PushService,
   state: LiveState,
   now: number,
 ) {
-  const outcome = await tokens.send(environment, (token, signal) =>
-    createChannel(environment, env.APNS_TOPIC, token, signal),
-  );
-  if (outcome.kind !== "created") {
-    if (outcome.kind !== "deferred") console.error("APNs channel creation failed", raceId, environment, outcome);
-    return;
-  }
+  const channelId = await (service === "fcm"
+    ? startTopic(env, tokens, raceId, state, now)
+    : createAtAPNs(env, tokens, raceId, service));
+  if (channelId === undefined) return;
   try {
     await env.DB.prepare(
       `INSERT INTO live_channels (race_id, environment, channel_id, state, published_at, created_at)
@@ -267,21 +276,54 @@ async function openChannel(
        SET channel_id = excluded.channel_id, state = excluded.state, published_at = excluded.published_at,
          created_at = excluded.created_at, deleted_at = NULL`,
     )
-      .bind(raceId, environment, outcome.channelId, JSON.stringify(state), now)
+      .bind(raceId, service, channelId, JSON.stringify(state), now)
       .run();
   } catch (error) {
-    // Recorded nowhere, the channel would count against the limit of 10,000 forever: deleted at
-    // once, or retired for a later alarm.
-    if ((await deleteAtAPNs(env, tokens, environment, outcome.channelId)) !== "deleted") {
-      retire(storage, [{ environment, channelId: outcome.channelId }]);
+    // Recorded nowhere, an APNs channel would count against the limit of 10,000 forever: deleted
+    // at once, or retired for a later alarm.
+    if (service !== "fcm" && (await deleteAtAPNs(env, tokens, service, channelId)) !== "deleted") {
+      retire(storage, [{ environment: service, channelId }]);
     }
     throw error;
   }
 }
 
+/** Creates a channel at APNs; its id, `undefined` when APNs created none. */
+async function createAtAPNs(
+  env: Env,
+  tokens: ProviderTokens,
+  raceId: string,
+  environment: APNsEnvironment,
+): Promise<string | undefined> {
+  const outcome = await tokens.send(environment, (token, signal) =>
+    createChannel(environment, env.APNS_TOPIC, token, signal),
+  );
+  if (outcome.kind === "created") return outcome.channelId;
+  if (outcome.kind !== "deferred") console.error("APNs channel creation failed", raceId, environment, outcome);
+  return undefined;
+}
+
+/** Sends the topic's first state, which starts the Live Update; the topic, `undefined` until it is sent. */
+async function startTopic(
+  env: Env,
+  tokens: ProviderTokens,
+  raceId: string,
+  state: LiveState,
+  now: number,
+): Promise<string | undefined> {
+  const outcome = await sendToTopic(env, tokens, raceId, { event: "update" }, state, now);
+  return outcome === "sent" ? raceTopic(raceId) : undefined;
+}
+
 /** An open channel APNs no longer knows, waiting for its replacement. */
 function isDropped(row: ChannelRow): boolean {
   return row.endedAt === null && row.deletedAt !== null;
+}
+
+type APNsChannelRow = ChannelRow & { environment: APNsEnvironment };
+
+function isAPNs(row: ChannelRow): row is APNsChannelRow {
+  return row.environment !== "fcm";
 }
 
 /**
@@ -349,14 +391,15 @@ function endDue(row: ChannelRow): number {
 
 /**
  * Sends the ends that are due, for the devices that were offline too, and deletes the channels
- * at APNs once the grace period is over. The rows stay, marked deleted, for the app to learn
- * the final state.
+ * at APNs once the grace period is over. FCM keeps a topic's end for the devices offline until
+ * its dismissal date (`buildTopicMessage`): sent once, it needs nothing more. The rows stay,
+ * marked deleted, for the app to learn the final state.
  */
 async function sendEnds(env: Env, tokens: ProviderTokens, rows: ChannelRow[], now: number) {
   for (const row of rows) {
     if (row.endedAt === null || row.deletedAt !== null || endDue(row) > now) continue;
     const outcome = await (now - row.endedAt >= END_GRACE_MS
-      ? deleteAtAPNs(env, tokens, row.environment, row.channelId)
+      ? deleteAt(env, tokens, row)
       : send(
           env,
           tokens,
@@ -366,9 +409,10 @@ async function sendEnds(env: Env, tokens: ProviderTokens, rows: ChannelRow[], no
           now,
         ));
     if (outcome === "deferred") continue;
-    if (outcome === "deleted" || outcome === "unregistered") row.deletedAt = now;
-    else {
-      if (outcome === "sent") row.endSentAt = now;
+    if (outcome === "sent") row.endSentAt = now;
+    if (outcome === "deleted" || outcome === "unregistered" || (outcome === "sent" && !isAPNs(row))) {
+      row.deletedAt = now;
+    } else {
       row.attemptedAt = now;
     }
     await env.DB.prepare(
@@ -377,6 +421,11 @@ async function sendEnds(env: Env, tokens: ProviderTokens, rows: ChannelRow[], no
       .bind(row.endSentAt, row.deletedAt, row.attemptedAt, row.raceId, row.environment)
       .run();
   }
+}
+
+/** Deletes an ended channel; a topic has nothing to delete. */
+async function deleteAt(env: Env, tokens: ProviderTokens, row: ChannelRow): Promise<"deleted" | "deferred" | "failed"> {
+  return isAPNs(row) ? deleteAtAPNs(env, tokens, row.environment, row.channelId) : "deleted";
 }
 
 /** Deletes a channel at APNs, "deleted" too when APNs no longer knew it. */
@@ -452,18 +501,21 @@ async function schedule(storage: DurableObjectStorage, rows: ChannelRow[], retir
   if (alarm !== next) await storage.setAlarm(next);
 }
 
+type ActivityEvent = { event: "update" } | { event: "end"; "dismissal-date": number };
+
 /**
- * Broadcasts an ActivityKit event; "unregistered" when APNs no longer knows the channel,
- * "deferred" when the update has no subrequest left.
+ * Broadcasts an ActivityKit event, or sends it to the race's topic; "unregistered" when APNs no
+ * longer knows the channel, "deferred" when the update has no subrequest left.
  */
 async function send(
   env: Env,
   tokens: ProviderTokens,
   row: ChannelRow,
-  event: { event: "update" } | { event: "end"; "dismissal-date": number },
+  event: ActivityEvent,
   state: LiveState,
   now: number,
 ): Promise<"sent" | "unregistered" | "deferred" | "failed"> {
+  if (!isAPNs(row)) return sendToTopic(env, tokens, row.raceId, event, state, now);
   const payload = {
     aps: {
       timestamp: broadcastTimestamp(now),
@@ -481,5 +533,40 @@ async function send(
   );
   if (outcome.kind === "sent" || outcome.kind === "unregistered" || outcome.kind === "deferred") return outcome.kind;
   console.error("APNs broadcast failed", row.raceId, row.environment, outcome);
+  return "failed";
+}
+
+/**
+ * Sends an event to the race's FCM topic; "deferred" when the update has no subrequest left, and
+ * "failed" when Google's credentials or access token can't be had either.
+ */
+async function sendToTopic(
+  env: Env,
+  tokens: ProviderTokens,
+  raceId: string,
+  event: ActivityEvent,
+  state: LiveState,
+  now: number,
+): Promise<"sent" | "deferred" | "failed"> {
+  const message = buildTopicMessage(
+    {
+      raceId,
+      event: event.event,
+      state,
+      timestamp: broadcastTimestamp(now),
+      ...(event.event === "end" && { dismissalDate: event["dismissal-date"] }),
+    },
+    now,
+  );
+  try {
+    const { projectId } = serviceAccount(env.GOOGLE_SERVICE_ACCOUNT);
+    const outcome = await tokens.send("fcm", (token, signal) => sendFCM(message, projectId, token, signal));
+    if (outcome.kind === "sent" || outcome.kind === "deferred") return outcome.kind;
+    console.error("FCM topic message failed", raceId, outcome);
+  } catch (error) {
+    // Broken Google credentials, or an access token that can't be fetched, hold up neither the
+    // APNs channels nor the starts.
+    console.error("FCM topic message failed", raceId, String(error));
+  }
   return "failed";
 }

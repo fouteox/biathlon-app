@@ -1,4 +1,5 @@
 import type { PushOutcome } from "./apns";
+import type { LiveState } from "./live";
 import { buildAndroidNotification, type AlertInput } from "./payload";
 
 /**
@@ -40,12 +41,73 @@ export function buildMessage(push: FCMPush, now: number) {
   };
 }
 
-/** Sends `push`; any failure to reach FCM is a retry. */
+/**
+ * A race's state, to the app's Live Update (Android's Live Activity) on the devices subscribed to
+ * the race's topic (`raceTopic`): FCM has no broadcast channel, and a topic reaches all of them
+ * in one request (https://firebase.google.com/docs/cloud-messaging/android/topic-messaging).
+ */
+export interface TopicPush {
+  raceId: string;
+  event: "update" | "end";
+  state: LiveState;
+  /** When the state was published, in seconds since 1970, for the app to ignore an older one arriving late. */
+  timestamp: number;
+  /** For an end, when the app removes the final state, in seconds since 1970 (`dismissalDate`, live.ts). */
+  dismissalDate?: number;
+}
+
+/** The topic of a race's Live Update. Topic names take letters, digits and `-_.~%`; IBU race ids are letters and digits. */
+export function raceTopic(raceId: string): string {
+  return `race-${raceId}`;
+}
+
+/**
+ * How long FCM keeps an update for a device that is offline: before the start, the state the
+ * topic opens with is the only one for 30 minutes, until the race goes live. A newer one replaces
+ * it (`collapseKey`).
+ */
+const TOPIC_UPDATE_TTL_S = 60 * 60;
+
+/**
+ * The `Message` of `push`, sent at `now` (milliseconds): data only, which the app draws into its
+ * notification, at high priority since it shows one (https://firebase.google.com/docs/cloud-messaging/android/message-priority).
+ * FCM data values are strings. An end is kept until its dismissal date, and no later.
+ */
+export function buildTopicMessage(push: TopicPush, now: number) {
+  const topic = raceTopic(push.raceId);
+  const expiration = push.dismissalDate ?? Math.floor(now / 1000) + TOPIC_UPDATE_TTL_S;
+  return {
+    topic,
+    android: {
+      collapseKey: topic,
+      priority: "HIGH",
+      ttl: `${Math.max(0, expiration - Math.floor(now / 1000))}s`,
+    },
+    data: {
+      raceId: push.raceId,
+      event: push.event,
+      state: JSON.stringify(push.state),
+      timestamp: String(push.timestamp),
+      ...(push.dismissalDate === undefined ? {} : { dismissalDate: String(push.dismissalDate) }),
+    },
+  };
+}
+
+/**
+ * How long a send may wait, at most: a request has no time limit of its own, and a race's update
+ * sends its topic's message on the same deadline as its APNs requests and starts. FCM answers in
+ * well under a second.
+ */
+const REQUEST_TIMEOUT_MS = 5_000;
+
+/**
+ * Sends a `Message` (`buildMessage`, `buildTopicMessage`); any failure to reach FCM, within
+ * `REQUEST_TIMEOUT_MS` or before `signal` aborts, is a retry.
+ */
 export async function sendFCM(
-  push: FCMPush,
+  message: object,
   projectId: string,
   accessToken: string,
-  now: number,
   signal?: AbortSignal,
 ): Promise<PushOutcome> {
   let response: Response;
@@ -53,8 +115,8 @@ export async function sendFCM(
     response = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
       method: "POST",
       headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
-      body: JSON.stringify({ message: buildMessage(push, now) }),
-      signal,
+      body: JSON.stringify({ message }),
+      signal: AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...(signal ? [signal] : [])]),
     });
   } catch (error) {
     return { kind: "retry", reason: String(error) };

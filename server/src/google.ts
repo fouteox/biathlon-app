@@ -41,7 +41,17 @@ export interface AccessToken {
   expiresAt: number;
 }
 
-/** Trades a signed assertion for an access token; throws on any failure, which a later request retries. */
+/**
+ * How long the token request may wait, at most: a request has no time limit of its own, and a
+ * cron run hands every race its FCM token before it updates any (`givenTokens`). Google answers in
+ * well under a second.
+ */
+const TOKEN_REQUEST_TIMEOUT_MS = 5_000;
+
+/**
+ * Trades a signed assertion for an access token; throws on any failure, which a later request
+ * retries, and once the request has waited `TOKEN_REQUEST_TIMEOUT_MS` or `signal` aborts it.
+ */
 export async function fetchAccessToken(
   account: ServiceAccount,
   now: number,
@@ -64,7 +74,7 @@ export async function fetchAccessToken(
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer", assertion }),
-    signal,
+    signal: AbortSignal.any([AbortSignal.timeout(TOKEN_REQUEST_TIMEOUT_MS), ...(signal ? [signal] : [])]),
   });
   if (!response.ok) throw new Error(`Google token endpoint: ${response.status} ${await response.text()}`);
   const { access_token: token, expires_in: expiresIn } = await response.json<{

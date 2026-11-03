@@ -1,6 +1,6 @@
-import { ENVIRONMENTS, type APNsEnvironment } from "./apns";
 import { parseIBUDate, raceStatus, type IBUCompetition, type RaceSnapshot, type RaceStatus } from "./ibu";
 import type { ProviderTokens, ProviderTokenSet } from "./providerTokens";
+import { PUSH_SERVICES, type PushService } from "./pushSender";
 
 /**
  * One Live Activity per race, updated through an APNs broadcast channel: one request
@@ -8,7 +8,9 @@ import type { ProviderTokens, ProviderTokenSet } from "./providerTokens";
  * 10069). Each race's Durable Object (`RaceActivity`, raceActivity.ts) opens a channel
  * per APNs environment while the race is upcoming, publishes each change of its state,
  * then ends the activity and deletes the channel at APNs a while after the race is over
- * (channels are limited to 10,000).
+ * (channels are limited to 10,000). Android has no such channel: the race's FCM topic stands for
+ * one (`raceTopic`, fcm.ts), opened shortly before the start since it starts the app's Live
+ * Update, Android's Live Activity, on the devices subscribed to it.
  */
 
 /** `Results?RaceId=`: the race and its rows. */
@@ -67,6 +69,12 @@ export function relevanceScore(state: LiveState): number {
 }
 
 const RELEVANCE_SCORES: Record<RaceStatus, number> = { live: 1, scheduled: 0.5, finished: 0, cancelled: 0 };
+/**
+ * How long before its race an activity starts: the server starts those of the races followed
+ * (liveStarts.ts), and the race's FCM topic opens, shortly before, as Apple and Android ask of
+ * an event about to start (`RaceLiveState.activityLead` in the app).
+ */
+export const ACTIVITY_LEAD_MS = 30 * 60_000;
 /** Seconds between the UNIX epoch and the reference date of Foundation's `Date`. */
 const REFERENCE_DATE_S = 978_307_200;
 /**
@@ -170,31 +178,31 @@ export async function syncLiveActivities(
 
 /**
  * The run's provider tokens, for the objects. One that can't be loaded, like a broken APNs key,
- * is left out: its environment's requests then fail in each object, without holding up the other's.
+ * is left out: its service's requests then fail in each object, without holding up the others'.
  */
 export async function givenTokens(tokens: ProviderTokens): Promise<ProviderTokenSet> {
   const given: ProviderTokenSet = {};
-  for (const environment of ENVIRONMENTS) {
+  for (const service of PUSH_SERVICES) {
     try {
-      given[environment] = await tokens.token(environment);
+      given[service] = await tokens.token(service);
     } catch (error) {
-      console.error("APNs provider token unavailable", environment, String(error));
+      console.error("Provider token unavailable", service, String(error));
     }
   }
   return given;
 }
 
 /**
- * The channel the app subscribes a race's Live Activity to, for its APNs environment,
- * with the state last published on it: the channel stores no messages, so a new
- * activity starts from it. Once the end is sent, which a new subscriber would miss,
+ * The channel the app subscribes a race's Live Activity to, for its APNs environment, or the
+ * race's FCM topic for its Live Update, with the state last published on it: the channel stores
+ * no messages, so a new activity starts from it. Once the end is sent, which a new subscriber would miss,
  * only the final state and its dismissal date, for the app to end the activities that missed it. None while
  * a dropped channel waits for its replacement.
  */
 export async function channelFor(
   db: D1Database,
   raceId: string,
-  environment: APNsEnvironment,
+  service: PushService,
 ): Promise<
   { channelId: string; state: LiveState; timestamp: number } | { ended: LiveState; dismissalDate: number } | undefined
 > {
@@ -203,7 +211,7 @@ export async function channelFor(
       `SELECT channel_id AS channelId, state, published_at AS publishedAt, ended_at AS endedAt, deleted_at AS deletedAt
        FROM live_channels WHERE race_id = ?1 AND environment = ?2`,
     )
-    .bind(raceId, environment)
+    .bind(raceId, service)
     .first<{
       channelId: string;
       state: string;

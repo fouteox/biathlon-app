@@ -1,4 +1,4 @@
-import { isEnvironment, probe } from "./apns";
+import { probe } from "./apns";
 import {
   deleteAndroidDevice,
   deleteOwnedDevice,
@@ -23,6 +23,7 @@ import { IBU_BASE_URL } from "./ibu";
 import { isPurpose, issueChallenge } from "./challenges";
 import { authorize, pruneKeys, registerKey } from "./keys";
 import { checkIntegrity } from "./playIntegrity";
+import { isPushService } from "./pushSender";
 import { channelFor, pruneChannels } from "./live";
 import { TV_COVERAGE } from "./tvCoverage";
 import { claimCronRun, pruneRaces, runCron } from "./watcher";
@@ -56,10 +57,10 @@ export default {
 
     const channel = url.pathname.match(/^\/v1\/races\/([^/]+)\/channels\/([^/]+)$/);
     if (channel && request.method === "GET") {
-      const [, raceId = "", environment = ""] = channel.map(decodeURIComponent);
-      if (!isEnvironment(environment)) return json({ error: "invalid environment" }, 400);
+      const [, raceId = "", service = ""] = channel.map(decodeURIComponent);
+      if (!isPushService(service)) return json({ error: "invalid environment" }, 400);
       // The channel can change at every cron run: no cache may answer for it, 404 and 410 included.
-      const live = await channelFor(env.DB, raceId, environment);
+      const live = await channelFor(env.DB, raceId, service);
       if (!live) return json({ error: "no channel for this race" }, 404, NO_STORE);
       return "ended" in live
         ? json({ state: live.ended, dismissalDate: live.dismissalDate }, 410, NO_STORE)

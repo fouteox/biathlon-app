@@ -1,6 +1,6 @@
 import { isEnvironment, type APNsEnvironment, type PushOutcome } from "./apns";
 import { parseIBUDate, type RaceSnapshot } from "./ibu";
-import { isFollowable, relevanceScore, type IBUResults, type LiveState } from "./live";
+import { ACTIVITY_LEAD_MS, isFollowable, relevanceScore, type IBUResults, type LiveState } from "./live";
 import { LOC_KEYS, raceTitleKey } from "./payload";
 import type { Deferred } from "./providerTokens";
 import { MAX_SEND_ATTEMPTS, type PushLots } from "./pushLots";
@@ -32,8 +32,6 @@ export interface StartRegistration {
 
 /** Favorites per kind, or races, a device may send: far more than anyone follows. */
 const MAX_FAVORITES = 500;
-/** The activity starts this long before the race (`RaceLiveState.activityLead` in the app). */
-const START_LEAD_MS = 30 * 60_000;
 /**
  * How long after the race's start APNs keeps a start for a device that is offline: later, it
  * would show an outdated state, the race being well under way.
@@ -168,7 +166,7 @@ export interface OpenChannel {
 }
 
 /**
- * Starts the race's activity, once it is due within `START_LEAD_MS` and until it is over, on
+ * Starts the race's activity, once it is due within `ACTIVITY_LEAD_MS` and until it is over, on
  * the devices following it or whose favorites are on its start list and that it wasn't checked
  * for, on its open `channels`. Called by the race's Durable Object, one update at a time: the
  * starts of a race never overlap. The favorites wait for its start list, the followers don't;
@@ -182,7 +180,7 @@ export async function startActivities(
   now: number,
   lots: PushLots,
 ): Promise<void> {
-  if (!isFollowable(race) || now < parseIBUDate(race.startTime) - START_LEAD_MS || channels.length === 0) return;
+  if (!isFollowable(race) || now < parseIBUDate(race.startTime) - ACTIVITY_LEAD_MS || channels.length === 0) return;
   const environments = JSON.stringify(channels.map((channel) => channel.environment));
   const channelIds = JSON.stringify(channels.map((channel) => channel.channelId));
   // Until the race starts, its start list can change: the installs it started nothing for
