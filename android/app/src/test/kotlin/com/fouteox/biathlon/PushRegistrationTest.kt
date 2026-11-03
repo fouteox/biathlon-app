@@ -100,6 +100,20 @@ class PushRegistrationTest {
         assertEquals(listOf(HttpMethod.Put, HttpMethod.Delete, HttpMethod.Delete), requests.map { it.method })
     }
 
+    /** The server may have registered the device although its answer was lost. */
+    @Test
+    fun forgetsADeviceWhoseRegistrationGotNoAnswer() = runBlocking {
+        registration.registered("fid-1")
+        turnAlertsOn()
+        status = HttpStatusCode.GatewayTimeout
+        sync()
+        settings.update { it.copy(cancellationAlerts = false) }
+        status = HttpStatusCode.NoContent
+        sync()
+        sync()
+        assertEquals(listOf(HttpMethod.Put, HttpMethod.Delete), requests.map { it.method })
+    }
+
     @Test
     fun hasNothingToForgetForADeviceNeverRegistered() = runBlocking {
         registration.registered("fid-1")

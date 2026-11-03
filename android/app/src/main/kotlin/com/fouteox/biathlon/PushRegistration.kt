@@ -50,16 +50,20 @@ class PushRegistration(
         val request = "$fid $registration"
         val synced = stored[SYNCED]
         val upToDate = if (registration == null) {
-            // Forgotten already, or never had: nothing for the server to forget.
-            synced == request || synced?.startsWith("$fid ") != true
+            // Nothing for the server to forget: no registration of this installation was accepted,
+            // nor sent without an answer, unless forgotten since.
+            listOfNotNull(synced, stored[SENT]).none { it.startsWith("$fid ") && it != request }
         } else {
             synced == request && stored[RESEND] != true
         }
         if (upToDate) return Outcome.DONE
         return try {
+            // A request whose answer is lost may still have reached the server.
+            store.edit { it[SENT] = request }
             server.registerAndroidDevice(fid, registration, integrityToken)
             store.edit {
                 it[SYNCED] = request
+                it.remove(SENT)
                 it.remove(RESEND)
             }
             Outcome.DONE
@@ -82,6 +86,9 @@ class PushRegistration(
 
         /** The request the server last accepted: the installation ID, then the registration. */
         private val SYNCED = stringPreferencesKey("synced")
+
+        /** The request last sent, until the server accepts it. */
+        private val SENT = stringPreferencesKey("sent")
 
         /** Set as FCM reports the installation, until the server has its registration again. */
         private val RESEND = booleanPreferencesKey("resend")

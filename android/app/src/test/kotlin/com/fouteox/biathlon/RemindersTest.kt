@@ -18,6 +18,10 @@ import io.ktor.http.HttpStatusCode
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -34,9 +38,15 @@ class RemindersTest {
     private val context: Context = RuntimeEnvironment.getApplication()
     private val now = Instant.parse("2026-11-26T12:00:00Z")
     private var calendarIsUnavailable = false
+
+    /** Completed as the calendar is requested, whose answers wait for [calendarAnswer]. */
+    private val calendarRequested = CompletableDeferred<Unit>()
+    private var calendarAnswer = CompletableDeferred(Unit)
     private val client = IbuClient(
         httpClient = HttpClient(
             MockEngine { request ->
+                calendarRequested.complete(Unit)
+                calendarAnswer.await()
                 if (calendarIsUnavailable) return@MockEngine respondError(HttpStatusCode.ServiceUnavailable)
                 when (request.url.segments.last()) {
                     "Events" -> respond(
@@ -107,6 +117,21 @@ class RemindersTest {
         ShadowAlarmManager.setCanScheduleExactAlarms(false)
         settings.update { it.copy(reminderEnabled = true) }
         reminders.refresh(now)
+        assertEquals(emptyList<Instant>(), scheduledTimes)
+    }
+
+    /** A refresh still fetching the calendar can't set the reminders again once they are off. */
+    @Test
+    fun aLaterRefreshWinsOverOneStillFetching() = runBlocking {
+        ShadowAlarmManager.setCanScheduleExactAlarms(true)
+        settings.update { it.copy(reminderEnabled = true) }
+        calendarAnswer = CompletableDeferred()
+        val fetching = launch(Dispatchers.Default) { reminders.refresh(now) }
+        calendarRequested.await()
+        settings.update { it.copy(reminderEnabled = false) }
+        val turningOff = launch(Dispatchers.Default) { reminders.refresh(now) }
+        calendarAnswer.complete(Unit)
+        joinAll(fetching, turningOff)
         assertEquals(emptyList<Instant>(), scheduledTimes)
     }
 

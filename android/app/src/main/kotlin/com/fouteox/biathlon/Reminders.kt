@@ -21,6 +21,8 @@ import com.fouteox.biathlon.kit.upcomingRaces
 import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * The local "N minutes before the start" reminders, as `ReminderScheduler` on iOS: one exact alarm
@@ -36,11 +38,16 @@ class Reminders(
 ) {
     private val alarms = checkNotNull(context.getSystemService<AlarmManager>())
 
+    /** Refreshes run one after another, each with the preferences current as it starts, so an older one can't overwrite a newer one. */
+    private val lock = Mutex()
+
     /**
      * Sets the alarms of the current preferences in place of the previous ones; `false` when the
      * calendar can't be fetched, which keeps the previous ones.
      */
-    suspend fun refresh(now: Instant = Instant.now()): Boolean {
+    suspend fun refresh(now: Instant = Instant.now()): Boolean = lock.withLock { refreshAlone(now) }
+
+    private suspend fun refreshAlone(now: Instant): Boolean {
         val preferences = settings.preferences.first()
         val reminders = if (preferences.reminderEnabled && AlarmManagerCompat.canScheduleExactAlarms(alarms)) {
             val races = try {
