@@ -18,6 +18,8 @@ import io.ktor.http.Url
 import java.io.File
 import java.nio.file.Files
 import java.time.Instant
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -53,7 +55,7 @@ class RaceLiveUpdateTest {
         RuntimeEnvironment.getApplication(),
         server,
         object : LiveUpdates.Topics {
-            override fun subscribe(topic: String) {
+            override fun subscribe(topic: String, onSubscribed: () -> Unit) {
                 subscriptions += "+$topic"
             }
 
@@ -62,6 +64,7 @@ class RaceLiveUpdateTest {
             }
         },
         PreferenceDataStoreFactory.create { File(Files.createTempDirectory("live").toFile(), "live.preferences_pb") },
+        CoroutineScope(Job()),
     )
 
     private fun race(id: String): Competition = runBlocking { client.race(id) }

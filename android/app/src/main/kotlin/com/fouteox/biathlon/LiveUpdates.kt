@@ -21,6 +21,7 @@ import java.io.IOException
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -40,22 +41,25 @@ class LiveUpdates(
     private val server: ServerClient,
     private val topics: Topics,
     private val store: DataStore<Preferences>,
+    /** Where a race catches up once its topic's subscription succeeds, outliving the screen that followed it. */
+    private val scope: CoroutineScope,
 ) {
     /** The races' FCM topics, which tests replace. */
     interface Topics {
-        fun subscribe(topic: String)
+        /** Subscribes to `topic`, then calls [onSubscribed] once the device is subscribed, which can come much later. */
+        fun subscribe(topic: String, onSubscribed: () -> Unit)
 
         fun unsubscribe(topic: String)
     }
 
     /**
-     * FCM keeps each subscription change and retries it until it succeeds
-     * (https://firebase.google.com/docs/reference/android/com/google/firebase/messaging/FirebaseMessaging#subscribeToTopic(java.lang.String)):
-     * nothing to wait for or retry here.
+     * FCM keeps each subscription change and retries it until it succeeds, completing its task
+     * then (https://firebase.google.com/docs/reference/android/com/google/firebase/messaging/FirebaseMessaging#subscribeToTopic(java.lang.String)):
+     * nothing to retry here.
      */
     object FcmTopics : Topics {
-        override fun subscribe(topic: String) {
-            FirebaseMessaging.getInstance().subscribeToTopic(topic)
+        override fun subscribe(topic: String, onSubscribed: () -> Unit) {
+            FirebaseMessaging.getInstance().subscribeToTopic(topic).addOnSuccessListener { onSubscribed() }
         }
 
         override fun unsubscribe(topic: String) {
@@ -77,18 +81,8 @@ class LiveUpdates(
      */
     suspend fun follow(raceId: String, name: String, start: Instant) = lock.withLock {
         edit { it.follow(raceId, name, start) }
-        topics.subscribe(LiveUpdate.topic(raceId))
-        val current = try {
-            server.liveUpdate(raceId)
-        } catch (error: ServerException) {
-            // The topic brings the next state.
-            Log.e(TAG, "Live state lookup failed", error)
-            null
-        } catch (error: IOException) {
-            Log.w(TAG, "Live state unreachable", error)
-            null
-        }
-        when (current) {
+        subscribe(raceId)
+        when (val current = lookUp(raceId)) {
             is LiveUpdate.Update -> showIfNew(current)
             is LiveUpdate.End -> {
                 stopAlone(raceId)
@@ -139,18 +133,7 @@ class LiveUpdates(
     suspend fun refresh(now: Instant = Instant.now()) {
         val stale = lock.withLock { races().let { it.raceIds - it.pruned(now).raceIds } }
         stale.forEach { stop(it) }
-        for (raceId in lock.withLock { races().raceIds }) {
-            val current = try {
-                server.liveUpdate(raceId)
-            } catch (error: ServerException) {
-                Log.e(TAG, "Live state lookup failed", error)
-                continue
-            } catch (error: IOException) {
-                Log.w(TAG, "Live state unreachable", error)
-                return
-            }
-            current?.let { receive(it, now) }
-        }
+        lock.withLock { races().raceIds }.forEach { catchUp(it, now) }
     }
 
     /**
@@ -158,7 +141,29 @@ class LiveUpdates(
      * doesn't say that subscriptions outlive a new installation ID.
      */
     suspend fun resubscribe() = lock.withLock {
-        races().raceIds.forEach { topics.subscribe(LiveUpdate.topic(it)) }
+        races().raceIds.forEach(::subscribe)
+    }
+
+    /**
+     * Subscribes to the race's topic, then catches up once subscribed: a message published before
+     * then, the topic's first or the race's end, never reaches the device.
+     */
+    private fun subscribe(raceId: String) = topics.subscribe(LiveUpdate.topic(raceId)) { scope.launch { catchUp(raceId) } }
+
+    /** Shows the race's current state, as the server last published it. */
+    private suspend fun catchUp(raceId: String, now: Instant = Instant.now()) {
+        lookUp(raceId)?.let { receive(it, now) }
+    }
+
+    /** The race's current state; `null` before its topic opens, or when the server can't be reached, its topic then bringing the next. */
+    private suspend fun lookUp(raceId: String): LiveUpdate? = try {
+        server.liveUpdate(raceId)
+    } catch (error: ServerException) {
+        Log.e(TAG, "Live state lookup failed", error)
+        null
+    } catch (error: IOException) {
+        Log.w(TAG, "Live state unreachable", error)
+        null
     }
 
     private suspend fun races() = FollowedRaces.decoded(store.data.first()[RACES])
@@ -195,7 +200,8 @@ class LiveUpdates(
 
         private val Context.store by preferencesDataStore("live-updates")
 
-        fun open(context: Context, server: ServerClient) = LiveUpdates(context, server, FcmTopics, context.store)
+        fun open(context: Context, server: ServerClient) =
+            LiveUpdates(context, server, FcmTopics, context.store, CoroutineScope(SupervisorJob() + Dispatchers.Default))
 
         /** Unpins the race's Live Update, told apart from the other races' by its data. */
         fun unpinIntent(context: Context, raceId: String): PendingIntent = PendingIntent.getBroadcast(

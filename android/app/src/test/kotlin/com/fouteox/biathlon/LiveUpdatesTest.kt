@@ -19,7 +19,10 @@ import java.io.File
 import java.nio.file.Files
 import java.time.Duration
 import java.time.Instant
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -57,9 +60,15 @@ class LiveUpdatesTest {
 
     private val subscriptions = mutableListOf<String>()
 
+    /** What FCM calls once each subscription succeeds, which [subscribed] stands for. */
+    private val pendingSubscriptions = mutableListOf<() -> Unit>()
+
+    private val scope = CoroutineScope(Job())
+
     private val topics = object : LiveUpdates.Topics {
-        override fun subscribe(topic: String) {
+        override fun subscribe(topic: String, onSubscribed: () -> Unit) {
             subscriptions += "+$topic"
+            pendingSubscriptions += onSubscribed
         }
 
         override fun unsubscribe(topic: String) {
@@ -80,7 +89,15 @@ class LiveUpdatesTest {
         ),
         topics,
         PreferenceDataStoreFactory.create { File(Files.createTempDirectory("live").toFile(), "live.preferences_pb") },
+        scope,
     )
+
+    /** FCM reports the subscriptions done, and the races catch up. */
+    private suspend fun subscribed() {
+        pendingSubscriptions.forEach { it() }
+        pendingSubscriptions.clear()
+        scope.coroutineContext.job.children.forEach { it.join() }
+    }
 
     @Before
     fun allowNotifications() {
@@ -158,6 +175,26 @@ class LiveUpdatesTest {
         assertEquals(setOf(raceId), followed())
         assertEquals(listOf("+$topic"), subscriptions)
         assertEquals(emptyList<Notification>(), posted())
+    }
+
+    /** The topic's first message, published after the lookup but before the device subscribed, never reaches it. */
+    @Test
+    fun catchesUpOnceSubscribed() = runBlocking {
+        follow()
+        channel = HttpStatusCode.OK to """{"channelId":"$topic","state":${stateJson(live)},"timestamp":${now.epochSecond}}"""
+        subscribed()
+        assertEquals("1 🇫🇷 PERROT E. 12:41.6", posted().single().extras.getCharSequence(Notification.EXTRA_TEXT).toString())
+    }
+
+    /** The race's end, sent once, missed the same way. */
+    @Test
+    fun endsOnceSubscribedARaceThatEndedMeanwhile() = runBlocking {
+        channel = HttpStatusCode.OK to """{"channelId":"$topic","state":${stateJson(live)},"timestamp":${now.epochSecond}}"""
+        follow()
+        channel = HttpStatusCode.Gone to """{"state":${stateJson(RaceLiveState.demoResult(start))},"dismissalDate":${now.epochSecond + 1800}}"""
+        subscribed()
+        assertEquals("Finished", posted().single().extras.getString(Notification.EXTRA_SUB_TEXT))
+        assertEquals(emptySet<String>(), followed())
     }
 
     @Test
