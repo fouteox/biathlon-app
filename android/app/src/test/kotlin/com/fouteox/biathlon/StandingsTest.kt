@@ -9,6 +9,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import com.fouteox.biathlon.kit.IbuClient
 import com.fouteox.biathlon.kit.sample
 import java.time.Instant
@@ -24,9 +26,12 @@ class StandingsTest {
     @get:Rule
     val compose = createComposeRule()
 
+    /** Whether the athletes' results fail to load, as the IBU's API sometimes does. */
+    private var resultsUnavailable = false
+
     @Before
     fun openStandings() {
-        compose.setContent { BiathlonApp(IbuClient.sample(Instant.now())) }
+        compose.setContent { BiathlonApp(IbuClient.sample(Instant.now()) { it == "AllResults" && resultsUnavailable }) }
         compose.onNodeWithText("Standings").performClick()
         compose.waitForText("VANGEN A.")
     }
@@ -70,5 +75,17 @@ class StandingsTest {
         compose.onAllNodesWithText("Men's Sprint").onFirst().performClick()
         compose.waitForText("Results")
         compose.onNodeWithText("VANGEN A.").assertExists()
+    }
+
+    /** Pulling the profile reloads the results and the standing too, which load on their own. */
+    @Test
+    fun pullingAnAthleteReloadsTheirResults() {
+        resultsUnavailable = true
+        compose.onNodeWithText("VANGEN A.").performClick()
+        compose.waitForText("Aksel VANGEN")
+        compose.onNodeWithText("1 · 1000 points").assertDoesNotExist()
+        resultsUnavailable = false
+        compose.onNode(hasScrollToNodeAction()).performTouchInput { swipeDown() }
+        compose.waitForText("1 · 1000 points")
     }
 }

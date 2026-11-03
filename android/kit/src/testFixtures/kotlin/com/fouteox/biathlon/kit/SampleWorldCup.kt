@@ -3,6 +3,7 @@ package com.fouteox.biathlon.kit
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.engine.mock.respondError
 import io.ktor.http.HttpStatusCode
 import java.time.Duration
 import java.time.Instant
@@ -21,14 +22,17 @@ import kotlinx.serialization.json.putJsonArray
 /**
  * A client answering from [SampleWorldCup] instead of the network, so that the screens' tests
  * depend on neither the network nor the IBU's calendar. The data is fictional: the IBU's terms
- * forbid redistributing theirs.
+ * forbid redistributing theirs. [isUnavailable]: the API paths that fail for now, as the IBU's
+ * sometimes do.
  */
-fun IbuClient.Companion.sample(now: Instant, liveRace: Boolean = false): IbuClient {
+fun IbuClient.Companion.sample(now: Instant, liveRace: Boolean = false, isUnavailable: (String) -> Boolean = { false }): IbuClient {
     val worldCup = SampleWorldCup(now, liveRace)
     return IbuClient(
         httpClient = HttpClient(
             MockEngine { request ->
-                val body = worldCup.response(request.url.segments.last(), request.url.parameters.names().associateWith { request.url.parameters[it].orEmpty() })
+                val path = request.url.segments.last()
+                if (isUnavailable(path)) return@MockEngine respondError(HttpStatusCode.ServiceUnavailable)
+                val body = worldCup.response(path, request.url.parameters.names().associateWith { request.url.parameters[it].orEmpty() })
                 if (body == null) respond("", HttpStatusCode.NotFound) else respond(body.toString())
             },
         ),

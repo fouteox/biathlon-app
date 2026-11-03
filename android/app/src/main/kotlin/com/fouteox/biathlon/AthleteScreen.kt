@@ -66,7 +66,8 @@ fun AthleteScreen(athleteId: String, name: String, open: (Route) -> Unit, onBack
         },
     ) { padding ->
         val standing = if (season != null && category != null) rememberStanding(athleteId, category, season) else null
-        LoadableList(bio, padding) { profile ->
+        val loadedStanding = standing?.state?.collectAsStateWithLifecycle()?.value
+        LoadableList(bio, padding, alsoLoading = listOfNotNull(history, standing)) { profile ->
             item { Profile(profile) }
             profile.nation?.let { nation ->
                 // The nation opens on the athlete's standings, the men's when the IBU gives no gender.
@@ -77,18 +78,18 @@ fun AthleteScreen(athleteId: String, name: String, open: (Route) -> Unit, onBack
                     )
                 }
             }
-            if (athleteHistory != null && season != null) history(athleteHistory, season, standing, open)
+            if (athleteHistory != null && season != null) history(athleteHistory, season, loadedStanding, open)
         }
     }
 }
 
 /** The athlete's row in the season's overall standings, keyed by what it depends on. */
 @Composable
-private fun rememberStanding(athleteId: String, category: RaceCategory, season: SeasonId): Loadable<CupRow?> {
+private fun rememberStanding(athleteId: String, category: RaceCategory, season: SeasonId): LoadViewModel<CupRow?> {
     val client = LocalIbuClient.current
     val standing = viewModel(key = "standing/$category/$season") { LoadViewModel { client.worldCupStanding(athleteId, category, season) } }
     WhileStarted(standing) { standing.load() }
-    return standing.state.collectAsStateWithLifecycle().value
+    return standing
 }
 
 @Composable
