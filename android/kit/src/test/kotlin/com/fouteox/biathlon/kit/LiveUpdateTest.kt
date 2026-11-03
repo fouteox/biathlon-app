@@ -124,6 +124,9 @@ class LiveUpdateTest {
         assertFalse(shown.isNew(first.copy(publishedAt = instant("2026-11-26T15:29:00Z"))))
         assertTrue(shown.isNew(first.copy(publishedAt = instant("2026-11-26T15:31:00Z"))))
         assertFalse(FollowedRaces().isNew(first))
+        assertTrue(shown.isOlder(first.copy(publishedAt = instant("2026-11-26T15:29:00Z"))))
+        assertFalse(shown.isOlder(first))
+        assertFalse(races.isOlder(first))
     }
 
     @Test

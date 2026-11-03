@@ -41,6 +41,12 @@ data class FollowedRaces(private val races: Map<String, Race> = emptyMap()) {
         return race.shown == null || publishedAt.epochSecond > race.shown
     }
 
+    /** Whether `update` was published before the state on screen, which it must not replace. */
+    fun isOlder(update: LiveUpdate.Update): Boolean {
+        val shown = races[update.raceId]?.shown ?: return false
+        return update.publishedAt.epochSecond < shown
+    }
+
     fun shown(update: LiveUpdate.Update) =
         races[update.raceId]?.let { FollowedRaces(races + (update.raceId to it.copy(shown = update.publishedAt.epochSecond))) } ?: this
 

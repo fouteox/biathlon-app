@@ -267,6 +267,17 @@ class LiveUpdatesTest {
         assertEquals("1 🇫🇷 PERROT E. 12:41.6", posted().single().extras.getCharSequence(Notification.EXTRA_TEXT).toString())
     }
 
+    /** Without a notification on screen, the state shown last still bars older messages. */
+    @Test
+    fun keepsRejectingOlderStatesWhileNothingShows() = runBlocking {
+        shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        follow()
+        liveUpdates.receive(LiveUpdate.Update(raceId, live, now))
+        liveUpdates.receive(LiveUpdate.Update(raceId, RaceLiveState.demo(start)[0], now - Duration.ofMinutes(2)))
+        liveUpdates.receive(LiveUpdate.End(raceId, live, now + Duration.ofMinutes(30), now - Duration.ofMinutes(1)), now)
+        assertEquals(setOf(raceId), followed())
+    }
+
     @Test
     fun removesAnEndPastItsDismissal() = runBlocking {
         follow()

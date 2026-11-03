@@ -118,10 +118,13 @@ class LiveUpdates(
         }
     }
 
-    /** Shows a newer state, or the same one again where it is no longer on screen: after a restart, or before the permission to notify. */
+    /**
+     * Shows a newer state, or the same one again where it is no longer on screen: after a restart,
+     * or before the permission to notify. Never an older one, which would let older messages through.
+     */
     private suspend fun showIfNew(update: LiveUpdate.Update) {
         val races = races()
-        if (!races.isNew(update) && RaceNotifications.isLiveUpdateShown(context, update.raceId)) return
+        if (races.isOlder(update) || !races.isNew(update) && RaceNotifications.isLiveUpdateShown(context, update.raceId)) return
         RaceNotifications.showLiveUpdate(context, title(update.raceId, checkNotNull(races[update.raceId])), update)
         edit { it.shown(update) }
     }
