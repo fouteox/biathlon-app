@@ -538,6 +538,12 @@
             "value": "Live-Update"
           }
         },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live update"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -554,6 +560,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Live-Updates"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live updates"
           }
         },
         "fr": {
@@ -2186,6 +2198,12 @@
             "value": "Live-Update kann nicht gestartet werden"
           }
         },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unable to start the live update"
+          }
+        },
         "fr": {
           "stringUnit": {
             "state": "translated",
@@ -2219,6 +2237,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nicht mehr anheften"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unpin"
           }
         },
         "fr": {
