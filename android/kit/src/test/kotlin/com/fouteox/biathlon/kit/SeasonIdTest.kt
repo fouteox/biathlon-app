@@ -3,6 +3,7 @@ package com.fouteox.biathlon.kit
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.util.Locale
 
 class SeasonIdTest {
     private val now = instant("2026-10-19T12:00:00Z")
@@ -30,5 +31,17 @@ class SeasonIdTest {
         assertTrue(SeasonId("9899") < SeasonId("0001"))
         assertEquals("9900", SeasonId("0001").previous.rawValue)
         assertEquals("1998-99", SeasonId("9899").displayName)
+    }
+
+    /** An ID, not a text: its digits stay ASCII whatever the device's language. */
+    @Test
+    fun asciiDigitsInEveryLocale() {
+        val locale = Locale.getDefault()
+        Locale.setDefault(Locale.forLanguageTag("ar-EG"))
+        try {
+            assertEquals("2627", SeasonId.containing(now).rawValue)
+        } finally {
+            Locale.setDefault(locale)
+        }
     }
 }

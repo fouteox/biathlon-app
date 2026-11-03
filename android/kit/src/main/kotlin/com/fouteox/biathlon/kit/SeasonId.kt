@@ -2,6 +2,7 @@ package com.fouteox.biathlon.kit
 
 import java.time.Instant
 import java.time.ZoneOffset
+import java.util.Locale
 
 /** IBU season ID, for example `2627` for the 2026-27 winter. */
 @JvmInline
@@ -32,7 +33,7 @@ value class SeasonId(val rawValue: String) : Comparable<SeasonId> {
         /** The first World Cup season, the oldest with standings (`CupResults?CupId=BT7778SWRLCP__SMTS`). */
         val FIRST_WORLD_CUP = starting(1977)
 
-        fun starting(year: Int) = SeasonId("%02d%02d".format(year % 100, (year + 1) % 100))
+        fun starting(year: Int) = SeasonId("%02d%02d".format(Locale.ROOT, year % 100, (year + 1) % 100))
 
         /** The season rolls over on July 1, in UTC like the server. */
         fun containing(instant: Instant): SeasonId {
