@@ -48,8 +48,8 @@ jobs:
           java-version: 25
       # Also validates the Gradle Wrapper's checksum.
       - uses: gradle/actions/setup-gradle@v6
-      # Lint (warnings as errors), the Robolectric tests of both build types, and the release
-      # bundle, minified as it would ship.
+      # Lint (warnings as errors), the tests of the models and clients (kit) and the app's
+      # Robolectric tests, and the release bundle, minified as it would ship.
       - run: ./gradlew check :app:bundleRelease
 
   app-ios:
