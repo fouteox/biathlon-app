@@ -93,7 +93,17 @@ export function buildTopicMessage(push: TopicPush, now: number) {
   };
 }
 
-/** Sends a `Message` (`buildMessage`, `buildTopicMessage`); any failure to reach FCM is a retry. */
+/**
+ * How long a send may wait, at most: a request has no time limit of its own, and a race's update
+ * sends its topic's message on the same deadline as its APNs requests and starts. FCM answers in
+ * well under a second.
+ */
+const REQUEST_TIMEOUT_MS = 5_000;
+
+/**
+ * Sends a `Message` (`buildMessage`, `buildTopicMessage`); any failure to reach FCM, within
+ * `REQUEST_TIMEOUT_MS` or before `signal` aborts, is a retry.
+ */
 export async function sendFCM(
   message: object,
   projectId: string,
@@ -106,7 +116,7 @@ export async function sendFCM(
       method: "POST",
       headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
       body: JSON.stringify({ message }),
-      signal,
+      signal: AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...(signal ? [signal] : [])]),
     });
   } catch (error) {
     return { kind: "retry", reason: String(error) };

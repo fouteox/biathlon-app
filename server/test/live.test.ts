@@ -1051,6 +1051,24 @@ describe("Live Update topics", () => {
     },
   );
 
+  it(
+    "broadcasts on the APNs channels before the topic, whose stalled sends wait 5 seconds at most",
+    { timeout: 30_000 },
+    async () => {
+      const env = await makeEnv();
+      stubNetwork();
+      await sync(env, [race()], NOW);
+
+      const sent = stubNetwork();
+      unanswered("fcm.googleapis.com");
+      const started = Date.now();
+      await update(env, NOW, race({ IsLive: true }), env, Date.now() + 20_000);
+
+      expect(broadcasts(sent)).toHaveLength(2);
+      expect(Date.now() - started).toBeLessThan(10_000);
+    },
+  );
+
   it("keeps broadcasting on the APNs channels with a broken Google service account", async () => {
     const env = { ...(await makeEnv()), GOOGLE_SERVICE_ACCOUNT: "{}" };
     stubNetwork();

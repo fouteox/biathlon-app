@@ -164,12 +164,13 @@ export async function syncRace(
   await schedule(storage, current, retired, now);
 }
 
+/** The race's channels, its topic last: a stalled FCM send then holds up none of APNs's. */
 async function readChannels(db: D1Database, raceId: string): Promise<ChannelRow[]> {
   const { results } = await db
     .prepare(
       `SELECT race_id AS raceId, environment, channel_id AS channelId, state, published_at AS publishedAt,
          ended_at AS endedAt, end_sent_at AS endSentAt, deleted_at AS deletedAt, attempted_at AS attemptedAt
-       FROM live_channels WHERE race_id = ?1 ORDER BY environment`,
+       FROM live_channels WHERE race_id = ?1 ORDER BY environment = 'fcm', environment`,
     )
     .bind(raceId)
     .all<ChannelRow>();
