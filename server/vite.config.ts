@@ -10,6 +10,17 @@ const generated = ["worker-configuration.d.ts"];
 const apnsKey = () =>
   generateKeyPairSync("ec", { namedCurve: "P-256" }).privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 
+/** A Google service account's JSON key, as the Google Cloud console downloads it. */
+const googleServiceAccount = () =>
+  JSON.stringify({
+    type: "service_account",
+    project_id: "biathlon-test",
+    client_email: "push@biathlon-test.iam.gserviceaccount.com",
+    private_key: generateKeyPairSync("rsa", { modulusLength: 2048 })
+      .privateKey.export({ type: "pkcs8", format: "pem" })
+      .toString(),
+  });
+
 export default defineConfig({
   fmt: {
     // The width the code was written at.
@@ -39,6 +50,7 @@ export default defineConfig({
           APNS_PRODUCTION_KEY_ID: "HIJ456KLMN",
           APP_ATTEST_APP_ID: "TEAM123456.com.fouteox.biathlon",
           APP_ATTEST_SECRET: "test secret",
+          GOOGLE_SERVICE_ACCOUNT: googleServiceAccount(),
         },
       },
     })),

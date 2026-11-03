@@ -15,6 +15,7 @@ import { syncLiveActivities } from "./live";
 import type { AlertInput } from "./payload";
 import { ProviderTokens } from "./providerTokens";
 import { MAX_SEND_ATTEMPTS, PushLots } from "./pushLots";
+import type { LotPush } from "./pushSender";
 import { SubrequestBudget } from "./subrequests";
 
 /** The calendar of events rarely changes: refresh it every 6 hours. */
@@ -133,17 +134,16 @@ function enqueue(db: D1Database, change: RaceChange, now: number): D1PreparedSta
   const preference = change.kind === "cancelled" ? "cancellation" : "rescheduling";
   return db
     .prepare(
-      `INSERT INTO outbox (token, environment, kind, race_id, race_name, start_time, locale, time_zone, created_at)
-       SELECT token, environment, ?1, ?2, ?3, ?4, locale, time_zone, ?5 FROM devices
+      `INSERT INTO outbox (token, platform, environment, kind, race_id, race_name, start_time, locale, time_zone, created_at)
+       SELECT token, platform, environment, ?1, ?2, ?3, ?4, locale, time_zone, ?5 FROM devices
        WHERE ${preference} = 1 AND ?6 IN (SELECT value FROM json_each(categories))`,
     )
     .bind(change.kind, change.race.id, change.race.name, change.race.startTime, now, change.race.category);
 }
 
-interface OutboxRow {
+type OutboxRow = {
   id: number;
   token: string;
-  environment: APNsEnvironment;
   kind: AlertInput["kind"];
   race_id: string;
   race_name: string;
@@ -152,7 +152,7 @@ interface OutboxRow {
   time_zone: string;
   attempts: number;
   created_at: number;
-}
+} & ({ platform: "ios"; environment: APNsEnvironment } | { platform: "android"; environment: null });
 
 export async function drainOutbox(
   env: Env,
@@ -167,21 +167,7 @@ export async function drainOutbox(
   const retry: number[] = [];
   const unregistered: string[] = [];
   const sent = rows.map(async (row) => {
-    const outcome = await lots.send({
-      deviceToken: row.token,
-      environment: row.environment,
-      topic: env.APNS_TOPIC,
-      collapseId: `${row.kind}-${row.race_id}`,
-      expiration: Math.floor((row.created_at + OUTBOX_MAX_AGE_MS) / 1000),
-      alert: {
-        kind: row.kind,
-        raceId: row.race_id,
-        raceName: row.race_name,
-        startTime: row.start_time,
-        locale: row.locale,
-        timeZone: row.time_zone,
-      },
-    });
+    const outcome = await lots.send(alertPush(env, row));
     switch (outcome.kind) {
       case "sent":
         done.push(row.id);
@@ -195,11 +181,11 @@ export async function drainOutbox(
       case "retry":
       case "expiredProviderToken":
         (row.attempts + 1 >= MAX_SEND_ATTEMPTS ? done : retry).push(row.id);
-        console.warn("APNs retry", row.id, outcome);
+        console.warn("Push retry", row.id, outcome);
         break;
       default:
         done.push(row.id);
-        console.error("APNs failure", row.id, outcome);
+        console.error("Push failure", row.id, outcome);
     }
   });
   await lots.flush();
@@ -214,6 +200,29 @@ export async function drainOutbox(
   ];
   await env.DB.batch(statements);
   if (unregistered.length > 0) await deleteDevices(env.DB, [...new Set(unregistered)]);
+}
+
+/** The push of a queued alert, to APNs or FCM after the device's platform. */
+function alertPush(env: Env, row: OutboxRow): LotPush {
+  const collapseKey = `${row.kind}-${row.race_id}`;
+  const expiration = Math.floor((row.created_at + OUTBOX_MAX_AGE_MS) / 1000);
+  const alert: AlertInput = {
+    kind: row.kind,
+    raceId: row.race_id,
+    raceName: row.race_name,
+    startTime: row.start_time,
+    locale: row.locale,
+    timeZone: row.time_zone,
+  };
+  if (row.platform === "android") return { fid: row.token, collapseKey, expiration, alert };
+  return {
+    deviceToken: row.token,
+    environment: row.environment,
+    topic: env.APNS_TOPIC,
+    collapseId: collapseKey,
+    expiration,
+    alert,
+  };
 }
 
 /** World Cup events (Level=1) of the current season, cached in D1. */

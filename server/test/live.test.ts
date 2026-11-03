@@ -1062,7 +1062,7 @@ describe("alerts", () => {
   async function queue(env: Env, tokens: string[], kind = "cancelled") {
     for (const token of tokens) {
       await env.DB.prepare(
-        "INSERT INTO outbox (token, environment, kind, race_id, race_name, start_time, locale, time_zone, created_at) VALUES (?1, 'sandbox', ?2, ?3, 'x', '2026-11-26T15:15:00.000Z', 'fr', 'Europe/Paris', ?4)",
+        "INSERT INTO outbox (token, platform, environment, kind, race_id, race_name, start_time, locale, time_zone, created_at) VALUES (?1, 'ios', 'sandbox', ?2, ?3, 'x', '2026-11-26T15:15:00.000Z', 'fr', 'Europe/Paris', ?4)",
       )
         .bind(token, kind, RACE_ID, NOW)
         .run();
@@ -1137,7 +1137,7 @@ describe("alerts", () => {
   it("converts the categories written comma-separated before they were JSON", async () => {
     const env = await makeEnv();
     const insert = env.DB.prepare(
-      "INSERT INTO devices (token, environment, categories, cancellation, rescheduling, locale, time_zone, updated_at) VALUES (?1, 'sandbox', ?2, 1, 1, 'fr', 'Europe/Paris', 0)",
+      "INSERT INTO devices (token, platform, environment, categories, cancellation, rescheduling, locale, time_zone, updated_at) VALUES (?1, 'ios', 'sandbox', ?2, 1, 1, 'fr', 'Europe/Paris', 0)",
     );
     await env.DB.batch([
       insert.bind("aa".repeat(32), "MX,SM"),

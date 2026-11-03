@@ -40,10 +40,16 @@
     "APNS_TOPIC": "com.fouteox.biathlon",
     // Oldest app build (CFBundleVersion) App Attest accepts: raise it to shut out builds before a fix.
     "APP_ATTEST_MIN_BUNDLE_VERSION": "1",
+    // The Android app (applicationId), whose Play Integrity tokens are accepted.
+    "ANDROID_PACKAGE_NAME": "com.fouteox.biathlon",
+    // Oldest Android build (versionCode) Play Integrity accepts: raise it to shut out builds before a fix.
+    "PLAY_INTEGRITY_MIN_VERSION_CODE": "1",
   },
   "secrets": {
     // Apple recommends one team-scoped key per APNs environment.
     // APP_ATTEST_APP_ID: "<App ID prefix>.<bundle ID>". APP_ATTEST_SECRET: random key that signs challenges.
+    // GOOGLE_SERVICE_ACCOUNT: the JSON key of the Google Cloud service account that sends FCM
+    // messages and decodes Play Integrity tokens (src/google.ts).
     "required": [
       "APNS_TEAM_ID",
       "APNS_SANDBOX_KEY",
@@ -52,6 +58,7 @@
       "APNS_PRODUCTION_KEY_ID",
       "APP_ATTEST_APP_ID",
       "APP_ATTEST_SECRET",
+      "GOOGLE_SERVICE_ACCOUNT",
     ],
   },
 }

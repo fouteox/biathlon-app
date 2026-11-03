@@ -3,9 +3,10 @@ import { eventId } from "./ibu";
 
 /**
  * Alert texts are resolved on the device from the app's Localizable.xcstrings
- * through `title-loc-key` / `loc-key`, so the server never translates: the title
- * names the race, the body says what happened. The keys must exist in the app's
- * String Catalog.
+ * through `title-loc-key` / `loc-key` on iOS, and from the Android resources the
+ * Android build generates from the same catalog (`androidResourceName`), so the server
+ * never translates: the title names the race, the body says what happened. The keys
+ * must exist in the app's String Catalog.
  */
 export const LOC_KEYS = {
   cancelled: "push.cancelled",
@@ -54,6 +55,35 @@ export interface AlertInput {
   startTime: string;
   locale: string;
   timeZone: string;
+}
+
+/**
+ * The name of a catalog key's Android string resource, as the Android build generates it
+ * (`resourceName` in android/app/build.gradle.kts): "push.cancelled" is `push_cancelled`.
+ * The push keys hold no placeholder, which that function also rewrites.
+ */
+export function androidResourceName(key: string): string {
+  return key
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+/** The notification channel of these alerts, which the Android app creates. */
+export const ANDROID_ALERT_CHANNEL = "race-alerts";
+
+/**
+ * The alert as FCM's `AndroidNotification` (https://firebase.google.com/docs/reference/fcm/rest/v1/projects.messages),
+ * the same texts as `buildPayload`'s from the same keys and arguments.
+ */
+export function buildAndroidNotification(input: AlertInput) {
+  const titleKey = raceTitleKey(input.raceId);
+  return {
+    ...(titleKey ? { titleLocKey: androidResourceName(titleKey) } : { title: input.raceName }),
+    bodyLocKey: androidResourceName(LOC_KEYS[input.kind]),
+    ...(input.kind === "rescheduled" && { bodyLocArgs: rescheduledArgs(input) }),
+    channelId: ANDROID_ALERT_CHANNEL,
+  };
 }
 
 export function buildPayload(input: AlertInput) {

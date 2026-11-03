@@ -4,6 +4,8 @@
 // https://developer.apple.com/documentation/usernotifications/sending-channel-management-requests-to-apns
 // https://developer.apple.com/documentation/usernotifications/sending-broadcast-push-notification-requests-to-apns
 
+import { signJWT } from "./jwt";
+
 export type APNsEnvironment = "sandbox" | "production";
 
 export const ENVIRONMENTS: readonly APNsEnvironment[] = ["production", "sandbox"];
@@ -41,24 +43,8 @@ export interface ProviderKey {
 }
 
 /** Signs an ES256 JWT with the `alg`, `kid`, `iss` and `iat` fields Apple requires. */
-export async function makeProviderToken(key: ProviderKey, issuedAt: number): Promise<string> {
-  const header = base64url(JSON.stringify({ alg: "ES256", kid: key.keyId }));
-  const claims = base64url(JSON.stringify({ iss: key.teamId, iat: issuedAt }));
-  const signingInput = `${header}.${claims}`;
-  const cryptoKey = await crypto.subtle.importKey(
-    "pkcs8",
-    pemToDer(key.pem),
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"],
-  );
-  // WebCrypto returns the raw r||s signature, which is the JWS ES256 format.
-  const signature = await crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    cryptoKey,
-    new TextEncoder().encode(signingInput),
-  );
-  return `${signingInput}.${base64url(new Uint8Array(signature))}`;
+export function makeProviderToken(key: ProviderKey, issuedAt: number): Promise<string> {
+  return signJWT("ES256", key.pem, { kid: key.keyId }, { iss: key.teamId, iat: issuedAt });
 }
 
 export interface PushRequest {
@@ -257,20 +243,4 @@ function whenAborted(signal: AbortSignal, until: AbortSignal): Promise<never> {
     if (signal.aborted) reject(signal.reason);
     else signal.addEventListener("abort", () => reject(signal.reason), { once: true, signal: until });
   });
-}
-
-function pemToDer(pem: string): ArrayBuffer {
-  const base64 = pem
-    .replace(/\\n/g, "\n")
-    .replace(/-----(BEGIN|END) PRIVATE KEY-----/g, "")
-    .replace(/\s+/g, "");
-  const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-  return bytes.buffer;
-}
-
-function base64url(input: string | Uint8Array): string {
-  const bytes = typeof input === "string" ? new TextEncoder().encode(input) : input;
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
