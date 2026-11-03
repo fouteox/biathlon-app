@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -35,7 +36,7 @@ class PushRegistration(
     suspend fun registered(installationId: String) {
         store.edit { stored ->
             stored[INSTALLATION_ID] = installationId
-            stored.remove(SYNCED)
+            stored[RESEND] = true
         }
     }
 
@@ -48,11 +49,19 @@ class PushRegistration(
         // The registration's data class text: equal for equal registrations.
         val request = "$fid $registration"
         val synced = stored[SYNCED]
-        // Nothing new for the server, or a device it never had to forget.
-        if (synced == request || (registration == null && synced?.startsWith("$fid ") != true)) return Outcome.DONE
+        val upToDate = if (registration == null) {
+            // Forgotten already, or never had: nothing for the server to forget.
+            synced == request || synced?.startsWith("$fid ") != true
+        } else {
+            synced == request && stored[RESEND] != true
+        }
+        if (upToDate) return Outcome.DONE
         return try {
             server.registerAndroidDevice(fid, registration, integrityToken)
-            store.edit { it[SYNCED] = request }
+            store.edit {
+                it[SYNCED] = request
+                it.remove(RESEND)
+            }
             Outcome.DONE
         } catch (error: ServerException.Http) {
             Log.e(TAG, "Server sync refused", error)
@@ -73,6 +82,9 @@ class PushRegistration(
 
         /** The request the server last accepted: the installation ID, then the registration. */
         private val SYNCED = stringPreferencesKey("synced")
+
+        /** Set as FCM reports the installation, until the server has its registration again. */
+        private val RESEND = booleanPreferencesKey("resend")
 
         private val Context.store by preferencesDataStore("push")
 

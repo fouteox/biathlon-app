@@ -28,8 +28,12 @@ object NotificationWork {
         WorkManager.getInstance(context).enqueueUniqueWork("push-sync", ExistingWorkPolicy.REPLACE, request)
     }
 
+    /**
+     * Without waiting for the network: turning the reminders off cancels them offline too. A
+     * calendar that can't be fetched keeps the current reminders and is retried with a backoff.
+     */
     fun refreshReminders(context: Context) {
-        val request = OneTimeWorkRequestBuilder<ReminderWorker>().setConstraints(online).build()
+        val request = OneTimeWorkRequestBuilder<ReminderWorker>().build()
         WorkManager.getInstance(context).enqueueUniqueWork("reminders", ExistingWorkPolicy.REPLACE, request)
     }
 

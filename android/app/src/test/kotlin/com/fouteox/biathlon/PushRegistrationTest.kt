@@ -85,6 +85,21 @@ class PushRegistrationTest {
         assertEquals(listOf(HttpMethod.Put, HttpMethod.Delete), requests.map { it.method })
     }
 
+    /** FCM may report the installation again before the server has forgotten it. */
+    @Test
+    fun stillForgetsTheDeviceAfterFcmReportsItAgain() = runBlocking {
+        registration.registered("fid-1")
+        turnAlertsOn()
+        sync()
+        settings.update { it.copy(cancellationAlerts = false) }
+        status = HttpStatusCode.ServiceUnavailable
+        sync()
+        registration.registered("fid-1")
+        status = HttpStatusCode.NoContent
+        sync()
+        assertEquals(listOf(HttpMethod.Put, HttpMethod.Delete, HttpMethod.Delete), requests.map { it.method })
+    }
+
     @Test
     fun hasNothingToForgetForADeviceNeverRegistered() = runBlocking {
         registration.registered("fid-1")
