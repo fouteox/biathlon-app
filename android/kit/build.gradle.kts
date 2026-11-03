@@ -1,6 +1,7 @@
 // The app's models and its clients, in plain Kotlin as BiathlonKit is in Swift: tested on the
 // JVM against the same fixtures, with no Android device.
 plugins {
+    `java-test-fixtures`
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.android.lint)
@@ -32,6 +33,10 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     api(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
+
+    // The fictional World Cup the screens' tests run on, without the network.
+    testFixturesImplementation(libs.ktor.client.mock)
+    testFixturesImplementation(libs.kotlinx.serialization.json)
 
     testImplementation(platform(libs.junit.bom))
     testImplementation(libs.junit.jupiter)
