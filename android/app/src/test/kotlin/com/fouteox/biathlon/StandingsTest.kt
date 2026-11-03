@@ -37,13 +37,10 @@ class StandingsTest {
 
     @Before
     fun openStandings() {
-        compose.setContent {
-            BiathlonApp(
-                IbuClient.sample(Instant.now()) { it == "AllResults" && resultsUnavailable },
-                WikidataClient.sample(mapOf("BTNORSM01" to mapOf("en" to URI("https://en.wikipedia.org/wiki/Aksel_Vangen")))),
-                server = null,
-            )
-        }
+        compose.launchApp(
+            IbuClient.sample(Instant.now()) { it == "AllResults" && resultsUnavailable },
+            WikidataClient.sample(mapOf("BTNORSM01" to mapOf("en" to URI("https://en.wikipedia.org/wiki/Aksel_Vangen")))),
+        )
         compose.onNodeWithText("Standings").performClick()
         compose.waitForText("VANGEN A.")
     }

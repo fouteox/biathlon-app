@@ -8,10 +8,6 @@ import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextReplacement
-import com.fouteox.biathlon.kit.IbuClient
-import com.fouteox.biathlon.kit.WikidataClient
-import com.fouteox.biathlon.kit.sample
-import java.time.Instant
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -26,7 +22,7 @@ class SearchTest {
 
     @Before
     fun openSearch() {
-        compose.setContent { BiathlonApp(IbuClient.sample(Instant.now()), WikidataClient.sample(), server = null) }
+        compose.launchApp()
         compose.onAllNodesWithText("Search").onFirst().performClick()
         compose.onNodeWithText("Search for a biathlete").assertExists()
     }

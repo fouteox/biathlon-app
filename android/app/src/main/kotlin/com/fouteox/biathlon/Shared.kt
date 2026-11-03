@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -213,6 +214,20 @@ fun EmptyMessage(text: String, modifier: Modifier = Modifier) {
     )
 }
 
+/** What to do, or what happened, in place of a list: [icon], a title and a line below it. */
+@Composable
+fun Prompt(@DrawableRes icon: Int, title: String, text: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier.padding(horizontal = 32.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(painterResource(icon), contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+    }
+}
+
 /** A list section's title, as Material lists head their groups. */
 @Composable
 fun SectionHeader(text: String) {
@@ -245,9 +260,25 @@ fun NationMark(code: String?) {
     }
 }
 
+/** A name in a list row, bold with a star when it is a favorite's: the same mark on every list. */
+@Composable
+fun RowName(name: String, highlighted: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(name, fontWeight = if (highlighted) FontWeight.Bold else null)
+        if (highlighted) {
+            Icon(
+                painterResource(R.drawable.ic_star_filled),
+                stringResource(R.string.favorite),
+                Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
 /** An athlete's or a team's result: rank or status (DNF…), flag, name, shootings, time and gap. */
 @Composable
-fun ResultLine(row: ResultRow, modifier: Modifier = Modifier) {
+fun ResultLine(row: ResultRow, highlighted: Boolean, modifier: Modifier = Modifier) {
     ListItem(
         modifier = modifier,
         leadingContent = {
@@ -256,7 +287,7 @@ fun ResultLine(row: ResultRow, modifier: Modifier = Modifier) {
                 NationMark(row.nation)
             }
         },
-        headlineContent = { Text(row.shortName ?: row.name) },
+        headlineContent = { RowName(row.shortName ?: row.name, highlighted) },
         supportingContent = row.shootings?.let { { Text(it) } },
         trailingContent = {
             Column(horizontalAlignment = Alignment.End) {
@@ -269,9 +300,9 @@ fun ResultLine(row: ResultRow, modifier: Modifier = Modifier) {
 
 /** A result row leading to its athlete, when it has one. */
 @Composable
-fun ResultLink(row: ResultRow, open: (Route) -> Unit, modifier: Modifier = Modifier) {
+fun ResultLink(row: ResultRow, highlighted: Boolean, open: (Route) -> Unit, modifier: Modifier = Modifier) {
     val id = row.athleteId
-    ResultLine(row, if (id != null) modifier.clickable { open(Route.Athlete(id, row.name)) } else modifier)
+    ResultLine(row, highlighted, if (id != null) modifier.clickable { open(Route.Athlete(id, row.name)) } else modifier)
 }
 
 /** How much of a race's start a row says: all of it, or the time alone under a header that gives the day. */

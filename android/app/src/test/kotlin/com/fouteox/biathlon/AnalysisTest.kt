@@ -1,8 +1,6 @@
 package com.fouteox.biathlon
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -31,7 +29,7 @@ class AnalysisTest {
     private val sprint: Competition = runBlocking { client.race("BT2526SWRLCP01SMSP") }
 
     private fun show(content: @Composable () -> Unit) {
-        compose.setContent { MaterialTheme { CompositionLocalProvider(LocalIbuClient provides client, content = content) } }
+        compose.showScreen(client, content = content)
     }
 
     /** The results lead to the analysis once they are final. */

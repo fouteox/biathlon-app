@@ -1,6 +1,5 @@
 package com.fouteox.biathlon
 
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.hasScrollToNodeAction
 import androidx.compose.ui.test.hasText
@@ -44,9 +43,7 @@ class HomeScreenTest {
         )
         val loaded = LoadViewModel { feed }
         runBlocking { loaded.load() }
-        compose.setContent {
-            MaterialTheme { HomeScreen(loaded, open = {}) }
-        }
+        compose.showScreen { HomeScreen(loaded, open = {}) }
         compose.waitForText("SOLBERG I.")
         compose.onNode(hasScrollToNodeAction()).performScrollToNode(hasText("All results"))
         compose.waitUntil { compose.onAllNodes(hasText("SOLBERG I.")).fetchSemanticsNodes().size == 2 }
@@ -60,10 +57,8 @@ class HomeScreenTest {
         val next = Competition("BT2627SWRLCP01SMSP", "Men 10 km Sprint", clock.instant().plus(Duration.ofMinutes(10)))
         val loaded = LoadViewModel { HomeFeed(events = listOf(event), races = listOf(next)) }
         runBlocking { loaded.load() }
-        compose.setContent {
-            CompositionLocalProvider(LocalClock provides clock) {
-                MaterialTheme { HomeScreen(loaded, open = {}) }
-            }
+        compose.showScreen {
+            CompositionLocalProvider(LocalClock provides clock) { HomeScreen(loaded, open = {}) }
         }
         compose.onNodeWithText("In 10 minutes").assertExists()
         clock.now = clock.now.plus(Duration.ofMinutes(5))

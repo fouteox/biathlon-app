@@ -69,6 +69,7 @@ fun AthleteScreen(athleteId: String, name: String, open: (Route) -> Unit, onBack
     Screen(
         name,
         onBack,
+        actions = { FavoriteButton(Favorite.Kind.ATHLETE, athleteId, name, loadedBio.value?.nation) },
         pickers = if (athleteHistory != null && season != null) {
             { SeasonPicker(athleteHistory.seasons, season) { picked = it.rawValue } }
         } else {
