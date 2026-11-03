@@ -10,6 +10,6 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as BiathlonApplication
-        setContent { BiathlonApp(app.ibu, app.wikidata) }
+        setContent { BiathlonApp(app.ibu, app.wikidata, app.server) }
     }
 }

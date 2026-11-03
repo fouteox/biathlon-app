@@ -42,7 +42,16 @@ data class Competition(
             }
         }
 
-    enum class State { SCHEDULED, LIVE, CANCELLED, FINISHED }
+    enum class State {
+        SCHEDULED,
+        LIVE,
+        CANCELLED,
+        FINISHED,
+        ;
+
+        /** Still to be watched: its TV channels, its live alerts. */
+        val canBeFollowedLive: Boolean get() = this == SCHEDULED || this == LIVE
+    }
 
     val eventId: String get() = eventId(id)
 

@@ -41,6 +41,7 @@ class StandingsTest {
             BiathlonApp(
                 IbuClient.sample(Instant.now()) { it == "AllResults" && resultsUnavailable },
                 WikidataClient.sample(mapOf("BTNORSM01" to mapOf("en" to URI("https://en.wikipedia.org/wiki/Aksel_Vangen")))),
+                server = null,
             )
         }
         compose.onNodeWithText("Standings").performClick()

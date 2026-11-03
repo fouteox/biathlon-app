@@ -1577,6 +1577,30 @@
         }
       }
     },
+    "Share": {
+      "comment": "Android: the top app bar's button that shares a race's podium, read by TalkBack.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Teilen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Share"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Partager"
+          }
+        }
+      }
+    },
     "Shooting": {
       "comment": "Analysis ranking of the times on the shooting mat.",
       "localizations": {

@@ -35,6 +35,13 @@ class RaceStatusTest {
         assertEquals(RaceCategory.WOMEN, decode<Competition>(race("R1", "2026-11-26T15:15:00Z", category = "SW")).category)
     }
 
+    /** Upcoming and live races can still be watched; cancelled and finished ones can't. */
+    @ParameterizedTest
+    @CsvSource("SCHEDULED, true", "LIVE, true", "CANCELLED, false", "FINISHED, false")
+    fun canBeFollowedLive(state: Competition.State, followed: Boolean) {
+        assertEquals(followed, state.canBeFollowedLive)
+    }
+
     companion object {
         @JvmField
         val cases: List<Case> = decode(fixture("race-status"))

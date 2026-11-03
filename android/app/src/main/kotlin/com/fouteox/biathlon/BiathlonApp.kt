@@ -21,6 +21,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation3.ui.NavDisplay
 import com.fouteox.biathlon.kit.HomeFeed
 import com.fouteox.biathlon.kit.IbuClient
+import com.fouteox.biathlon.kit.ServerClient
 import com.fouteox.biathlon.kit.WikidataClient
 import com.fouteox.biathlon.kit.homeFeed
 import java.time.Duration
@@ -29,7 +30,7 @@ import kotlinx.coroutines.delay
 
 /** The app, on Material 3's own colors: the wallpaper's where Android has them (12 and later). */
 @Composable
-fun BiathlonApp(client: IbuClient, wikidata: WikidataClient) {
+fun BiathlonApp(client: IbuClient, wikidata: WikidataClient, server: ServerClient?) {
     val dark = isSystemInDarkTheme()
     val colorScheme = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -40,7 +41,11 @@ fun BiathlonApp(client: IbuClient, wikidata: WikidataClient) {
         else -> lightColorScheme()
     }
     MaterialTheme(colorScheme = colorScheme) {
-        CompositionLocalProvider(LocalIbuClient provides client, LocalWikidataClient provides wikidata) { Tabs() }
+        CompositionLocalProvider(
+            LocalIbuClient provides client,
+            LocalWikidataClient provides wikidata,
+            LocalServerClient provides server,
+        ) { Tabs() }
     }
 }
 
