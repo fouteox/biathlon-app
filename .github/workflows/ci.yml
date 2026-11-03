@@ -34,6 +34,24 @@ jobs:
       - uses: ./.github/actions/server-setup
       - run: npm run check
 
+  android:
+    name: App (Android)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 25
+      # Also validates the Gradle Wrapper's checksum.
+      - uses: gradle/actions/setup-gradle@v6
+      # Lint (warnings as errors), the Robolectric tests of both build types, and the release
+      # bundle, minified as it would ship.
+      - run: ./gradlew check :app:bundleRelease
+
   app-ios:
     name: App (iOS Simulator)
     # Xcode 27 (Swift 6.4), the version the app is developed with.

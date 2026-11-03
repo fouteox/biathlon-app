@@ -26,6 +26,16 @@ Mise en forme du code Swift (`swift format`, inclus dans la toolchain Swift 6 ; 
 swift format --in-place --recursive App Shared Widgets BiathlonTests BiathlonUITests Packages/BiathlonKit/Package.swift Packages/BiathlonKit/Sources Packages/BiathlonKit/Tests
 ```
 
+## Android
+
+L'app Android est en cours d'écriture, en Kotlin et Jetpack Compose (Material 3), dans `android/`, un projet Gradle : Android Studio l'ouvre tel quel. Les versions sont réunies dans `android/gradle/libs.versions.toml`.
+
+```sh
+cd android && ./gradlew check
+```
+
+`check` lance lint (avertissements traités comme des erreurs) et les tests, qui tournent sur la JVM avec Robolectric, sans émulateur ni appareil. Il faut un JDK 17 ou plus récent et le SDK Android (`ANDROID_HOME`, ou `sdk.dir` dans `android/local.properties`). Les textes sont en anglais, français et allemand, dans `app/src/main/res/values*/strings.xml`.
+
 ## Xcode Cloud
 
 Xcode Cloud compile `Biathlon.xcodeproj` tel quel, sans script. Il numérote lui-même les builds à partir de 1 : n'envoyer les builds TestFlight que par Xcode Cloud, sinon les numéros se chevauchent.
@@ -52,6 +62,7 @@ La branche `main` est protégée par le ruleset `.github/rulesets/main.json` (à
 - `App` : l'app SwiftUI (iOS 26, Swift 6, isolation `MainActor` par défaut, Observation, SwiftData pour les favoris).
 - `Widgets` : l'extension WidgetKit : le widget « Prochaine course » (écran d'accueil et écran verrouillé) et la Live Activity d'une course sur l'écran verrouillé et dans la Dynamic Island.
 - `Shared` : le code et le String Catalog communs à l'app et à l'extension.
+- `android` : l'app Android (Kotlin, Jetpack Compose, Material 3), testée avec Robolectric.
 - `server` : Cloudflare Worker qui envoie les alertes d'annulation et de départ décalé, met à jour les Live Activities des courses par des canaux de diffusion APNs, et sert de cache à l'API IBU (voir `server/README.md`).
 
 ## Données
