@@ -10,6 +10,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import kotlinx.coroutines.runBlocking
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,18 +25,22 @@ class RaceScreenTest {
     private val relay = checkNotNull(javaClass.getResource("/relay-results.json")).readText()
     private val client = IbuClient(httpClient = HttpClient(MockEngine { respond(relay) }))
 
+    private val opened = mutableListOf<Route>()
+
+    /** Each leg opens its athlete. */
     @Test
     fun relayTeamsOpenOnTheirLegs() {
         val race = checkNotNull(runBlocking { client.results("BT2526SWRLCP01SMRL") }.competition)
         compose.setContent {
             MaterialTheme {
-                CompositionLocalProvider(LocalIbuClient provides client) { RaceScreen(race, onBack = {}) }
+                CompositionLocalProvider(LocalIbuClient provides client) { RaceScreen(race, open = { opened += it }, onBack = {}) }
             }
         }
         compose.waitForText("NORWAY")
         compose.onNodeWithText("ULDAL M.").assertDoesNotExist()
         compose.onNodeWithText("NORWAY").performClick()
-        compose.onNodeWithText("ULDAL M.").assertExists()
+        compose.onNodeWithText("ULDAL M.").performClick()
+        assertEquals(listOf(Route.Athlete("BTNOR00000000001", "ULDAL Martin")), opened)
         compose.onNodeWithText("NORWAY").performClick()
         compose.onNodeWithText("ULDAL M.").assertDoesNotExist()
     }

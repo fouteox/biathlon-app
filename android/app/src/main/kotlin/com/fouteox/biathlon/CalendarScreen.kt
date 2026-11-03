@@ -1,21 +1,14 @@
 package com.fouteox.biathlon
 
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,7 +33,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapNotNull
 
 /** The World Cup calendar of a season, by month, opening on the event underway or the next one. */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarScreen(open: (Route) -> Unit) {
     val client = LocalIbuClient.current
@@ -51,13 +43,10 @@ fun CalendarScreen(open: (Route) -> Unit) {
     val shown = SeasonId(season)
     val events = viewModel(key = shown.rawValue) { LoadViewModel { client.events(shown) } }
     WhileStarted(events) { events.load() }
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.calendar)) },
-                actions = { SeasonPicker(seasons, SeasonId(season)) { season = it.rawValue } },
-            )
-        },
+    Screen(
+        stringResource(R.string.calendar),
+        onBack = null,
+        pickers = { SeasonPicker(seasons, shown) { season = it.rawValue } },
     ) { padding ->
         val zone = ZoneId.systemDefault()
         // Kept per season, so that coming back from an event leaves the list where it was.
@@ -101,30 +90,11 @@ private fun calendarIndex(events: List<BiathlonEvent>, event: BiathlonEvent, zon
     return 0
 }
 
-@Composable
-private fun SeasonPicker(seasons: List<SeasonId>, selection: SeasonId, select: (SeasonId) -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        TextButton(onClick = { expanded = true }) { Text(stringResource(R.string.season_arg, selection.displayName)) }
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            for (season in seasons) {
-                DropdownMenuItem(
-                    text = { Text(season.displayName) },
-                    onClick = {
-                        expanded = false
-                        select(season)
-                    },
-                )
-            }
-        }
-    }
-}
-
 /** An event's races, by day: the day once in the header, the time on each row. */
 @Composable
 fun EventScreen(event: BiathlonEvent, open: (Route) -> Unit, onBack: () -> Unit) {
     val client = LocalIbuClient.current
-    val races = viewModel { LoadViewModel { client.competitions(event.id) } }
+    val races = viewModel(key = "races") { LoadViewModel { client.competitions(event.id) } }
     WhileStarted(races) { races.load() }
     Screen(Nation.titled(event.shortDescription, event.nation), onBack) { padding ->
         val zone = ZoneId.systemDefault()

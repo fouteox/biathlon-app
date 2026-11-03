@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -98,22 +99,33 @@ fun StateBadge(state: Competition.State) {
     }
 }
 
-/** A screen of the app: its title in the top app bar, with a back button below a tab's root. */
+/**
+ * A screen of the app: its title in the top app bar, with a back button below a tab's root,
+ * and the choices it filters its list by under the bar.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun Screen(title: String, onBack: (() -> Unit)?, content: @Composable (PaddingValues) -> Unit) {
+fun Screen(
+    title: String,
+    onBack: (() -> Unit)?,
+    pickers: (@Composable RowScope.() -> Unit)? = null,
+    content: @Composable (PaddingValues) -> Unit,
+) {
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text(title) },
-                navigationIcon = {
-                    if (onBack != null) {
-                        IconButton(onClick = onBack) {
-                            Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.back))
+            Column {
+                TopAppBar(
+                    title = { Text(title) },
+                    navigationIcon = {
+                        if (onBack != null) {
+                            IconButton(onClick = onBack) {
+                                Icon(painterResource(R.drawable.ic_arrow_back), contentDescription = stringResource(R.string.back))
+                            }
                         }
-                    }
-                },
-            )
+                    },
+                )
+                pickers?.let { PickerRow(it) }
+            }
         },
         content = content,
     )

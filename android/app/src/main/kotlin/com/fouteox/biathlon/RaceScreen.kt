@@ -22,13 +22,14 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.fouteox.biathlon.kit.Competition
 import com.fouteox.biathlon.kit.Nation
 import com.fouteox.biathlon.kit.RaceResults
+import com.fouteox.biathlon.kit.ResultRow
 import java.time.Instant
 
 /** A race's place and start, then its start list or results, refreshed every 20 seconds while it is live. */
 @Composable
-fun RaceScreen(race: Competition, onBack: () -> Unit) {
+fun RaceScreen(race: Competition, open: (Route) -> Unit, onBack: () -> Unit) {
     val client = LocalIbuClient.current
-    val results = viewModel { LoadViewModel { client.results(race.id) } }
+    val results = viewModel(key = "results") { LoadViewModel { client.results(race.id) } }
     WhileStarted(results) { results.load() }
     val state by results.state.collectAsStateWithLifecycle()
     // The race as its results last gave it, or as the calendar did.
@@ -54,7 +55,7 @@ fun RaceScreen(race: Competition, onBack: () -> Unit) {
                 }
             } else {
                 item { listTitle(loaded, isLive)?.let { SectionHeader(it) } }
-                rows(competition, loaded, expanded) { team -> expanded = if (team in expanded) expanded - team else expanded + team }
+                rows(competition, loaded, expanded, open) { team -> expanded = if (team in expanded) expanded - team else expanded + team }
                 (state as? Loadable.Loaded)?.loadedAt?.takeIf { isLive }?.let { loadedAt ->
                     item { SectionFooter(updatedAt(loadedAt)) }
                 }
@@ -73,9 +74,9 @@ private fun RaceSummary(race: Competition, results: RaceResults) {
     )
 }
 
-private fun LazyListScope.rows(race: Competition, results: RaceResults, expanded: Set<String>, toggle: (String) -> Unit) {
+private fun LazyListScope.rows(race: Competition, results: RaceResults, expanded: Set<String>, open: (Route) -> Unit, toggle: (String) -> Unit) {
     if (!race.isRelay) {
-        items(results.standings, key = { it.id }) { ResultLine(it) }
+        items(results.standings, key = { it.id }) { ResultLink(it, open) }
         return
     }
     for (team in results.standings) {
@@ -84,7 +85,28 @@ private fun LazyListScope.rows(race: Competition, results: RaceResults, expanded
             val state = stringResource(if (isExpanded) R.string.expanded else R.string.collapsed)
             ResultLine(team, Modifier.clickable { toggle(team.id) }.semantics { stateDescription = state })
         }
-        if (isExpanded) items(results.legs(team), key = { it.id }) { ResultLine(it, Modifier.padding(start = 24.dp)) }
+        if (isExpanded) items(results.legs(team), key = { it.id }) { ResultLink(it, open, Modifier.padding(start = 24.dp)) }
+    }
+}
+
+/** A result row leading to its athlete, when it has one. */
+@Composable
+private fun ResultLink(row: ResultRow, open: (Route) -> Unit, modifier: Modifier = Modifier) {
+    val id = row.athleteId
+    ResultLine(row, if (id != null) modifier.clickable { open(Route.Athlete(id, row.name)) } else modifier)
+}
+
+/** A race known by its ID alone, such as an athlete's result: found among its event's races first. */
+@Composable
+fun RaceByIdScreen(raceId: String, title: String, open: (Route) -> Unit, onBack: () -> Unit) {
+    val client = LocalIbuClient.current
+    val race = viewModel(key = "race") { LoadViewModel { client.race(raceId) } }
+    WhileStarted(race) { race.load() }
+    val state by race.state.collectAsStateWithLifecycle()
+    when (val loaded = state) {
+        is Loadable.Loaded -> RaceScreen(loaded.value, open, onBack)
+        // Loading or failed, under the title the link gave.
+        else -> Screen(title, onBack) { padding -> LoadableList(race, padding) {} }
     }
 }
 
