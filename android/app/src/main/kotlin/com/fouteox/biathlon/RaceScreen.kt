@@ -296,12 +296,15 @@ fun RaceByIdScreen(raceId: String, title: String, open: (Route) -> Unit, onBack:
     }
 }
 
-/** The race an app shortcut opens, found when it opens; under its title until then, or without one. */
+/**
+ * The race an app shortcut opens, found when it opens; under its title until then, or without one.
+ * Once found, the race stays the screen's, as its results and their refreshes are that race's.
+ */
 @Composable
 fun FeaturedRaceScreen(featured: FeaturedRace, open: (Route) -> Unit, onBack: () -> Unit) {
     val client = LocalIbuClient.current
     val feed = viewModel(key = "featured") { LoadViewModel { client.featuredRaces(Instant.now()) } }
-    WhileStarted(feed) { feed.load() }
+    WhileStarted(feed) { if (feed.state.value !is Loadable.Loaded) feed.load() }
     val state by feed.state.collectAsStateWithLifecycle()
     when (val race = state.value?.let(featured.race)) {
         null -> Screen(stringResource(featured.title), onBack) { padding -> LoadableList(feed, padding, empty = { featured.none }) {} }
