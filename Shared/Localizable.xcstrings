@@ -246,6 +246,54 @@
         }
       }
     },
+    "Allow": {
+      "comment": "Android: the button that opens the system's \"Alarms & reminders\" access for the app.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erlauben"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autoriser"
+          }
+        }
+      }
+    },
+    "Allow alarms and reminders so that reminders arrive on time.": {
+      "comment": "Android: shown in Settings while the reminders are on and the app may not set exact alarms (the system's \"Alarms & reminders\" access).",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erlaube Wecker und Erinnerungen, damit die Erinnerungen pünktlich kommen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow alarms and reminders so that reminders arrive on time."
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisez les alarmes et rappels pour que les rappels arrivent à l'heure."
+          }
+        }
+      }
+    },
     "Analysis": {
       "localizations": {
         "de": {
@@ -476,6 +524,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "Décédé"
+          }
+        }
+      }
+    },
+    "Race alerts": {
+      "comment": "Android: the notification channel of the server's alerts, a race cancelled or rescheduled, in the system's notification settings.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rennhinweise"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Race alerts"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alertes des courses"
+          }
+        }
+      }
+    },
+    "Reminders": {
+      "comment": "Android: the notification channel of the reminders before a race's start, in the system's notification settings.",
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erinnerungen"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reminders"
+          }
+        },
+        "fr": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rappels"
           }
         }
       }

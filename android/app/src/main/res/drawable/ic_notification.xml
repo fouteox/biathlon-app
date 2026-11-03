@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The status bar's icon of the app's notifications: the themed launcher icon's drawing, without its margins. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="60"
+    android:viewportHeight="60">
+    <group
+        android:translateX="-24"
+        android:translateY="-24">
+        <path android:fillColor="#FFFFFF" android:pathData="M28,42.04a4.76,4.76 0,1 0,9.52,0a4.76,4.76 0,1 0,-9.52,0ZM38.61,42.04a4.76,4.76 0,1 0,9.52,0a4.76,4.76 0,1 0,-9.52,0ZM49.21,42.04a4.76,4.76 0,1 0,9.52,0a4.76,4.76 0,1 0,-9.52,0ZM28.81,65.02L79.45,59.64L79.45,61.27L28.81,66.71ZM28.81,69.09L79.45,63.65L79.45,65.35L28.81,70.79Z" />
+        <path android:fillColor="#FFFFFF" android:fillType="evenOdd" android:pathData="M59.82,42.04a4.76,4.76 0,1 0,9.52,0a4.76,4.76 0,1 0,-9.52,0ZM61.31,42.04a3.26,3.26 0,1 0,6.52,0a3.26,3.26 0,1 0,-6.52,0ZM70.41,42.04a4.76,4.76 0,1 0,9.52,0a4.76,4.76 0,1 0,-9.52,0ZM71.91,42.04a3.26,3.26 0,1 0,6.52,0a3.26,3.26 0,1 0,-6.52,0Z" />
+    </group>
+</vector>

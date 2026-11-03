@@ -3,11 +3,21 @@ package com.fouteox.biathlon.kit
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.request
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.URLBuilder
 import io.ktor.http.Url
 import io.ktor.http.appendPathSegments
+import io.ktor.http.content.ByteArrayContent
+import io.ktor.http.isSuccess
+import java.security.MessageDigest
+import java.util.Base64
+import kotlinx.serialization.Serializable
 
 /** Client for the server's `/v1/` routes (server/src/index.ts), as the iOS app's. */
 class ServerClient(
@@ -24,6 +34,57 @@ class ServerClient(
             throw ServerException.Decoding(route, error)
         }
     }
+
+    /**
+     * Registers this device for push alerts by its Firebase Installation ID, or unregisters it
+     * when `registration` is `null`. The request carries the Play Integrity token that
+     * `integrityToken` gives for its [requestHash], which proves it comes from this app, from
+     * Google Play, on a genuine device (server/src/playIntegrity.ts).
+     */
+    suspend fun registerAndroidDevice(
+        fid: String,
+        registration: AndroidDeviceRegistration?,
+        integrityToken: suspend (requestHash: String) -> String,
+    ) {
+        val url = URLBuilder(baseUrl).appendPathSegments("v1", "android-devices", fid).build()
+        val method = if (registration == null) HttpMethod.Delete else HttpMethod.Put
+        // Sent as these exact bytes, which the hash covers.
+        val body = registration?.let { IbuJson.encodeToString(it).encodeToByteArray() } ?: ByteArray(0)
+        val token = integrityToken(requestHash(method.value, url.encodedPath, body))
+        val response = httpClient.request(url) {
+            this.method = method
+            header(PLAY_INTEGRITY_HEADER, token)
+            if (registration != null) setBody(ByteArrayContent(body, ContentType.Application.Json))
+        }
+        if (!response.status.isSuccess()) throw ServerException.Http(response.status.value)
+    }
+
+    private companion object {
+        const val PLAY_INTEGRITY_HEADER = "X-Play-Integrity-Token"
+    }
+}
+
+/** What the server stores of an Android device's alert preferences (`parseAndroidRegistration` in server/src/devices.ts). */
+@Serializable
+data class AndroidDeviceRegistration(
+    val categories: List<String>,
+    val cancellation: Boolean,
+    val rescheduling: Boolean,
+    /** BCP 47, the language the alerts' dates are written in. */
+    val locale: String,
+    /** IANA, the time zone of the alerts' start times. */
+    val timeZone: String,
+)
+
+/**
+ * The `requestHash` of a Play Integrity token for a request: the unpadded base64url SHA-256 of its
+ * method, its path and its raw body, as the server computes it (`requestHash` in server/src/playIntegrity.ts).
+ */
+fun requestHash(method: String, path: String, body: ByteArray): String {
+    val digest = MessageDigest.getInstance("SHA-256")
+    digest.update("$method $path\n".encodeToByteArray())
+    digest.update(body)
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(digest.digest())
 }
 
 /** Failures of the server. The screens then go without what it adds. */

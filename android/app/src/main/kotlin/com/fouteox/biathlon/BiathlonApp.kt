@@ -29,16 +29,23 @@ import java.time.Instant
 import kotlinx.coroutines.delay
 
 @Composable
-fun BiathlonApp(client: IbuClient, wikidata: WikidataClient, server: ServerClient?, favorites: Favorites) {
-    AppEnvironment(client, wikidata, server, favorites) { Tabs() }
+fun BiathlonApp(client: IbuClient, wikidata: WikidataClient, server: ServerClient?, favorites: Favorites, notifications: NotificationSettings) {
+    AppEnvironment(client, wikidata, server, favorites, notifications) { Tabs() }
 }
 
 /**
  * What every screen reads: Material 3's own colors, the wallpaper's where Android has them (12
- * and later), and the app's clients and favorites, which tests replace.
+ * and later), and the app's clients, favorites and notification settings, which tests replace.
  */
 @Composable
-fun AppEnvironment(client: IbuClient, wikidata: WikidataClient, server: ServerClient?, favorites: Favorites, content: @Composable () -> Unit) {
+fun AppEnvironment(
+    client: IbuClient,
+    wikidata: WikidataClient,
+    server: ServerClient?,
+    favorites: Favorites,
+    notifications: NotificationSettings,
+    content: @Composable () -> Unit,
+) {
     val dark = isSystemInDarkTheme()
     val colorScheme = when {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -54,6 +61,7 @@ fun AppEnvironment(client: IbuClient, wikidata: WikidataClient, server: ServerCl
             LocalWikidataClient provides wikidata,
             LocalServerClient provides server,
             LocalFavorites provides favorites,
+            LocalNotificationSettings provides notifications,
             content = content,
         )
     }
